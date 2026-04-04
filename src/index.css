@@ -1,0 +1,156 @@
+:root {
+  --primary-color: #3b82f6;
+  --bg-color: #0c0c0e; /* Darker background for better contrast */
+  --card-bg: rgba(28, 28, 33, 0.95); /* More opaque cards for readability */
+  --border-color: rgba(63, 63, 70, 0.4);
+  --text-primary: #ffffff; /* pure white for primary text */
+  --text-secondary: #a1a1aa;
+  --glass-bg: rgba(24, 24, 27, 0.85); /* Darker glass for text readability */
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* Firefox Support */
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #0c0c0e;
+}
+
+/* Slick Custom Scrollbar for Chrome/Edges/Safari */
+::-webkit-scrollbar {
+  width: 6px; /* Slightly thinner for mobile feel */
+}
+
+::-webkit-scrollbar-track {
+  background: #0c0c0e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3b82f6, #6366f1);
+  border-radius: 10px;
+  border: 2px solid #0c0c0e;
+}
+
+body {
+  font-family: var(--font-main);
+  background: radial-gradient(circle at top right, #1e1b4b, #0c0c0e 60%);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px; /* slightly rounder for premium feel */
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  margin-bottom: 24px;
+}
+
+.ant-layout {
+  background: transparent !important;
+}
+
+.ant-layout-sider {
+  background: var(--bg-color) !important;
+  border-right: 1px solid var(--border-color);
+}
+
+/* Responsive Table Fixes */
+.ant-table {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+}
+
+.ant-table-thead > tr > th {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+}
+
+.ant-table-tbody > tr > td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.ant-table-wrapper {
+  overflow-x: auto;
+}
+
+/* Mobile Responsiveness & Contrast */
+@media (max-width: 768px) {
+  .glass-card {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    margin-bottom: 16px !important;
+  }
+  
+  .gradient-text {
+    font-size: 22px !important;
+  }
+  
+  .ant-form-item {
+    margin-bottom: 16px !important;
+  }
+
+  /* Force vertical layout for some row-based filters on mobile */
+  .mobile-vertical-flow {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 16px !important;
+  }
+
+  .ant-statistic-title {
+      font-size: 10px !important;
+  }
+  .ant-statistic-content-value {
+      font-size: 16px !important;
+  }
+}
+
+.ant-menu-item-selected {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  color: var(--primary-color) !important;
+  font-weight: 600;
+}
+
+/* Better Input Contrast */
+.ant-input, .ant-input-number, .ant-picker, .ant-select-selector {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid var(--border-color) !important;
+  color: #ffffff !important;
+  transition: all 0.3s !important;
+}
+
+.ant-input:focus, .ant-input-number-focused, .ant-picker-focused, .ant-select-focused, .ant-input:hover {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+}
+
+.ant-form-item-label label {
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+}
+
+.gradient-text {
+  background: linear-gradient(to right, #60a5fa, #a78bfa, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  text-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+/* Ant Designer Overrides for Dark Mode labels in Select/Picker */
+.ant-select-selection-item, .ant-picker-input > input {
+    color: white !important;
+}
+.ant-select-arrow, .ant-picker-suffix {
+    color: var(--text-secondary) !important;
+}
+

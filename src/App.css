@@ -1,0 +1,18 @@
+/* App.css placeholder */
+.modern-table .ant-table {
+  background: transparent !important;
+}
+
+.modern-table .ant-table-thead > tr > th {
+  background: rgba(39, 39, 42, 0.4) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.modern-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.modern-table .ant-table-tbody > tr:hover > td {
+  background: rgba(59, 130, 246, 0.05) !important;
+}
