@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.gitignore
+README.md
+eslint.config.js
+vite.config.js
+package-lock.json
+public
