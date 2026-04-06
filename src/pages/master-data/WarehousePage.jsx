@@ -47,7 +47,11 @@ const WarehousePage = () => {
 
     const exportData = data.map(w => ({
       'Tên kho': w.warehouse_name,
-      'Địa điểm': w.location
+      'Địa điểm (Tỉnh/TP)': w.location,
+      'Địa chỉ': w.address,
+      'Điện thoại bàn': w.phone,
+      'Di động': w.mobile_phone,
+      'Quản lý': w.manager_name,
     }));
 
     exportToExcel(exportData, `DanhSachKho_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -103,11 +107,11 @@ const WarehousePage = () => {
       key: 'warehouse_name',
       render: (text) => <Text strong style={{ color: 'var(--primary-color)' }}>{text}</Text>
     },
-    { 
-      title: 'Địa điểm', 
-      dataIndex: 'location', 
-      key: 'location' 
-    },
+    { title: 'Địa điểm', dataIndex: 'location', key: 'location' },
+    { title: 'Địa chỉ', dataIndex: 'address', key: 'address', ellipsis: true },
+    { title: 'Điện thoại bàn', dataIndex: 'phone', key: 'phone' },
+    { title: 'Di động', dataIndex: 'mobile_phone', key: 'mobile_phone' },
+    { title: 'Quản lý', dataIndex: 'manager_name', key: 'manager_name' },
     {
       title: 'Thao tác',
       key: 'action',
@@ -187,8 +191,26 @@ const WarehousePage = () => {
           <Form.Item label="Tên kho" name="warehouse_name" rules={[{ required: true, message: 'Vui lòng nhập tên kho' }]}>
             <Input placeholder="Ví dụ: Kho Chính, Kho Phụ..." />
           </Form.Item>
-          <Form.Item label="Địa điểm" name="location">
-            <Input placeholder="Nhập địa chỉ hoặc vị trí kho" />
+          <Form.Item label="Địa điểm (Tỉnh/Thành phố - dùng in hóa đơn)" name="location">
+            <Input placeholder="Ví dụ: Ninh Bình, Hà Nội..." />
+          </Form.Item>
+          <Form.Item label="Địa chỉ chi tiết (Dành cho in hóa đơn)" name="address">
+            <Input.TextArea rows={2} placeholder="Số nhà, Tên đường, Phường, Quận..." />
+          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="Điện thoại bàn" name="phone">
+                <Input placeholder="0229..." />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="Số di động (in trên hợp đồng)" name="mobile_phone">
+                <Input placeholder="09xxx..." />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="Tên quản lý / Cửa hàng trưởng" name="manager_name">
+            <Input placeholder="Nguyễn Văn A..." />
           </Form.Item>
         </Form>
       </Modal>

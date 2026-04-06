@@ -1,7 +1,8 @@
 import axios from 'axios';
 
+// Tự động lấy URL từ biến môi trường, mặc định là localhost nếu không có
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
 });
 
 // Thêm bộ lọc (Interceptor) để đính kèm Token vào từng yêu cầu

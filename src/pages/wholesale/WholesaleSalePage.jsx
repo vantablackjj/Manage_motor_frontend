@@ -308,8 +308,20 @@ const WholesaleSalePage = () => {
 
 
   return (
-    <div style={{ padding: '0 5px' }}>
-      <Title level={2} className="gradient-text" style={{ marginBottom: 20 }}>XUẤT BÁN BUÔN THEO LÔ & QUẢN LÝ THU NỢ</Title>
+    <div className="page-container">
+      <div className="page-header">
+        <Title level={2} className="gradient-text">XUẤT BÁN BUÔN & THU NỢ</Title>
+        <Space wrap>
+            <Button 
+                icon={<Download size={18} />} 
+                type="primary" 
+                ghost
+                onClick={handleExport}
+            >
+                Xuất Excel
+            </Button>
+        </Space>
+      </div>
 
       <Card className="glass-card" style={{ marginBottom: 24 }}>
         <Form form={form} layout="vertical" initialValues={{ sale_date: dayjs() }}>
@@ -350,12 +362,12 @@ const WholesaleSalePage = () => {
             key: '1',
             label: <Space><Plus size={18} /> LẬP LÔ BÁN MỚI</Space>,
             children: (
-              <Card className="glass-card">
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <Text type="secondary">Tìm xe chọn nhanh vào bảng để bán nguyên lô (Hệ thống tự đối chiếu kho)</Text>
-                   <Button icon={<Plus size={16} />} onClick={addRow} type="primary" style={{ background: 'var(--primary-color)' }}>Thêm dòng bán</Button>
+              <Card className="glass-card" styles={{ body: { padding: '8px' } }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                   <Text type="secondary" style={{ fontSize: 12 }}>Tìm xe, nhập giá bán lẻ vào bảng (Chốt lô bán buôn)</Text>
+                   <Button icon={<Plus size={16} />} onClick={addRow} type="primary">Dòng mới</Button>
                 </div>
-                <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 800 }} />
+                <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 1000 }} />
                  <div style={{ marginTop: 32, textAlign: 'right' }}>
                     <Space size={16}>
                        <Button size="large" icon={<RotateCcw size={18} />} ghost onClick={() => setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }])}>Làm mới bảng</Button>
@@ -402,22 +414,15 @@ const WholesaleSalePage = () => {
               <Row gutter={24}>
                 <Col xs={24} lg={12}>
                   <Card 
-                    title="Các đơn hàng nợ (theo Lô)" 
+                    title="Lịch sử Lô hàng" 
                     className="glass-card"
-                    extra={
-                        <Button 
-                            icon={<Download size={14} />} 
-                            onClick={handleExport}
-                            size="small"
-                        >
-                            Xuất danh sách
-                        </Button>
-                    }
+                    styles={{ body: { padding: 0 } }}
                   >
                     <Table 
                       dataSource={saleHistory} 
                       size="small" 
                       rowKey="id"
+                      scroll={{ x: 'max-content' }}
                       columns={[
                         { title: 'Ngày Bán', dataIndex: 'sale_date', render: d => dayjs(d).format('DD/MM/YYYY') },
                         { title: 'Tổng Tiền', render: (_, r) => <b>{Number(r.total_amount_vnd).toLocaleString()}</b> },
@@ -428,7 +433,7 @@ const WholesaleSalePage = () => {
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title={selectedSale ? `Lô hàng ngày ${dayjs(selectedSale?.sale_date).format('DD/MM/YYYY')}` : 'Chọn lô để xem'} className="glass-card">
+                  <Card title={selectedSale ? `Hóa đơn: ${dayjs(selectedSale?.sale_date).format('DD/MM/YYYY')}` : 'Chi tiết đơn'} className="glass-card">
                     {selectedSale ? (
                       <div className="lot-details">
                          <div style={{ marginBottom: 20 }}>
@@ -444,13 +449,14 @@ const WholesaleSalePage = () => {
                              </Button>
                          </div>
                          <Text strong>- Xe trong lô:</Text>
-                         <Table 
-                            dataSource={saleDetails.vehicles} 
-                            size="small" 
-                            pagination={{ pageSize: 5 }}
-                            rowKey="id"
-                            columns={[{ title: 'Số Máy', dataIndex: 'engine_no' }, { title: 'Số Khung', dataIndex: 'chassis_no' }, { title: 'Ghi chú xe', dataIndex: 'notes' }]}
-                         />
+                          <Table 
+                             dataSource={saleDetails.vehicles} 
+                             size="small" 
+                             pagination={{ pageSize: 5 }}
+                             rowKey="id"
+                             scroll={{ x: 'max-content' }}
+                             columns={[{ title: 'Số Máy', dataIndex: 'engine_no' }, { title: 'Số Khung', dataIndex: 'chassis_no' }, { title: 'Ghi chú xe', dataIndex: 'notes' }]}
+                          />
                          <Divider />
                          <Text strong>- Lịch sử thu tiền:</Text>
                          <Table 

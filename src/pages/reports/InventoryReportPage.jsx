@@ -55,7 +55,7 @@ const InventoryReportPage = () => {
   const fetchOptions = async () => {
     try {
       const [wRes, tRes, cRes] = await Promise.all([
-        isAdmin ? api.get('/warehouses') : Promise.resolve({ data: [] }),
+        api.get('/warehouses'),
         api.get('/vehicle-types'),
         api.get('/colors')
       ]);
@@ -145,9 +145,9 @@ const InventoryReportPage = () => {
   ];
 
   return (
-    <div style={{ padding: '0 5px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁO CÁO TỒN KHO TỔNG HỢP</Title>
+    <div className="page-container">
+      <div className="page-header">
+        <Title level={2} className="gradient-text">BÁO CÁO TỒN KHO</Title>
         <Button 
           icon={<Download size={18} />} 
           type="primary" 
@@ -209,19 +209,18 @@ const InventoryReportPage = () => {
           <Col xs={24} md={1}>
              <Filter size={20} opacity={0.5} />
           </Col>
-          {isAdmin && (
-            <Col xs={24} md={7}>
-              <Select 
-                allowClear 
-                style={{ width: '100%' }} 
-                placeholder="--- Tất cả các kho ---" 
-                size="large"
-                onChange={v => handleFilterChange('warehouse_id', v)}
-              >
-                {options.warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
-              </Select>
-            </Col>
-          )}
+          <Col xs={24} md={7}>
+            <Select 
+              allowClear 
+              style={{ width: '100%' }} 
+              placeholder="--- Tất cả các kho ---" 
+              size="large"
+              defaultValue={isAdmin ? undefined : user.warehouse_id}
+              onChange={v => handleFilterChange('warehouse_id', v)}
+            >
+              {options.warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+            </Select>
+          </Col>
           <Col xs={24} md={isAdmin ? 8 : 11}>
             <Select 
               allowClear 
@@ -258,23 +257,24 @@ const InventoryReportPage = () => {
           loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: true }}
           size="middle"
-          scroll={{ x: 1000 }}
+          scroll={{ x: 'max-content' }}
         />
       </Card>
 
       <style>{`
         .stat-card .ant-statistic-title {
-            font-size: 13px !important;
-            margin-bottom: 8px !important;
+            font-size: 11px !important;
+            margin-bottom: 4px !important;
             opacity: 0.8;
         }
         .stat-card .ant-statistic-content-value {
-            font-size: 24px !important;
+            font-size: 20px !important;
             font-weight: 800 !important;
         }
-        .ant-table-wrapper {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 8px;
+        @media (max-width: 768px) {
+            .stat-card {
+                margin-bottom: 0 !important;
+            }
         }
       `}</style>
     </div>

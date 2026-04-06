@@ -86,27 +86,27 @@ const AdminDashboardPage = () => {
     };
 
     return (
-        <div style={{ paddingBottom: 40 }}>
-            <div style={{ marginBottom: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
-                <div>
-                   <Title level={2} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <TrendingUp color="var(--primary-color)" /> Tổng quan hệ thống
+        <div className="dashboard-container">
+            <div className="page-header" style={{ alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                   <Title level={2} className="gradient-text" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <TrendingUp size={24} /> Tổng quan hệ thống
                    </Title>
-                   <Text type="secondary">Theo dõi doanh thu, tồn kho và lợi nhuận thời gian thực</Text>
+                   <Text type="secondary" style={{ fontSize: 13 }}>Số liệu kinh doanh & tồn kho thời gian thực</Text>
                 </div>
 
-                <Space size="middle" wrap>
-                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <Space size="middle" wrap className="dashboard-filters">
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 12px', borderRadius: 8, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center' }}>
                          <Space>
-                            <Filter size={16} opacity={0.6} />
-                            <Text size="small" strong>LỌC THEO KHO:</Text>
+                            <Filter size={14} opacity={0.6} />
                             <Select 
                                 placeholder="Tất cả kho" 
-                                style={{ width: 180 }} 
+                                style={{ width: 140 }} 
                                 allowClear
                                 onChange={handleWarehouseChange}
                                 value={filters.warehouse_id}
                                 variant="borderless"
+                                size="small"
                             >
                                 {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                             </Select>
@@ -116,7 +116,8 @@ const AdminDashboardPage = () => {
                     <RangePicker 
                         value={filters.dates}
                         onChange={handleDateChange}
-                        style={{ height: 40, borderRadius: 8 }}
+                        style={{ borderRadius: 8 }}
+                        size="small"
                     />
                 </Space>
             </div>
@@ -254,16 +255,23 @@ const AdminDashboardPage = () => {
                 }
                 .dashboard-detail-col {
                     border-left: 1px solid var(--border-color);
-                    padding-left: 40px;
+                    padding-left: 24px;
                 }
                 @media (max-width: 768px) {
-                    .responsive-title { font-size: 20px !important; }
+                    .dashboard-filters {
+                        width: 100% !important;
+                        flex-direction: column !important;
+                        align-items: stretch !important;
+                    }
+                    .dashboard-filters > div, .dashboard-filters > .ant-picker {
+                        width: 100% !important;
+                    }
                     .dashboard-detail-col {
                         border-left: none;
                         padding-left: 0;
-                        margin-top: 20px;
+                        margin-top: 16px;
                         border-top: 1px solid var(--border-color);
-                        padding-top: 20px;
+                        padding-top: 16px;
                     }
                 }
 

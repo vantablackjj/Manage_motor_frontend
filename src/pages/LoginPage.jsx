@@ -57,10 +57,12 @@ const LoginPage = () => {
       <Card 
         className="glass-card"
         style={{ 
-          width: 400, 
-          padding: '24px 10px', 
+          width: '95%',
+          maxWidth: 400, 
+          padding: '16px 8px', 
           border: '1px solid rgba(255,255,255,0.05)',
-          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+          margin: '0 auto'
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>

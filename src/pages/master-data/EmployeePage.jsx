@@ -82,6 +82,7 @@ const EmployeePage = () => {
         full_name: record.full_name,
         role: record.role,
         warehouse_id: record.warehouse_id,
+        phone: record.phone || '',
         password: '', // Không tải mật khẩu cũ
       });
     } else {
@@ -144,6 +145,11 @@ const EmployeePage = () => {
       title: 'Tên đăng nhập', 
       dataIndex: 'username', 
       key: 'username' 
+    },
+    { 
+      title: 'SĐT', 
+      dataIndex: 'phone', 
+      key: 'phone' 
     },
     { 
       title: 'Quyền hạn', 
@@ -216,9 +222,10 @@ const EmployeePage = () => {
       <Table 
         dataSource={data} 
         columns={columns.filter(c => !c.hidden)} 
-        rowKey="id"
-        className="modern-table"
+        rowKey="id" 
         loading={loading}
+        size="small"
+        scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 15 }}
       />
 
@@ -238,12 +245,17 @@ const EmployeePage = () => {
           layout="vertical"
         >
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item label="Họ và tên" name="full_name" rules={[{ required: true, message: 'Nhập họ tên' }]}>
                 <Input placeholder="Nguyễn Văn A" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
+              <Form.Item label="Số điện thoại" name="phone">
+                <Input placeholder="09xxx..." />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
               <Form.Item label="Tên đăng nhập" name="username" rules={[{ required: true, message: 'Nhập tên đăng nhập' }]}>
                 <Input placeholder="user_01" disabled={!!editingId} />
               </Form.Item>

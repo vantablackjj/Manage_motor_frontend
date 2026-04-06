@@ -98,7 +98,11 @@ function App() {
                     />
                     <Route 
                       path="/employees" 
-                      element={<EmployeePage />} 
+                      element={
+                        <ProtectedRoute adminOnly={true}>
+                          <EmployeePage />
+                        </ProtectedRoute>
+                      } 
                     />
                     <Route path="/transfers" element={<TransferPage />} />
                     <Route path="/vehicle-search" element={<VehicleLifecyclePage />} />

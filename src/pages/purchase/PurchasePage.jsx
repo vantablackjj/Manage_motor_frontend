@@ -211,8 +211,18 @@ const PurchasePage = () => {
   const isAdmin = user.role === 'ADMIN';
 
   return (
-    <div style={{ padding: '0 5px' }}>
-      <Title level={2} className="gradient-text" style={{ marginBottom: 20 }}>QUẢN LÝ NHẬP LÔ XE & CÔNG NỢ</Title>
+    <div className="page-container">
+      <div className="page-header">
+        <Title level={2} className="gradient-text">QUẢN LÝ NHẬP LÔ XE</Title>
+        <Button 
+          icon={<Download size={18} />} 
+          type="primary" 
+          ghost
+          onClick={handleExport}
+        >
+          Xuất Excel
+        </Button>
+      </div>
       
       <Card className="glass-card" style={{ marginBottom: 24 }}>
         <Form form={form} layout="vertical" initialValues={{ purchase_date: dayjs(), warehouse_id: user.warehouse_id }}>
@@ -234,9 +244,12 @@ const PurchasePage = () => {
 
       <Tabs activeKey={activeTab} onChange={setActiveTab} type="card" className="custom-tabs" items={[
           { key: '1', label: <Space><Plus size={18} /> NHẬP LÔ XE MỚI</Space>, children: (
-            <Card className="glass-card">
-              <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Text type="secondary">Nhập trực tiếp danh sách vào bảng (Giống Excel)</Text><Button icon={<Plus size={16} />} onClick={addRow} type="primary">Thêm dòng mới</Button></div>
-              <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 800 }} />
+            <Card className="glass-card" styles={{ body: { padding: '8px' } }}>
+              <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>Nhập danh sách xe mới vào bảng (Batch Entry)</Text>
+                <Button icon={<Plus size={16} />} onClick={addRow} type="primary">Thêm xe</Button>
+              </div>
+              <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 1000 }} />
               <div style={{ marginTop: 32, textAlign: 'right' }}>
                 <Space>
                   <Button size="large" icon={<RotateCcw size={18} />} ghost onClick={() => setBatchItems([{ key: Date.now().toString(), type_id: null, color_id: null, engine_no: '', chassis_no: '', price_vnd: undefined, notes: '' }])}>Nhập lại toàn bộ</Button>
@@ -295,6 +308,7 @@ const PurchasePage = () => {
                         dataSource={purchaseHistory} 
                         size="small" 
                         rowKey="id" 
+                        scroll={{ x: 'max-content' }}
                         columns={[{ title: 'Ngày Nhập', dataIndex: 'purchase_date', render: d => dayjs(d).format('DD/MM/YYYY') }, { title: 'Tổng Tiền', render: (_, r) => <b>{Number(r.total_amount_vnd).toLocaleString()}</b> }, { title: 'Nợ', render: (_, r) => <Tag color="volcano">{(Number(r.total_amount_vnd) - Number(r.paid_amount_vnd)).toLocaleString()}</Tag> }, { title: '', render: (_, r) => <Button size="small" onClick={() => loadLotDetails(r)}>Xem</Button> }]} 
                     />
                 </Card>

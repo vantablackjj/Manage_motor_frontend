@@ -19,7 +19,9 @@ import {
   Divider,
   Result,
   Badge,
-  Alert
+  Alert,
+  DatePicker,
+  InputNumber
 } from 'antd';
 import { 
   ArrowRightLeft, 
@@ -34,6 +36,7 @@ import {
   XCircle,
   MapPin,
   Calendar,
+  Search,
   User as UserIcon,
   Edit
 } from 'lucide-react';
@@ -55,7 +58,11 @@ const TransferPage = () => {
   const [detailData, setDetailData] = useState(null);
   const [editingTransfer, setEditingTransfer] = useState(null);
   
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [vehicleSearchText, setVehicleSearchText] = useState('');
+  const [historySearchText, setHistorySearchText] = useState('');
   const [form] = Form.useForm();
+  const [paymentForm] = Form.useForm();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
 
@@ -89,9 +96,12 @@ const TransferPage = () => {
     }
   };
 
-  const fetchAvailableVehicles = async (warehouseId) => {
+  const fetchAvailableVehicles = async (warehouseId, includeTransferId = null) => {
     try {
-      const res = await api.get(`/vehicles-in-warehouse/${warehouseId}`);
+      const url = includeTransferId 
+        ? `/vehicles-in-warehouse/${warehouseId}?include_transfer_id=${includeTransferId}`
+        : `/vehicles-in-warehouse/${warehouseId}`;
+      const res = await api.get(url);
       setAvailableVehicles(res.data);
     } catch (e) {
       console.error(e);
@@ -148,7 +158,7 @@ const TransferPage = () => {
       to_warehouse_id: transfer.to_warehouse_id,
       notes: transfer.notes
     });
-    fetchAvailableVehicles(transfer.from_warehouse_id);
+    fetchAvailableVehicles(transfer.from_warehouse_id, transfer.id);
     setSelectedVehicleIds(vehicles.map(v => v.id));
   };
 
@@ -195,6 +205,26 @@ const TransferPage = () => {
     }
   };
 
+  const handlePayment = async () => {
+    try {
+      const vals = await paymentForm.validateFields();
+      setLoading(true);
+      await api.post('/transfers/payment', {
+        transfer_id: detailData.transfer.id,
+        ...vals
+      });
+      message.success('Ghi nhận thanh toán thành công!');
+      setIsPaymentModalOpen(false);
+      paymentForm.resetFields();
+      loadDetails(detailData.transfer.id);
+      fetchTransfers();
+    } catch (e) {
+      message.error(e.response?.data?.message || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCancel = async (id) => {
     try {
       await api.post(`/transfers/${id}/cancel`);
@@ -227,17 +257,33 @@ const TransferPage = () => {
     { title: 'Mã Phiếu', dataIndex: 'transfer_code', key: 'transfer_code', render: (text, r) => <a onClick={() => loadDetails(r.id)}><Text strong>{text}</Text></a> },
     { title: 'Từ Kho', dataIndex: 'from_warehouse_id', render: id => warehouses.find(w => w.id === id)?.warehouse_name || 'N/A' },
     { title: 'Đến Kho', dataIndex: 'to_warehouse_id', render: id => warehouses.find(w => w.id === id)?.warehouse_name || 'N/A' },
-    { title: 'Giá Trị (đ)', dataIndex: 'total_amount', render: v => <Text strong>{Number(v).toLocaleString()}</Text> },
-    { title: 'Ngày Tạo', dataIndex: 'createdAt', render: date => dayjs(date).format('DD/MM/YYYY HH:mm') },
+    { title: 'Tổng Tiền', dataIndex: 'total_amount', render: v => <Text strong>{Number(v).toLocaleString()}</Text> },
+    { title: 'Đã Trả', dataIndex: 'paid_amount_vnd', render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()}</Text> },
+    { title: 'Còn Nợ', key: 'debt', render: (_, r) => <Tag color={(Number(r.total_amount) - Number(r.paid_amount_vnd)) > 0 ? 'red' : 'green'}>{(Number(r.total_amount) - Number(r.paid_amount_vnd)).toLocaleString()}</Tag> },
     { title: 'Trạng Thái', dataIndex: 'status', render: status => getStatusTag(status) },
     { title: '', key: 'action', render: (_, r) => <Button size="small" onClick={() => loadDetails(r.id)}>Chi tiết</Button> }
   ];
 
   const vehicleColumns = [
+    { title: 'Loại xe', key: 'type', render: (_, r) => r.VehicleType?.name || 'N/A' },
+    { title: 'Màu', key: 'color', render: (_, r) => <Tag color="blue">{r.VehicleColor?.color_name || 'N/A'}</Tag> },
     { title: 'Số Máy', dataIndex: 'engine_no', render: v => <Text code>{v}</Text> },
     { title: 'Số Khung', dataIndex: 'chassis_no', render: v => <Text code>{v}</Text> },
-    { title: 'Giá Hạch Toán (đ)', dataIndex: 'price_vnd', render: v => Number(v).toLocaleString() }
+    { title: 'Giá (đ)', dataIndex: 'price_vnd', render: v => Number(v).toLocaleString() }
   ];
+
+  const filteredVehicles = availableVehicles.filter(v => 
+    v.engine_no?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
+    v.chassis_no?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
+    v.VehicleType?.name?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
+    v.VehicleColor?.color_name?.toLowerCase().includes(vehicleSearchText.toLowerCase())
+  );
+
+  const filteredHistory = transfers.filter(t => 
+    t.transfer_code?.toLowerCase().includes(historySearchText.toLowerCase()) ||
+    warehouses.find(w => w.id === t.from_warehouse_id)?.warehouse_name?.toLowerCase().includes(historySearchText.toLowerCase()) ||
+    warehouses.find(w => w.id === t.to_warehouse_id)?.warehouse_name?.toLowerCase().includes(historySearchText.toLowerCase())
+  );
 
 
   return (
@@ -311,10 +357,25 @@ const TransferPage = () => {
                   </Col>
                 </Row>
                 
-                <Divider orientation="left">CHỌN XE TRONG KHO ({availableVehicles.length} xe sẵn sàng)</Divider>
+                <Divider orientation="left">
+                   CHỌN XE TRONG KHO ({availableVehicles.length} xe sẵn sàng) 
+                   {selectedVehicleIds.length > 0 && <Tag color="green" style={{ marginLeft: 10 }}>ĐANG CHỌN {selectedVehicleIds.length} XE</Tag>}
+                </Divider>
                 
+                <div style={{ marginBottom: 16 }}>
+                  <Input 
+                    placeholder="Tìm theo số máy hoặc số khung..." 
+                    prefix={<Search size={18} opacity={0.6} />} 
+                    allowClear
+                    size="large"
+                    value={vehicleSearchText}
+                    onChange={(e) => setVehicleSearchText(e.target.value)}
+                    style={{ borderRadius: 10, background: 'rgba(255,255,255,0.02)' }}
+                  />
+                </div>
+
                 <Table 
-                   dataSource={availableVehicles} 
+                   dataSource={filteredVehicles} 
                    columns={vehicleColumns} 
                    rowKey="id"
                    size="small"
@@ -349,8 +410,18 @@ const TransferPage = () => {
           label: <Space><History size={18} /> LỊCH SỬ CHUYỂN KHO</Space>,
           children: (
             <Card className="glass-card">
+              <div style={{ marginBottom: 16 }}>
+                <Input 
+                   placeholder="Tìm theo mã phiếu, tên kho..." 
+                   prefix={<Search size={18} opacity={0.6} />}
+                   allowClear
+                   value={historySearchText}
+                   onChange={(e) => setHistorySearchText(e.target.value)}
+                   style={{ width: 300, borderRadius: 10, background: 'rgba(255,255,255,0.02)' }}
+                />
+              </div>
               <Table 
-                dataSource={transfers} 
+                dataSource={filteredHistory} 
                 columns={columns} 
                 rowKey="id" 
                 loading={loading}
@@ -404,8 +475,30 @@ const TransferPage = () => {
                    style={{ marginTop: 10 }}
                 />
                 
+                <div style={{ marginTop: 24 }}>
+                  <Text strong>LỊCH SỬ THANH TOÁN ({detailData.payments?.length || 0})</Text>
+                  <Table 
+                    dataSource={detailData.payments} 
+                    size="small" 
+                    pagination={false} 
+                    style={{ marginTop: 10 }}
+                    columns={[
+                      { title: 'Ngày trả', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') },
+                      { title: 'Số tiền', dataIndex: 'amount_paid_vnd', render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text> },
+                      { title: 'Ghi chú', dataIndex: 'notes' }
+                    ]}
+                  />
+                  <div style={{ marginTop: 12, textAlign: 'right' }}>
+                    <Text type="secondary">Đã thanh toán: </Text>
+                    <Title level={4} style={{ display: 'inline', margin: 0, color: '#10b981' }}>{Number(detailData.transfer.paid_amount_vnd).toLocaleString()} đ</Title>
+                    {isAdmin && (
+                      <Button style={{ marginLeft: 16 }} onClick={() => setIsPaymentModalOpen(true)}>+ Trả thêm</Button>
+                    )}
+                  </div>
+                </div>
+
                 <div style={{ marginTop: 20 }}>
-                  <Text type="secondary">Ghi chú: </Text>
+                  <Text type="secondary">Ghi chú phiếu: </Text>
                   <Text>{detailData.transfer.notes || '---'}</Text>
                 </div>
 
@@ -456,6 +549,31 @@ const TransferPage = () => {
             </Row>
           </div>
         )}
+      </Modal>
+
+      {/* MODAL GHI THANH TOÁN */}
+      <Modal
+        title="GHI NHẬN THANH TOÁN CHUYỂN KHO"
+        open={isPaymentModalOpen}
+        onCancel={() => setIsPaymentModalOpen(false)}
+        onOk={() => paymentForm.submit()}
+        confirmLoading={loading}
+      >
+        <Form form={paymentForm} layout="vertical" onFinish={handlePayment} initialValues={{ payment_date: dayjs() }}>
+          <Form.Item label="Số vốn thanh toán (đ)" name="amount_paid_vnd" rules={[{ required: true }]}>
+              <InputNumber 
+                style={{ width: '100%' }} 
+                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} 
+                parser={v => v.replace(/\$\s?|(,*)/g, '')}
+              />
+          </Form.Item>
+          <Form.Item label="Ngày trả" name="payment_date" rules={[{ required: true }]}>
+            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Ghi chú" name="notes">
+            <Input.TextArea rows={2} placeholder="Chi phí vận chuyển, hạch toán đối chất..." />
+          </Form.Item>
+        </Form>
       </Modal>
 
       <style>{`

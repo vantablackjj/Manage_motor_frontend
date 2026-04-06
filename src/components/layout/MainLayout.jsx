@@ -57,7 +57,9 @@ const MainLayout = ({ children }) => {
     fetchNotifications();
     
     // Kết nối Socket.io
-    const socket = io("http://localhost:5000"); // URL Backend
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+    const socketUrl = apiUrl.replace('/api', ''); // Lấy domain gốc, bỏ đuôi /api
+    const socket = io(socketUrl); // URL Backend linh hoạt
     
     socket.on("connect", () => {
       console.log("Connected to Real-time server");
@@ -282,9 +284,9 @@ const MainLayout = ({ children }) => {
       icon: <Users size={18} />,
       label: isAdmin ? 'Quản trị & Phân quyền' : 'Danh mục nhân sự & Kho',
       children: [
-        { key: '/employees', label: <Link to="/employees">{isAdmin ? 'Quản lý nhân viên' : 'Xem danh sách nhân viên'}</Link> },
+        isAdmin && { key: '/employees', label: <Link to="/employees">Quản lý nhân viên</Link> },
         { key: '/warehouses', label: <Link to="/warehouses">{isAdmin ? 'Quản lý kho' : 'Xem danh sách kho'}</Link> },
-      ],
+      ].filter(Boolean),
     },
   ].filter(Boolean);
 
@@ -305,7 +307,7 @@ const MainLayout = ({ children }) => {
           <div style={{ minWidth: 40, width: 40, height: 40, background: 'var(--primary-color)', borderRadius: 8, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Truck color="white" size={24} />
           </div>
-          <span style={{ fontSize: 18, fontWeight: 'bold' }} className="gradient-text">HONDA 2026</span>
+          <span style={{ fontSize: 18, fontWeight: 'bold' }} className="gradient-text">QUẢN LÝ XE MÁY</span>
 
         </div>
         <Menu 
@@ -383,7 +385,7 @@ const MainLayout = ({ children }) => {
           </div>
         </Header>
         <Drawer
-          title={<span className="gradient-text">HONDA 2026</span>}
+          title={<span className="gradient-text">QUẢN LÝ XE MÁY</span>}
           placement="left"
           onClose={() => setDrawerVisible(false)}
           open={drawerVisible}
