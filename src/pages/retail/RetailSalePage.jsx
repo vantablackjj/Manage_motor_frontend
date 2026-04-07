@@ -424,12 +424,14 @@ const RetailSalePage = () => {
       key: "action",
       render: (_, r) => (
         <Space>
-           <Button 
-                type="text" 
-                icon={<Banknote size={16} />} 
-                onClick={() => handleOpenPaymentModal(r)}
-                title="Lịch sử trả tiền"
-            />
+            {isAdmin && (
+                <Button 
+                    type="text" 
+                    icon={<Banknote size={16} />} 
+                    onClick={() => handleOpenPaymentModal(r)}
+                    title="Lịch sử trả tiền"
+                />
+            )}
            <Button 
                 type="text" 
                 icon={<Printer size={16} />} 
