@@ -53,6 +53,10 @@ const WholesaleSalePage = () => {
   const isAdmin = user.role === 'ADMIN';
   const [warehouses, setWarehouses] = useState([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(user.warehouse_id);
+  const canDelete =
+    isAdmin || user.can_delete === true || user.can_delete === 1;
+  const canManageMoney =
+    isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
 
 
   useEffect(() => {
@@ -328,7 +332,7 @@ const WholesaleSalePage = () => {
           <Row gutter={24} align="bottom">
             <Col xs={24} md={isAdmin ? 7 : 10}>
               <Form.Item label="Chọn Khách Hàng Buôn" name="customer_id" rules={[{ required: true }]}>
-                <Select size="large" showSearch placeholder="Tìm theo tên hoặc mã khách" onChange={(val) => { handleSearchHistory(val); setActiveTab('2'); }}>
+                <Select size="large" showSearch placeholder="Tìm theo tên hoặc mã khách" optionFilterProp="children" onChange={(val) => { handleSearchHistory(val); setActiveTab('2'); }}>
                   {customers.map(c => <Option key={c.id} value={c.id}>{c.customer_code} - {c.name}</Option>)}
                 </Select>
               </Form.Item>
@@ -336,7 +340,7 @@ const WholesaleSalePage = () => {
             {isAdmin && (
                <Col xs={24} md={6}>
                   <Form.Item label="Từ Kho Xuất Bán" required>
-                    <Select size="large" value={selectedWarehouseId} onChange={handleWarehouseChange}>
+                    <Select size="large" showSearch placeholder="Chọn kho..." optionFilterProp="children" value={selectedWarehouseId} onChange={handleWarehouseChange}>
                         {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                     </Select>
                   </Form.Item>
@@ -370,14 +374,13 @@ const WholesaleSalePage = () => {
                 <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 1000 }} />
                  <div style={{ marginTop: 32, textAlign: 'right' }}>
                     <Space size={16}>
-                       <Button size="large" icon={<RotateCcw size={18} />} ghost onClick={() => setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }])}>Làm mới bảng</Button>
+                       <Button size="large" icon={<RotateCcw size={18} />} danger ghost onClick={() => setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }])}>Làm mới bảng</Button>
                        <Button 
                         size="large" 
                         icon={<FileSpreadsheet size={18} />} 
                         type="primary" 
                         ghost
                         onClick={() => setImportVisible(true)}
-                        disabled={!isAdmin}
                       >
                         NHẬP TỪ EXCEL
                       </Button>
@@ -440,12 +443,12 @@ const WholesaleSalePage = () => {
                             <Button 
                                 block 
                                 type="primary" 
-                                style={{ background: isAdmin ? '#10b981' : '#6b7280', height: 45, fontSize: 16 }} 
+                                style={{ background: canManageMoney ? '#10b981' : '#6b7280', height: 45, fontSize: 16 }} 
                                 icon={<DollarSign size={20} />} 
                                 onClick={() => setIsPaymentModalOpen(true)}
-                                disabled={!isAdmin}
+                                disabled={!canManageMoney}
                              >
-                                {isAdmin ? "THU TIỀN TỪ KHÁCH BUÔN" : "XEM LỊCH SỬ THU TIỀN"}
+                                {canManageMoney ? "THU TIỀN TỪ KHÁCH BUÔN" : "XEM LỊCH SỬ THU TIỀN"}
                              </Button>
                          </div>
                          <Text strong>- Xe trong lô:</Text>

@@ -27,7 +27,6 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 const WarrantyReportPage = () => {
-// ... existing state ...
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState([]);
     const [filters, setFilters] = useState({
@@ -62,7 +61,19 @@ const WarrantyReportPage = () => {
     };
 
     const fetchData = async (currentFilters = filters) => {
-// ... existing fetchData ...
+        setLoading(true);
+        try {
+            const { month, year, turn } = currentFilters;
+            const res = await api.get('/reports/warranty-report', {
+                params: { month, year, turn }
+            });
+            setData(res.data || []);
+        } catch (e) {
+            console.error('Lỗi khi lấy dữ liệu bảo hành', e);
+            message.error('Không thể tải danh sách xe bảo hành');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleFilterChange = (key, value) => {

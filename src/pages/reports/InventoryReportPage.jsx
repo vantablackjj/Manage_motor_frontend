@@ -24,7 +24,8 @@ import {
   Filter,
   BarChart3,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
 import api from '../../utils/api';
 import dayjs from 'dayjs';
@@ -107,6 +108,128 @@ const InventoryReportPage = () => {
     exportToExcel(exportData, `BaoCaoTonKho_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
+  const handlePrint = () => {
+    if (!reportData.vehicles || reportData.vehicles.length === 0) {
+        return message.warning('Không có dữ liệu để in!');
+    }
+
+    const warehouseName = filters.warehouse_id ? options.warehouses.find(w => w.id === filters.warehouse_id)?.warehouse_name : 'Tất cả các kho';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Báo cáo tồn kho</title>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.4; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+        .company-name { font-size: 14pt; font-weight: bold; text-transform: uppercase; }
+        .report-title { font-size: 22pt; font-weight: bold; margin: 15px 0; color: #000; }
+        .report-subtitle { font-size: 12pt; font-style: italic; }
+        .summary-box { display: flex; justify-content: space-around; margin-bottom: 25px; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
+        .summary-item { text-align: center; }
+        .summary-label { font-size: 9pt; color: #666; margin-bottom: 5px; }
+        .summary-value { font-size: 12pt; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9pt; }
+        th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+        th { background-color: #eee; font-weight: bold; text-align: center; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
+        .signature-box { width: 250px; }
+        .signature-title { font-weight: bold; margin-bottom: 60px; }
+        @media print {
+            @page { margin: 15mm; size: A4 portrait; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">HỆ THỐNG CỬA HÀNG XE MÁY THANH HẢI</div>
+        <div class="report-title">BÁO CÁO TỒN KHO CHI TIẾT</div>
+        <div class="report-subtitle">Ngày lập: ${dayjs().format('DD/MM/YYYY HH:mm')} | Kho: ${warehouseName}</div>
+    </div>
+
+    <div class="summary-box">
+        <div class="summary-item">
+            <div class="summary-label">TỔNG SỐ LƯỢNG</div>
+            <div class="summary-value">${reportData.summary.total_count} chiếc</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">TỔNG GIÁ TRỊ VỐN</div>
+            <div class="summary-value">${Number(reportData.summary.total_value).toLocaleString()} đ</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">SẴN SÀNG</div>
+            <div class="summary-value">${reportData.summary.available_count} xe</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">ĐANG CHUYỂN</div>
+            <div class="summary-value">${reportData.summary.transferring_count} xe</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;">STT</th>
+                <th>Kho</th>
+                <th>Loại xe</th>
+                <th>Màu xe</th>
+                <th>Số máy</th>
+                <th>Số khung</th>
+                <th>Giá nhập</th>
+                <th>Ngày nhập</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${reportData.vehicles.map((v, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${v.Warehouse?.warehouse_name || 'N/A'}</td>
+                    <td>${v.VehicleType?.name || 'N/A'}</td>
+                    <td>${v.VehicleColor?.color_name || 'N/A'}</td>
+                    <td>${v.engine_no}</td>
+                    <td>${v.chassis_no}</td>
+                    <td class="text-right">${Number(v.price_vnd).toLocaleString()}</td>
+                    <td class="text-center">${dayjs(v.createdAt).format('DD/MM/YYYY')}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <div class="footer" style="margin-top: 50px;">
+        <div class="signature-box">
+            <div class="signature-title">Người lập báo cáo</div>
+            <div>(Ký và ghi rõ họ tên)</div>
+        </div>
+        <div class="signature-box">
+            <div class="signature-title">Thủ kho</div>
+            <div>(Ký và ghi rõ họ tên)</div>
+        </div>
+        <div class="signature-box">
+            <div>Ngày ....... tháng ....... năm .......</div>
+            <div class="signature-title">Xác nhận của Giám đốc</div>
+            <div>(Ký tên và đóng dấu)</div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() { window.print(); };
+        window.onafterprint = function() { window.close(); };
+    </script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } else {
+        message.warning('Vui lòng cho phép pop-up để in báo cáo.');
+    }
+  };
+
   const columns = [
     { title: 'Tên Kho', dataIndex: ['Warehouse', 'warehouse_name'], key: 'warehouse', render: v => <Tag color="blue">{v || 'N/A'}</Tag>, responsive: ['md'] },
     { title: 'Loại Xe', dataIndex: ['VehicleType', 'name'], key: 'type', render: v => <Text strong>{v}</Text> },
@@ -148,14 +271,23 @@ const InventoryReportPage = () => {
     <div className="page-container">
       <div className="page-header">
         <Title level={2} className="gradient-text">BÁO CÁO TỒN KHO</Title>
-        <Button 
-          icon={<Download size={18} />} 
-          type="primary" 
-          ghost
-          onClick={handleExport}
-        >
-          Xuất Excel
-        </Button>
+        <Space>
+          <Button 
+            icon={<Printer size={16} />} 
+            onClick={handlePrint}
+            type="dashed"
+          >
+            In báo cáo
+          </Button>
+          <Button 
+            icon={<Download size={18} />} 
+            type="primary" 
+            ghost
+            onClick={handleExport}
+          >
+            Xuất Excel
+          </Button>
+        </Space>
       </div>
 
       {/* DASHBOARDS */}

@@ -276,6 +276,7 @@ const MainLayout = ({ children }) => {
         { key: '/report/purchases', label: <Link to="/report/purchases">Xem thông tin mua xe</Link> },
         { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn</Link> },
         { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
+        { key: '/report/daily', label: <Link to="/report/daily">Báo cáo cuối ngày</Link> },
       ],
     },
 

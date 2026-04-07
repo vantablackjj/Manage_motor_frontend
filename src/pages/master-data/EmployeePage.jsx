@@ -12,7 +12,9 @@ import {
   message,
   Modal,
   Tag,
-  Select
+  Select,
+  Checkbox,
+  Divider
 } from 'antd';
 import { UserPlus, Trash2, Edit, Save, Plus, Shield, MapPin, Eye, EyeOff, Download } from 'lucide-react';
 import api from '../../utils/api';
@@ -54,7 +56,11 @@ const EmployeePage = () => {
       'Họ và tên': u.full_name,
       'Tên đăng nhập': u.username,
       'Quyền hạn': u.role === 'ADMIN' ? 'Quản trị viên' : 'Nhân viên',
-      'Kho làm việc': warehouses.find(w => w.id === u.warehouse_id)?.warehouse_name || '---'
+      'Kho làm việc': warehouses.find(w => w.id === u.warehouse_id)?.warehouse_name || '---',
+      'Quản lý nợ': u.can_manage_debt ? 'Có' : 'Không',
+      'Hủy đơn/Xóa': u.can_delete ? 'Có' : 'Không',
+      'Quản lý tiền': u.can_manage_money ? 'Có' : 'Không',
+      'Quản lý phụ tùng': u.can_manage_spare_parts ? 'Có' : 'Không',
     }));
 
     exportToExcel(exportData, `DanhSachNhanVien_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -84,11 +90,21 @@ const EmployeePage = () => {
         warehouse_id: record.warehouse_id,
         phone: record.phone || '',
         password: '', // Không tải mật khẩu cũ
+        can_manage_debt: record.can_manage_debt,
+        can_delete: record.can_delete,
+        can_manage_money: record.can_manage_money,
+        can_manage_spare_parts: record.can_manage_spare_parts,
       });
     } else {
       setEditingId(null);
       form.resetFields();
-      form.setFieldsValue({ role: 'STAFF' });
+      form.setFieldsValue({ 
+        role: 'STAFF',
+        can_manage_debt: false,
+        can_delete: false,
+        can_manage_money: false,
+        can_manage_spare_parts: false
+      });
     }
 
     setIsModalOpen(true);
@@ -156,6 +172,19 @@ const EmployeePage = () => {
       dataIndex: 'role', 
       key: 'role',
       render: (role) => getRoleTag(role)
+    },
+    { 
+      title: 'Quyền hạn bổ sung', 
+      key: 'permissions',
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          {record.can_manage_debt && <Tag color="cyan" style={{fontSize: '10px'}}>Quản lý nợ</Tag>}
+          {record.can_delete && <Tag color="red" style={{fontSize: '10px'}}>Hủy/Xóa</Tag>}
+          {record.can_manage_money && <Tag color="gold" style={{fontSize: '10px'}}>Tiền/Trả nợ</Tag>}
+          {record.can_manage_spare_parts && <Tag color="purple" style={{fontSize: '10px'}}>Phụ tùng</Tag>}
+          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
+        </Space>
+      )
     },
     { 
       title: 'Kho làm việc', 
@@ -289,6 +318,31 @@ const EmployeePage = () => {
               ))}
             </Select>
           </Form.Item>
+
+          <Divider orientation="left" plain style={{ fontSize: '13px', color: '#888' }}>Phân quyền chi tiết</Divider>
+          
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="can_manage_debt" valuePropName="checked">
+                <Checkbox>Công nợ</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="can_delete" valuePropName="checked">
+                <Checkbox>Hủy/Xóa</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="can_manage_money" valuePropName="checked">
+                <Checkbox>Tiền/Trả nợ</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="can_manage_spare_parts" valuePropName="checked">
+                <Checkbox>Phụ tùng</Checkbox>
+              </Form.Item>
+            </Col>
+          </Row>
 
         </Form>
       </Modal>

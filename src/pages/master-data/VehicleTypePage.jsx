@@ -9,7 +9,8 @@ import {
   Space, 
   Typography, 
   Popconfirm, 
-  message 
+  message,
+  InputNumber
 } from 'antd';
 import { PlusCircle, Search, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
 import api from '../../utils/api';
@@ -24,6 +25,7 @@ const VehicleTypePage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
 
@@ -52,7 +54,8 @@ const VehicleTypePage = () => {
       'Tên xe': t.name,
       'Loại xe': t.type,
       'Tiền tố khung': t.chassis_prefix,
-      'Tiền tố máy': t.engine_prefix
+      'Tiền tố máy': t.engine_prefix,
+      'Giá gợi ý': Number(t.suggested_price || 0)
     }));
 
     exportToExcel(exportData, `DanhMucLoaiXe_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -60,13 +63,30 @@ const VehicleTypePage = () => {
 
   const onFinish = async (values) => {
     try {
-      await api.post('/vehicle-types', values);
-      message.success('Thêm loại xe mới thành công!');
+      if (editingId) {
+        await api.put(`/vehicle-types/${editingId}`, values);
+        message.success('Cập nhật loại xe thành công!');
+        setEditingId(null);
+      } else {
+        await api.post('/vehicle-types', values);
+        message.success('Thêm loại xe mới thành công!');
+      }
       form.resetFields();
       fetchData();
     } catch (error) {
-      message.error('Lỗi khi lưu: ' + error.message);
+      message.error('Lỗi khi lưu: ' + (error.response?.data?.message || error.message));
     }
+  };
+
+  const handleEdit = (record) => {
+    setEditingId(record.id);
+    form.setFieldsValue(record);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    form.resetFields();
   };
 
   const handleDelete = async (id) => {
@@ -84,6 +104,13 @@ const VehicleTypePage = () => {
     { title: 'Loại xe', dataIndex: 'type', key: 'type' },
     { title: 'Tiền tố khung', dataIndex: 'chassis_prefix', key: 'chassis_prefix' },
     { title: 'Tiền tố máy', dataIndex: 'engine_prefix', key: 'engine_prefix' },
+    { 
+      title: 'Giá gợi ý', 
+      dataIndex: 'suggested_price', 
+      key: 'suggested_price',
+      hidden: true, // Hidden per user request to only show in Purchase
+      render: (v) => <Text strong style={{ color: '#10b981' }}>{Number(v || 0).toLocaleString()} đ</Text>
+    },
     {
       title: 'Thao tác',
       key: 'action',
@@ -91,8 +118,14 @@ const VehicleTypePage = () => {
       hidden: !isAdmin,
       render: (_, record) => (
         <Space>
-          <Button type="text" icon={<Edit size={16} />} style={{ color: 'var(--primary-color)' }} />
-          <Popconfirm title="Xóa loại xe này?" onConfirm={() => handleDelete(record.id)}>
+          <Button type="text" icon={<Edit size={16} />} style={{ color: 'var(--primary-color)' }} onClick={() => handleEdit(record)} />
+          <Popconfirm 
+            title="Xóa loại xe này?" 
+            description="Lưu ý: Bạn không thể xóa nếu đã có xe trong kho thuộc loại này."
+            onConfirm={() => handleDelete(record.id)}
+            okText="Xác nhận xóa"
+            cancelText="Bỏ qua"
+          >
             <Button type="text" danger icon={<Trash2 size={16} />} />
           </Popconfirm>
         </Space>
@@ -165,10 +198,30 @@ const VehicleTypePage = () => {
                   <Input placeholder="Ví dụ: JF62..." />
                 </Form.Item>
               </Col>
+              <Col xs={24} md={12}>
+                <Form.Item label="Giá gợi ý (đ)" name="suggested_price">
+                  <InputNumber 
+                    style={{ width: '100%' }}
+                    size="large"
+                    placeholder="Ví dụ: 35.000.000"
+                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+                    parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                  />
+                </Form.Item>
+              </Col>
             </Row>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Button icon={<RotateCcw size={16} />} ghost onClick={() => form.resetFields()}>Làm mới</Button>
-              <Button icon={<Save size={16} />} type="primary" onClick={() => form.submit()} style={{ background: 'var(--primary-color)' }}>Lưu danh mục</Button>
+              <Button icon={<RotateCcw size={16} />} ghost onClick={editingId ? handleCancelEdit : () => form.resetFields()}>
+                {editingId ? 'Hủy bỏ sửa' : 'Làm mới'}
+              </Button>
+              <Button 
+                icon={<Save size={16} />} 
+                type="primary" 
+                onClick={() => form.submit()} 
+                style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
+              >
+                {editingId ? 'Cập nhật danh mục' : 'Lưu danh mục'}
+              </Button>
             </div>
           </Form>
         </div>

@@ -53,6 +53,12 @@ const RetailSalePage = () => {
   const [form] = Form.useForm();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "ADMIN";
+  const canManageDebt =
+    isAdmin || user.can_manage_debt === true || user.can_manage_debt === 1;
+  const canDelete =
+    isAdmin || user.can_delete === true || user.can_delete === 1;
+  const canManageMoney =
+    isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
 
   const [salesHistory, setSalesHistory] = useState([]);
   const [availableStock, setAvailableStock] = useState([]);
@@ -111,33 +117,36 @@ const RetailSalePage = () => {
         engine_no: vehicle.engine_no,
         chassis_no: vehicle.chassis_no,
       });
+
       setShowPriceWarning(false);
     }
   };
 
-  const handlePriceChange = (value) => {
-    if (selectedVehicle && selectedVehicle.price_vnd) {
-      if (Number(value) < Number(selectedVehicle.price_vnd)) {
+  const handlePriceChange = (value, currentVehicle = selectedVehicle) => {
+    if (currentVehicle && currentVehicle.price_vnd) {
+      if (Number(value) < Number(currentVehicle.price_vnd)) {
         setShowPriceWarning(true);
       } else {
         setShowPriceWarning(false);
       }
     }
-    // Tự động gợi ý trả đủ
-    if (!form.getFieldValue("paid_amount")) {
-      form.setFieldsValue({
-        paid_amount: value,
-        cash_amount: value,
-        transfer_amount: 0
-      });
-    }
+    // Tự động gợi ý trả đủ (có trừ đi tiền vay nếu có)
+    const loan = form.getFieldValue("loan_amount") || 0;
+    const target = (value || 0) - loan;
+    form.setFieldsValue({
+      paid_amount: target,
+      cash_amount: target,
+      transfer_amount: 0,
+    });
   };
 
   const handlePaymentChange = (type, value) => {
-    const cash = type === 'cash' ? value : (form.getFieldValue('cash_amount') || 0);
-    const transfer = type === 'transfer' ? value : (form.getFieldValue('transfer_amount') || 0);
+    const cash =
+      type === "cash" ? value : form.getFieldValue("cash_amount") || 0;
+    const transfer =
+      type === "transfer" ? value : form.getFieldValue("transfer_amount") || 0;
     form.setFieldsValue({
-      paid_amount: Number(cash) + Number(transfer)
+      paid_amount: Number(cash) + Number(transfer),
     });
   };
 
@@ -164,15 +173,35 @@ const RetailSalePage = () => {
     }
   };
 
+  const handleDelete = async (id) => {
+    try {
+      setLoading(true);
+      await api.delete(`/retail-sales/${id}`);
+      message.success(
+        "Đã hủy đơn bán và khôi phục xe về trạng thái 'Trong kho'!",
+      );
+      fetchInitialData();
+    } catch (error) {
+      message.error(
+        "Lỗi khi hủy đơn: " + (error.response?.data?.message || error.message),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenPaymentModal = async (sale) => {
     try {
       setSelectedSale(sale);
       const res = await api.get(`/retail-sales/${sale.id}/payments`);
       setPaymentHistory(res.data);
       setPaymentModalVisible(true);
+      const price = Number(sale.sale_price || sale.total_price || 0);
+      const paid = Number(sale.paid_amount || 0);
+      const loan = Number(sale.loan_amount || 0);
       paymentForm.setFieldsValue({
         payment_date: dayjs(),
-        amount: Math.max(0, (sale.sale_price || sale.total_price) - (sale.paid_amount || 0))
+        amount: Math.max(0, price - paid - loan),
       });
     } catch (error) {
       message.error("Không thể tải lịch sử trả tiền: " + error.message);
@@ -180,38 +209,38 @@ const RetailSalePage = () => {
   };
 
   const onAddPayment = async (values) => {
-      try {
-          setLoading(true);
-          await api.post('/retail-payments', {
-              ...values,
-              retail_sale_id: selectedSale.id,
-              payment_date: values.payment_date.toISOString()
-          });
-          message.success('Đã thêm khoản thanh toán!');
-          paymentForm.resetFields(['amount', 'notes']);
-          
-          // Refresh data
-          const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
-          setPaymentHistory(res.data);
-          
-          fetchInitialData(); // Refresh history table
-      } catch (error) {
-          message.error('Lỗi: ' + (error.response?.data?.message || error.message));
-      } finally {
-          setLoading(false);
-      }
+    try {
+      setLoading(true);
+      await api.post("/retail-payments", {
+        ...values,
+        retail_sale_id: selectedSale.id,
+        payment_date: values.payment_date.toISOString(),
+      });
+      message.success("Đã thêm khoản thanh toán!");
+      paymentForm.resetFields(["amount", "notes"]);
+
+      // Refresh data
+      const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
+      setPaymentHistory(res.data);
+
+      fetchInitialData(); // Refresh history table
+    } catch (error) {
+      message.error("Lỗi: " + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeletePayment = async (id) => {
-      try {
-          await api.delete(`/retail-payments/${id}`);
-          message.success('Đã xóa khoản thanh toán');
-          const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
-          setPaymentHistory(res.data);
-          fetchInitialData();
-      } catch (error) {
-          message.error('Lỗi: ' + error.message);
-      }
+    try {
+      await api.delete(`/retail-payments/${id}`);
+      message.success("Đã xóa khoản thanh toán");
+      const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
+      setPaymentHistory(res.data);
+      fetchInitialData();
+    } catch (error) {
+      message.error("Lỗi: " + error.message);
+    }
   };
 
   const handlePrint = (sale) => {
@@ -225,56 +254,84 @@ const RetailSalePage = () => {
 
     // Simple Vietnamese number-to-words converter
     const toViWords = (n) => {
-      if (n <= 0) return 'Không đồng';
-      const units = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+      if (n <= 0) return "Không đồng";
+      const units = [
+        "",
+        "một",
+        "hai",
+        "ba",
+        "bốn",
+        "năm",
+        "sáu",
+        "bảy",
+        "tám",
+        "chín",
+      ];
       const readGroup = (num) => {
-        const h = Math.floor(num / 100), t = Math.floor((num % 100) / 10), u = num % 10;
-        let res = '';
-        if (h > 0) res += units[h] + ' trăm ';
-        if (t > 1) res += ['', 'mười', 'hai mươi', 'ba mươi', 'bốn mươi', 'năm mươi', 'sáu mươi', 'bảy mươi', 'tám mươi', 'chín mươi'][t] + (u > 0 ? ' ' + units[u] : '');
-        else if (t === 1) res += 'mười' + (u > 0 ? ' ' + units[u] : '');
-        else if (u > 0 && h > 0) res += 'lẻ ' + units[u];
+        const h = Math.floor(num / 100),
+          t = Math.floor((num % 100) / 10),
+          u = num % 10;
+        let res = "";
+        if (h > 0) res += units[h] + " trăm ";
+        if (t > 1)
+          res +=
+            [
+              "",
+              "mười",
+              "hai mươi",
+              "ba mươi",
+              "bốn mươi",
+              "năm mươi",
+              "sáu mươi",
+              "bảy mươi",
+              "tám mươi",
+              "chín mươi",
+            ][t] + (u > 0 ? " " + units[u] : "");
+        else if (t === 1) res += "mười" + (u > 0 ? " " + units[u] : "");
+        else if (u > 0 && h > 0) res += "lẻ " + units[u];
         else if (u > 0) res += units[u];
         return res.trim();
       };
-      const groups = [], labels = ['', ' nghìn', ' triệu', ' tỷ'];
+      const groups = [],
+        labels = ["", " nghìn", " triệu", " tỷ"];
       let temp = n;
-      while (temp > 0) { groups.push(temp % 1000); temp = Math.floor(temp / 1000); }
-      let result = '';
+      while (temp > 0) {
+        groups.push(temp % 1000);
+        temp = Math.floor(temp / 1000);
+      }
+      let result = "";
       for (let i = groups.length - 1; i >= 0; i--) {
-        if (groups[i] > 0) result += readGroup(groups[i]) + labels[i] + ' ';
+        if (groups[i] > 0) result += readGroup(groups[i]) + labels[i] + " ";
       }
       const r = result.trim();
-      return r.charAt(0).toUpperCase() + r.slice(1) + ' đồng';
+      return r.charAt(0).toUpperCase() + r.slice(1) + " đồng";
     };
 
     const dateObj = sale.sale_date ? new Date(sale.sale_date) : new Date();
-    const dd = String(dateObj.getDate()).padStart(2, '0');
-    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, "0");
+    const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
     const yyyy = dateObj.getFullYear();
     const getHeadName = (whName) => {
       const name = (whName || "").toUpperCase();
-      if (name.includes("NINH MỸ") || name.includes("NINH MY")) return "THANH HẢI 1";
-      if (name.includes("KIM SƠN") || name.includes("KIM SON")) return "THANH HẢI 2";
+      if (name.includes("NINH MỸ") || name.includes("NINH MY"))
+        return "THANH HẢI 1";
+      if (name.includes("KIM SƠN") || name.includes("KIM SON"))
+        return "THANH HẢI 2";
       if (name.includes("TH3")) return "THANH HẢI 3";
-      return "THANH HẢI"; 
+      return "THANH HẢI";
     };
     const headName = getHeadName(warehouse.warehouse_name);
 
     const formatSN = (no) => {
-      if (!no) return '................';
-      const clean = no.replace(/[-\s]/g, '');
-      if (clean.length > 7) {
-        return clean.slice(0, clean.length - 7) + '-' + clean.slice(clean.length - 7);
-      }
-      return clean;
+      if (!no) return "................";
+      return no.replace(/\s/g, ""); // Just remove spaces, keep original dashes if any or none.
     };
 
     const html = `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Hop Dong Mua Ban Xe May</title>
+  <title>&nbsp;</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: "Times New Roman", Times, serif; font-size: 11.5pt; line-height: 1.35; color: #000; background: white; }
@@ -289,10 +346,10 @@ const RetailSalePage = () => {
     .underline { width: 160px; height: 1.2px; background: #000; margin: 1px 0 0 auto; }
     .title-main { text-align: center; font-size: 19pt; font-weight: bold; margin: 8px 0 4px; }
     .title-date { text-align: center; font-style: italic; margin-bottom: 8px; font-size: 11pt; }
-    .row { display: flex; margin-bottom: 2px; align-items: flex-start; }
-    .col { display: flex; flex: 1; min-width: 0; }
-    .lbl { white-space: nowrap; margin-right: 6px; }
-    .val { font-weight: bold; word-break: break-word; flex: 1; }
+    .row { display: flex; width: 100%; margin: 2px 0; align-items: flex-start; }
+    .col { flex: 0 0 50%; display: flex; min-width: 0; }
+    .lbl { width: 115px; display: inline-block; color: #000; font-weight: normal; flex-shrink: 0; }
+    .val { font-weight: bold; flex: 1; word-break: break-word; }
     .footer-text { font-size: 10pt; margin-top: 10px; line-height: 1.3; font-style: italic; }
     .sig-row { display: flex; justify-content: space-between; margin-top: 15px; text-align: center; }
     .sig-box { flex: 1; }
@@ -316,50 +373,59 @@ const RetailSalePage = () => {
     </div>
   </div>
   <div class="title-main">HỢP ĐỒNG MUA BÁN XE MÁY</div>
-  <div class="title-date">${warehouse.location || 'Ninh Bình'}, ngày ${dd} tháng ${mm} năm ${yyyy}</div>
+  <div class="title-date">${warehouse.location || "Ninh Bình"}, ngày ${dd} tháng ${mm} năm ${yyyy}</div>
   <div style="font-weight:bold;text-decoration:underline;margin:5px 0 3px; font-size: 11pt">CHÚNG TÔI GỒM :</div>
   <div style="font-weight:bold;margin-top:2px; font-size: 11pt">1 - ĐẠI DIỆN BÊN BÁN XE (A) :</div>
-  <div class="row"><div class="val" style="text-transform:uppercase">${warehouse.warehouse_name || '................................................................................'}</div></div>
-  <div class="row"><span class="lbl">Địa chỉ :</span><span class="val">${[warehouse.address, warehouse.location].filter(Boolean).join(', ') || '................................................................................'}</span></div>
+  <div class="row"><div class="val" style="text-transform:uppercase">${warehouse.warehouse_name || "................................................................................"}</div></div>
+  <div class="row"><span class="lbl">Địa chỉ :</span><span class="val">${[warehouse.address, warehouse.location].filter(Boolean).join(", ") || "................................................................................"}</span></div>
   <div class="row">
-    <div class="col"><span class="lbl">Điện thoại :</span><span class="val">${seller.phone || warehouse.phone || '......................'}</span></div>
-    <div class="col"><span class="lbl">Di động :</span><span class="val">${warehouse.mobile_phone || warehouse.phone || '......................'}</span></div>
+    <div class="col"><span class="lbl">Điện thoại :</span><span class="val">${warehouse.phone || "......................"}</span></div>
+    <div class="col"><span class="lbl">Di động :</span><span class="val">${warehouse.mobile || "......................"}</span></div>
   </div>
   <div class="row">
-    <div class="col"><span class="lbl">Do ông :</span><span class="val">${warehouse.manager_name || '......................'}</span></div>
+    <div class="col"><span class="lbl">Do ông :</span><span class="val">${warehouse.manager_name || "......................"}</span></div>
     <div class="col"><span class="lbl">Chức vụ :</span><span class="val">Cửa hàng trưởng</span></div>
   </div>
   <div style="font-weight:bold;margin-top:10px; font-size: 11pt">2 - ĐẠI DIỆN BÊN MUA XE (B) :</div>
   <div class="row">
-    <div class="col" style="flex:1.5"><span class="lbl">Do ông (bà) :</span><span class="val">${sale.customer_name || ''}</span></div>
-    <div class="col"><span class="lbl">Số CMND :</span><span class="val">${sale.id_card || '................'}</span></div>
+    <div class="col"><span class="lbl">Do ông (bà) :</span><span class="val">${sale.customer_name || ""}</span></div>
+    <div class="col"><span class="lbl">Số CMND :</span><span class="val">${sale.id_card || "................"}</span></div>
   </div>
-  <div class="row"><span class="lbl">Địa chỉ :</span><span class="val">${sale.address || '................................................................................'}</span></div>
+  <div class="row"><span class="lbl">Địa chỉ :</span><span class="val">${sale.address || "................................................................................"}</span></div>
   <div class="row">
-    <div class="col"><span class="lbl">Điện thoại :</span><span class="val">${sale.phone || '......................'}</span></div>
-    <div class="col"><span class="lbl">Người bảo lãnh :</span><span class="val">${sale.guarantor_name || '................................'}</span></div>
+    <div class="col"><span class="lbl">Điện thoại :</span><span class="val">${sale.phone || "......................"}</span></div>
+    <div class="col"><span class="lbl">Người bảo lãnh :</span><span class="val">${sale.guarantor_name || "................................"}</span></div>
   </div>
   <div style="font-weight:bold;margin-top:10px; font-size: 11pt">3 - NỘI DUNG HỢP ĐỒNG :</div>
   <div style="margin-top:4px">Bên A bán cho bên B - 01 chiếc xe máy. Giá xe hai bên đã thỏa thuận.</div>
-  <div class="row" style="margin-top:2px"><span class="lbl">Xe bao gồm :</span><span class="val">${sale.sale_type === 'Đăng ký' ? 'Đăng ký xe' : 'Hồ sơ xe'}</span></div>
+  <div class="row" style="margin-top:2px"><span class="lbl">Xe bao gồm :</span><span class="val">${sale.sale_type === "Đăng ký" ? "Đăng ký xe" : "Hồ sơ xe"}</span></div>
   <div class="row">
-    <div class="col"><span class="lbl">Loại xe :</span><span class="val">${vehicle.VehicleType?.name || '................'}</span></div>
-    <div class="col"><span class="lbl">Màu :</span><span class="val">${vehicle.VehicleColor?.color_name || '................'}</span></div>
+    <div class="col"><span class="lbl">Loại xe :</span><span class="val">${vehicle.VehicleType?.name || "................"}</span></div>
+    <div class="col"><span class="lbl">Màu :</span><span class="val">${vehicle.VehicleColor?.color_name || "................"}</span></div>
   </div>
   <div class="row">
     <div class="col"><span class="lbl">Số máy :</span><span class="val">${formatSN(sale.engine_no)}</span></div>
     <div class="col"><span class="lbl">Số khung :</span><span class="val">${formatSN(sale.chassis_no)}</span></div>
   </div>
   <div class="row" style="margin-top:2px">
-    <div class="col"><span class="lbl">Giá bán :</span><span class="val">${price.toLocaleString('vi-VN')} đ</span></div>
-    <div class="col"><span class="lbl">Đã trả (TM/CK) :</span><span class="val">${paid.toLocaleString('vi-VN')} đ</span></div>
+    <div class="col"><span class="lbl">Giá bán :</span><span class="val">${price.toLocaleString("vi-VN")} đ</span></div>
+    <div class="col"><span class="lbl">Đã trả (TM/CK) :</span><span class="val">${paid.toLocaleString("vi-VN")} đ</span></div>
   </div>
+  ${
+    sale.payment_method === "Trả góp"
+      ? `
   <div class="row">
-    <div class="col"><span class="lbl">Trả góp (Ngân hàng) :</span><span class="val">${loan.toLocaleString('vi-VN')} đ</span></div>
-    <div class="col"><span class="lbl">Còn nợ lại :</span><span class="val" style="font-size:12pt">${debt.toLocaleString('vi-VN')} đ</span></div>
+    <div class="col"><span class="lbl">Trả góp :</span><span class="val">${loan.toLocaleString("vi-VN")} đ</span></div>
+    <div class="col"><span class="lbl">Ngân hàng :</span><span class="val">....................................................</span></div>
+  </div>
+  `
+      : ""
+  }
+  <div class="row">
+    <div class="col"><span class="lbl">Còn nợ lại :</span><span class="val" style="font-size:12pt">${debt.toLocaleString("vi-VN")} đ</span></div>
   </div>
   <div class="row"><span class="lbl">Bằng chữ :</span><span class="val" style="font-style:italic">${toViWords(debt)} .</span></div>
-  <div style="margin-top:6px">Hẹn đến ngày ....... tháng ....... năm 20....... , Ông (Bà) <b>${sale.customer_name || ''}</b> phải trả hết số tiền còn nợ cho công ty chúng tôi và nhận Đăng ký xe .</div>
+  <div style="margin-top:6px">Hẹn đến ngày ....... tháng ....... năm 20....... , Ông (Bà) <b>${sale.customer_name || ""}</b> phải trả hết số tiền còn nợ cho công ty chúng tôi và nhận Đăng ký xe .</div>
   <div class="footer-text">
     - Nếu quá hạn thanh toán 1 tháng khách hàng phải chịu lãi suất 3%/tháng.<br>
     - Nếu quá hạn thanh toán 2 tháng tôi xin chịu chấp nhận cho công ty thu hồi xe và xin chịu mọi phí tổn hao mòn xe, bồi thường cho <b style="text-transform:uppercase">HEAD ${headName}</b>.<br>
@@ -376,12 +442,14 @@ const RetailSalePage = () => {
 </body>
 </html>`;
 
-    const pw = window.open('', '_blank', 'width=850,height=700');
+    const pw = window.open("", "_blank", "width=850,height=700");
     if (pw) {
       pw.document.write(html);
       pw.document.close();
     } else {
-      message.warning('Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này.');
+      message.warning(
+        "Trình duyệt đã chặn cửa sổ pop-up. Vui lòng cho phép pop-up cho trang này.",
+      );
     }
   };
 
@@ -402,9 +470,7 @@ const RetailSalePage = () => {
     {
       title: "Loại TT",
       dataIndex: "payment_method",
-      render: (v) => (
-        <Tag color={v === "Trả góp" ? "orange" : "blue"}>{v}</Tag>
-      ),
+      render: (v) => <Tag color={v === "Trả góp" ? "orange" : "blue"}>{v}</Tag>,
     },
     {
       title: "Đã trả",
@@ -412,44 +478,58 @@ const RetailSalePage = () => {
       render: (v) => <Text type="success">{Number(v).toLocaleString()}</Text>,
     },
     {
-        title: "Còn nợ",
-        key: "debt",
-        render: (_, r) => {
-            const debt = (r.sale_price || r.total_price) - r.paid_amount;
-            return debt > 0 ? <Text type="danger" strong>{Number(debt).toLocaleString()}</Text> : <Tag color="green">Đã đủ</Tag>;
-        }
+      title: "Còn nợ",
+      key: "debt",
+      render: (_, r) => {
+        const price = Number(r.sale_price || r.total_price || 0);
+        const paid = Number(r.paid_amount || 0);
+        const loan = Number(r.loan_amount || 0);
+        const debt = price - paid - loan;
+        return debt > 0 ? (
+          <Text type="danger" strong>
+            {Number(debt).toLocaleString()}
+          </Text>
+        ) : (
+          <Tag color="green">Đã đủ</Tag>
+        );
+      },
     },
     {
       title: "Tác vụ",
       key: "action",
       render: (_, r) => (
         <Space>
-            {isAdmin && (
-                <Button 
-                    type="text" 
-                    icon={<Banknote size={16} />} 
-                    onClick={() => handleOpenPaymentModal(r)}
-                    title="Lịch sử trả tiền"
-                />
-            )}
-           <Button 
-                type="text" 
-                icon={<Printer size={16} />} 
-                onClick={() => handlePrint(r)}
-                title="In hợp đồng"
-                style={{ color: '#1890ff' }}
+          {canManageMoney && (
+            <Button
+              type="text"
+              icon={<Banknote size={16} />}
+              onClick={() => handleOpenPaymentModal(r)}
+              title="Lịch sử trả tiền"
             />
-            {isAdmin && (
-                <Popconfirm
-                    title="Hủy đơn bán này?"
-                    description="Xe sẽ được khôi phục về trạng thái 'Trong kho'. Tiếp tục?"
-                    onConfirm={() => handleDelete(r.id)}
-                    okText="Xác nhận"
-                    cancelText="Bỏ qua"
-                >
-                    <Button type="text" danger icon={<RotateCcw size={16} />} title="Hủy đơn / Đổi xe" />
-                </Popconfirm>
-            )}
+          )}
+          <Button
+            type="text"
+            icon={<Printer size={16} />}
+            onClick={() => handlePrint(r)}
+            title="In hợp đồng"
+            style={{ color: "#1890ff" }}
+          />
+          {canDelete && (
+            <Popconfirm
+              title="Hủy đơn bán này?"
+              description="Xe sẽ được khôi phục về trạng thái 'Trong kho'. Tiếp tục?"
+              onConfirm={() => handleDelete(r.id)}
+              okText="Xác nhận"
+              cancelText="Bỏ qua"
+            >
+              <Button
+                type="text"
+                danger
+                icon={<RotateCcw size={16} />}
+                title="Hủy đơn / Đổi xe"
+              />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -475,16 +555,16 @@ const RetailSalePage = () => {
     exportToExcel(exportData, `LichSuBanLe_${dayjs().format("YYYYMMDD_HHmm")}`);
   };
 
-  const filteredHistory = salesHistory.filter(s => {
-    const matchesSearch = 
+  const filteredHistory = salesHistory.filter((s) => {
+    const matchesSearch =
       s.engine_no?.toLowerCase().includes(searchText.toLowerCase()) ||
       s.customer_name?.toLowerCase().includes(searchText.toLowerCase()) ||
       s.phone?.includes(searchText);
 
     const hasDebt = (s.sale_price || s.total_price) - s.paid_amount > 0;
-    
+
     if (showOnlyDebt) {
-        return matchesSearch && hasDebt;
+      return matchesSearch && hasDebt;
     }
     return matchesSearch;
   });
@@ -571,7 +651,9 @@ const RetailSalePage = () => {
                   >
                     <Select
                       size="large"
+                      showSearch
                       placeholder="Chọn nhân viên bán..."
+                      optionFilterProp="children"
                       disabled={!isAdmin}
                     >
                       {employees.map((e) => (
@@ -587,9 +669,11 @@ const RetailSalePage = () => {
                     <Form.Item label="Kho xuất bán" required>
                       <Select
                         size="large"
+                        showSearch
                         value={selectedWarehouseId}
                         onChange={handleWarehouseChange}
                         placeholder="Chọn kho..."
+                        optionFilterProp="children"
                       >
                         {warehouses.map((w) => (
                           <Option key={w.id} value={w.id}>
@@ -708,8 +792,10 @@ const RetailSalePage = () => {
                       size="large"
                       style={{ width: "100%" }}
                       onChange={handlePriceChange}
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                      }
+                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
                     />
                   </Form.Item>
                 </Col>
@@ -729,9 +815,11 @@ const RetailSalePage = () => {
                     <InputNumber
                       size="large"
                       style={{ width: "100%" }}
-                      onChange={(v) => handlePaymentChange('cash', v)}
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                      onChange={(v) => handlePaymentChange("cash", v)}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                      }
+                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
                     />
                   </Form.Item>
                 </Col>
@@ -740,22 +828,57 @@ const RetailSalePage = () => {
                     <InputNumber
                       size="large"
                       style={{ width: "100%" }}
-                      onChange={(v) => handlePaymentChange('transfer', v)}
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                      onChange={(v) => handlePaymentChange("transfer", v)}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                      }
+                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
                     />
                   </Form.Item>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item label="Tiền thực thu" name="paid_amount" rules={[{ required: true }]}>
-                    <InputNumber
-                      size="large"
-                      style={{ width: "100%" }}
-                      placeholder="Tổng thực thu..."
-                      readOnly
-                      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                      parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
-                    />
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prev, curr) =>
+                      prev.sale_price !== curr.sale_price ||
+                      prev.loan_amount !== curr.loan_amount ||
+                      prev.payment_method !== curr.payment_method
+                    }
+                  >
+                    {({ getFieldValue }) => {
+                      const price = getFieldValue("sale_price") || 0;
+                      const loan = getFieldValue("loan_amount") || 0;
+                      const target = price - loan;
+                      return (
+                        <Form.Item
+                          label={
+                            <Space>
+                              Tiền thực thu
+                              {getFieldValue("payment_method") ===
+                                "Trả góp" && (
+                                <Tag color="cyan">
+                                  Cần thu: {target.toLocaleString()}đ
+                                </Tag>
+                              )}
+                            </Space>
+                          }
+                          name="paid_amount"
+                          rules={[{ required: true }]}
+                        >
+                          <InputNumber
+                            size="large"
+                            style={{ width: "100%" }}
+                            placeholder="Tổng thực thu..."
+                            readOnly
+                            className="readonly-input-highlight"
+                            formatter={(v) =>
+                              `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                            }
+                            parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                          />
+                        </Form.Item>
+                      );
+                    }}
                   </Form.Item>
                 </Col>
               </Row>
@@ -763,19 +886,33 @@ const RetailSalePage = () => {
               <Row gutter={[16, 16]}>
                 <Col xs={24} md={24}>
                   <Form.Item label="Hình thức thanh toán" name="payment_method">
-                    <Select 
+                    <Select
                       size="large"
                       onChange={(v) => {
+                        const price = form.getFieldValue("sale_price") || 0;
                         if (v === "Trả thẳng") {
                           form.setFieldsValue({
                             loan_amount: 0,
                             bank_name: null,
-                            contract_number: null
+                            contract_number: null,
+                            cash_amount: price,
+                            transfer_amount: 0,
+                            paid_amount: price,
+                          });
+                        } else {
+                          const loan = form.getFieldValue("loan_amount") || 0;
+                          const target = price - loan;
+                          form.setFieldsValue({
+                            cash_amount: target,
+                            transfer_amount: 0,
+                            paid_amount: target,
                           });
                         }
                       }}
                     >
-                      <Option value="Trả thẳng">Trả thẳng (Tiền mặt/Chuyển khoản)</Option>
+                      <Option value="Trả thẳng">
+                        Trả thẳng (Tiền mặt/Chuyển khoản)
+                      </Option>
                       <Option value="Trả góp">Trả góp (Qua ngân hàng)</Option>
                     </Select>
                   </Form.Item>
@@ -783,17 +920,48 @@ const RetailSalePage = () => {
               </Row>
 
               {/* WATCHER TRONG JSX ĐỂ HIỂN THỊ Ô NGÂN HÀNG */}
-              <Form.Item noStyle shouldUpdate={(prevValues, currentValues) => prevValues.payment_method !== currentValues.payment_method}>
-                {({ getFieldValue }) => 
-                  getFieldValue('payment_method') === 'Trả góp' && (
-                    <div style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 12, marginBottom: 24, border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <Title level={5} style={{ fontSize: 13, marginBottom: 20, color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <Form.Item
+                noStyle
+                shouldUpdate={(prevValues, currentValues) =>
+                  prevValues.payment_method !== currentValues.payment_method
+                }
+              >
+                {({ getFieldValue }) =>
+                  getFieldValue("payment_method") === "Trả góp" && (
+                    <div
+                      style={{
+                        padding: "20px",
+                        background: "rgba(255, 255, 255, 0.03)",
+                        borderRadius: 12,
+                        marginBottom: 24,
+                        border: "1px solid rgba(255, 255, 255, 0.1)",
+                      }}
+                    >
+                      <Title
+                        level={5}
+                        style={{
+                          fontSize: 13,
+                          marginBottom: 20,
+                          color: "var(--primary-color)",
+                          textTransform: "uppercase",
+                          letterSpacing: "1px",
+                        }}
+                      >
                         THÔNG TIN TRẢ GÓP
                       </Title>
                       <Row gutter={[16, 16]}>
                         <Col xs={24} md={8}>
-                          <Form.Item label="Ngân hàng" name="bank_name" rules={[{ required: true, message: 'Nhập tên ngân hàng' }]}>
-                            <Input size="large" placeholder="HD Saison, FE, MCredit..." />
+                          <Form.Item
+                            label="Ngân hàng"
+                            name="bank_name"
+                            rules={[
+                              { required: true, message: "Nhập tên ngân hàng" },
+                            ]}
+                          >
+                            <Input
+                              size="large"
+                              placeholder="HD Saison, FE, MCredit..."
+                            />
                           </Form.Item>
                         </Col>
                         <Col xs={12} md={8}>
@@ -806,8 +974,20 @@ const RetailSalePage = () => {
                             <InputNumber
                               size="large"
                               style={{ width: "100%" }}
-                              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                              parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                              onChange={(val) => {
+                                const price =
+                                  form.getFieldValue("sale_price") || 0;
+                                const target = price - (val || 0);
+                                form.setFieldsValue({
+                                  cash_amount: target,
+                                  transfer_amount: 0,
+                                  paid_amount: target,
+                                });
+                              }}
+                              formatter={(v) =>
+                                `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                              }
+                              parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
                               placeholder="Số tiền vay..."
                             />
                           </Form.Item>
@@ -891,18 +1071,20 @@ const RetailSalePage = () => {
             className="glass-card"
             extra={
               <Space wrap>
-                <Input.Search 
-                    placeholder="Tìm theo số máy/tên khách..." 
-                    allowClear 
-                    onSearch={(v) => setSearchText(v)}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    style={{ width: 220 }}
+                <Input.Search
+                  placeholder="Tìm theo số máy/tên khách..."
+                  allowClear
+                  onSearch={(v) => setSearchText(v)}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  style={{ width: 220 }}
                 />
-                <Checkbox 
-                    checked={showOnlyDebt} 
-                    onChange={(e) => setShowOnlyDebt(e.target.checked)}
+                <Checkbox
+                  checked={showOnlyDebt}
+                  onChange={(e) => setShowOnlyDebt(e.target.checked)}
                 >
-                    <Text strong type="danger" style={{ fontSize: 13 }}>Chưa thu đủ</Text>
+                  <Text strong type="danger" style={{ fontSize: 13 }}>
+                    Chưa thu đủ
+                  </Text>
                 </Checkbox>
                 <Button
                   icon={<Download size={16} />}
@@ -918,7 +1100,6 @@ const RetailSalePage = () => {
                   ghost
                   size="small"
                   onClick={() => setImportVisible(true)}
-                  disabled={!isAdmin}
                 >
                   Nhập Excel
                 </Button>
@@ -958,74 +1139,144 @@ const RetailSalePage = () => {
         footer={null}
         width={700}
       >
-          <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, background: '#f8fafc', padding: '12px 16px', borderRadius: 8 }}>
-                  <div>
-                      <Text type="secondary">Tổng giá bán:</Text><br/>
-                      <Title level={4} style={{ margin: 0 }}>{Number(selectedSale?.sale_price || selectedSale?.total_price || 0).toLocaleString()} đ</Title>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                      <Text type="secondary">Còn nợ lại:</Text><br/>
-                      <Title level={4} style={{ margin: 0, color: '#ef4444' }}>{Number((selectedSale?.sale_price || selectedSale?.total_price || 0) - (selectedSale?.paid_amount || 0)).toLocaleString()} đ</Title>
-                  </div>
-              </div>
-
-              <Title level={5} style={{ fontSize: 14 }}>THÊM KHOẢN THU (KHÁCH TRẢ THÊM)</Title>
-              <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
-                  <Row gutter={16}>
-                      <Col span={8}>
-                          <Form.Item name="payment_date" label="Ngày thu" rules={[{required: true}]}>
-                              <DatePicker style={{width: '100%'}} format="DD/MM/YYYY" />
-                          </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                          <Form.Item name="amount" label="Số tiền thu" rules={[{required: true}]}>
-                              <InputNumber 
-                                style={{width: '100%'}} 
-                                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                              />
-                          </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                          <Form.Item name="payment_method" label="Hình thức" initialValue="Tiền mặt">
-                              <Select>
-                                  <Option value="Tiền mặt">Tiền mặt</Option>
-                                  <Option value="Chuyển khoản">Chuyển khoản</Option>
-                              </Select>
-                          </Form.Item>
-                      </Col>
-                  </Row>
-                  <Form.Item name="notes" label="Ghi chú (Ví dụ: Trả nợ đăng ký, Trả góp đợt 1...)">
-                      <Input placeholder="Nhập ghi chú..." />
-                  </Form.Item>
-                  <Button type="primary" htmlType="submit" icon={<Save size={16} />} block loading={loading}>
-                      XÁC NHẬN THU TIỀN
-                  </Button>
-              </Form>
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 15,
+              background: "rgba(255, 255, 255, 0.05)",
+              padding: "16px",
+              borderRadius: 12,
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+            }}
+          >
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Tổng giá bán:
+              </Text>
+              <br />
+              <Title
+                level={4}
+                style={{ margin: 0, color: "var(--primary-color)" }}
+              >
+                {Number(
+                  selectedSale?.sale_price || selectedSale?.total_price || 0,
+                ).toLocaleString()}{" "}
+                đ
+              </Title>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Còn nợ lại:
+              </Text>
+              <br />
+              <Title level={4} style={{ margin: 0, color: "#ef4444" }}>
+                {Number(
+                  (selectedSale?.sale_price || selectedSale?.total_price || 0) -
+                    (selectedSale?.paid_amount || 0),
+                ).toLocaleString()}{" "}
+                đ
+              </Title>
+            </div>
           </div>
 
-          <Title level={5} style={{ fontSize: 14, marginTop: 24 }}>CHI TIẾT CÁC LẦN TRẢ TIỀN</Title>
-          <Table 
-            dataSource={paymentHistory}
-            rowKey="id"
-            pagination={false}
-            size="small"
-            columns={[
-                { title: 'Ngày', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY HH:mm') },
-                { title: 'Số tiền', dataIndex: 'amount', render: v => <b>{Number(v).toLocaleString()}</b> },
-                { title: 'Hình thức', dataIndex: 'payment_method' },
-                { title: 'Ghi chú', dataIndex: 'notes' },
-                { 
-                    title: '', 
-                    key: 'del', 
-                    render: (_, r) => isAdmin ? (
-                        <Popconfirm title="Xóa khoản thu này?" onConfirm={() => handleDeletePayment(r.id)}>
-                            <Button type="text" danger icon={<Trash2 size={14} />} />
-                        </Popconfirm>
-                    ) : null
-                }
-            ]}
-          />
+          <Title level={5} style={{ fontSize: 14 }}>
+            THÊM KHOẢN THU (KHÁCH TRẢ THÊM)
+          </Title>
+          <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  name="payment_date"
+                  label="Ngày thu"
+                  rules={[{ required: true }]}
+                >
+                  <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="amount"
+                  label="Số tiền thu"
+                  rules={[{ required: true }]}
+                >
+                  <InputNumber
+                    style={{ width: "100%" }}
+                    formatter={(v) =>
+                      `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                    }
+                    parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="payment_method"
+                  label="Hình thức"
+                  initialValue="Tiền mặt"
+                >
+                  <Select>
+                    <Option value="Tiền mặt">Tiền mặt</Option>
+                    <Option value="Chuyển khoản">Chuyển khoản</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item
+              name="notes"
+              label="Ghi chú (Ví dụ: Trả nợ đăng ký, Trả góp đợt 1...)"
+            >
+              <Input placeholder="Nhập ghi chú..." />
+            </Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<Save size={16} />}
+              block
+              loading={loading}
+            >
+              XÁC NHẬN THU TIỀN
+            </Button>
+          </Form>
+        </div>
+
+        <Title level={5} style={{ fontSize: 14, marginTop: 24 }}>
+          CHI TIẾT CÁC LẦN TRẢ TIỀN
+        </Title>
+        <Table
+          dataSource={paymentHistory}
+          rowKey="id"
+          pagination={false}
+          size="small"
+          columns={[
+            {
+              title: "Ngày",
+              dataIndex: "payment_date",
+              render: (d) => dayjs(d).format("DD/MM/YYYY HH:mm"),
+            },
+            {
+              title: "Số tiền",
+              dataIndex: "amount",
+              render: (v) => <b>{Number(v).toLocaleString()}</b>,
+            },
+            { title: "Hình thức", dataIndex: "payment_method" },
+            { title: "Ghi chú", dataIndex: "notes" },
+            {
+              title: "",
+              key: "del",
+              render: (_, r) =>
+                canManageMoney ? (
+                  <Popconfirm
+                    title="Xóa khoản thu này?"
+                    onConfirm={() => handleDeletePayment(r.id)}
+                  >
+                    <Button type="text" danger icon={<Trash2 size={14} />} />
+                  </Popconfirm>
+                ) : null,
+            },
+          ]}
+        />
       </Modal>
 
       {/* PrintInvoice component removed - printing is now handled via window.open */}

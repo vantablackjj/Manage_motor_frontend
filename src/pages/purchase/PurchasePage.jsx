@@ -189,10 +189,39 @@ const PurchasePage = () => {
   };
 
   const entryColumns = [
-    { title: 'Loại xe', dataIndex: 'type_id', width: '25%', render: (val, record) => ( <Select style={{ width: '100%' }} showSearch value={val} onChange={(v) => updateItem(record.key, 'type_id', v)}>{vehicleTypes.map(t => <Option key={t.id} value={t.id}>{t.name}</Option>)}</Select> ) },
+    { 
+      title: 'Loại xe', 
+      dataIndex: 'type_id', 
+      width: '20%', 
+      render: (val, record) => ( 
+        <Select 
+          style={{ width: '100%' }} 
+          showSearch 
+          placeholder="Loại xe..." 
+          optionFilterProp="children" 
+          value={val} 
+          onChange={(v) => updateItem(record.key, 'type_id', v)}
+        >
+          {vehicleTypes.map(t => <Option key={t.id} value={t.id}>{t.name}</Option>)}
+        </Select> 
+      ) 
+    },
+    { 
+      title: 'Giá đề xuất', 
+      key: 'suggested', 
+      width: '12%', 
+      render: (_, record) => {
+        const type = vehicleTypes.find(t => t.id === record.type_id);
+        return type?.suggested_price ? (
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {Number(type.suggested_price).toLocaleString()} đ
+          </Text>
+        ) : <Text type="secondary" style={{ fontSize: 12, opacity: 0.5 }}>-</Text>;
+      }
+    },
     { title: 'Số Máy', dataIndex: 'engine_no', render: (val, record) => <Input value={val} onChange={(e) => updateItem(record.key, 'engine_no', e.target.value)} /> },
     { title: 'Số Khung', dataIndex: 'chassis_no', render: (val, record) => <Input value={val} onChange={(e) => updateItem(record.key, 'chassis_no', e.target.value)} /> },
-    { title: 'Màu', dataIndex: 'color_id', width: '12%', render: (val, record) => ( <Select style={{ width: '100%' }} showSearch value={val} onChange={(v) => updateItem(record.key, 'color_id', v)}>{colors.map(c => <Option key={c.id} value={c.id}>{c.color_name}</Option>)}</Select> ) },
+    { title: 'Màu', dataIndex: 'color_id', width: '12%', render: (val, record) => ( <Select style={{ width: '100%' }} showSearch placeholder="Màu..." optionFilterProp="children" value={val} onChange={(v) => updateItem(record.key, 'color_id', v)}>{colors.map(c => <Option key={c.id} value={c.id}>{c.color_name}</Option>)}</Select> ) },
     { title: 'Giá Nhập (đ)', dataIndex: 'price_vnd', width: '15%', render: (val, record) => ( <InputNumber style={{ width: '100%' }} value={val} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v.replace(/\$\s?|(,*)/g, '')} onChange={(v) => updateItem(record.key, 'price_vnd', v)} /> ) },
     { title: 'Ghi chú', dataIndex: 'notes', width: '15%', render: (val, record) => <Input value={val} placeholder="Ghi chú..." onChange={(e) => updateItem(record.key, 'notes', e.target.value)} /> },
     { title: '', key: 'action', width: 40, render: (_, record) => <Button type="text" danger icon={<Trash2 size={16} />} onClick={() => removeItem(record.key)} /> }
@@ -200,6 +229,14 @@ const PurchasePage = () => {
 
   const detailColumns = [
     { title: 'Loại Xe', width: '150px', render: (_, r) => vehicleTypes.find(t => t.id === r.type_id)?.name || 'N/A' },
+    { 
+      title: 'Giá đề xuất', 
+      width: '120px', 
+      render: (_, r) => {
+        const type = vehicleTypes.find(t => t.id === r.type_id);
+        return type?.suggested_price ? <Text type="secondary">{Number(type.suggested_price).toLocaleString()} đ</Text> : '-';
+      }
+    },
     { title: 'Số Máy', dataIndex: 'engine_no', render: v => <Text code>{v}</Text> },
     { title: 'Số Khung', dataIndex: 'chassis_no', render: v => <Text code>{v}</Text> },
     { title: 'Màu', width: '90px', render: (_, r) => colors.find(c => c.id === r.color_id)?.color_name || 'N/A' },
@@ -209,6 +246,10 @@ const PurchasePage = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const canDelete =
+    isAdmin || user.can_delete === true || user.can_delete === 1;
+  const canManageMoney =
+    isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
 
   return (
     <div className="page-container">
@@ -227,10 +268,10 @@ const PurchasePage = () => {
       <Card className="glass-card" style={{ marginBottom: 24 }}>
         <Form form={form} layout="vertical" initialValues={{ purchase_date: dayjs(), warehouse_id: user.warehouse_id }}>
           <Row gutter={24} align="bottom">
-            <Col xs={24} md={8}><Form.Item label="Chủ Hàng" name="supplier_id" rules={[{ required: true }]}><Select size="large" showSearch placeholder="Chọn người gửi hàng" onChange={(val) => { handleSearchHistory(val); setActiveTab('2'); }}>{suppliers.map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}</Select></Form.Item></Col>
+            <Col xs={24} md={8}><Form.Item label="Chủ Hàng" name="supplier_id" rules={[{ required: true }]}><Select size="large" showSearch placeholder="Chọn người gửi hàng" optionFilterProp="children" onChange={(val) => { handleSearchHistory(val); setActiveTab('2'); }}>{suppliers.map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}</Select></Form.Item></Col>
             <Col xs={24} md={8}>
                 <Form.Item label="Nhập vào kho chi nhánh" name="warehouse_id" rules={[{ required: true }]}>
-                    <Select size="large" placeholder="Chọn kho nhận" disabled={!isAdmin}>
+                    <Select size="large" showSearch placeholder="Chọn kho nhận" optionFilterProp="children" disabled={!isAdmin}>
                         {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                     </Select>
                 </Form.Item>
@@ -252,14 +293,13 @@ const PurchasePage = () => {
               <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 1000 }} />
               <div style={{ marginTop: 32, textAlign: 'right' }}>
                 <Space>
-                  <Button size="large" icon={<RotateCcw size={18} />} ghost onClick={() => setBatchItems([{ key: Date.now().toString(), type_id: null, color_id: null, engine_no: '', chassis_no: '', price_vnd: undefined, notes: '' }])}>Nhập lại toàn bộ</Button>
-                  <Button 
+                  <Button size="large" icon={<RotateCcw size={18} />} danger ghost onClick={() => setBatchItems([{ key: Date.now().toString(), type_id: null, color_id: null, engine_no: '', chassis_no: '', price_vnd: undefined, notes: '' }])}>Nhập lại toàn bộ</Button>
+                    <Button 
                     size="large" 
                     icon={<FileSpreadsheet size={18} />} 
                     type="primary" 
                     ghost
                     onClick={() => setImportVisible(true)}
-                    disabled={!isAdmin}
                   >
                     NHẬP TỪ EXCEL
                   </Button>
@@ -321,12 +361,12 @@ const PurchasePage = () => {
                           <Space><Text strong>DANH SÁCH XE TRONG LÔ</Text></Space>
                           <Button 
                             type="primary" 
-                            style={{ background: isAdmin ? '#10b981' : '#6b7280' }} 
+                            style={{ background: canManageMoney ? '#10b981' : '#6b7280' }} 
                             icon={<DollarSign size={16} />} 
                             onClick={() => setIsPaymentModalOpen(true)}
-                            disabled={!isAdmin}
+                            disabled={!canManageMoney}
                           >
-                            {isAdmin ? "GIẢM NỢ CHO LÔ NÀY" : "LỊCH SỬ GIẢM NỢ"}
+                            {canManageMoney ? "GIẢM NỢ CHO LÔ NÀY" : "LỊCH SỬ GIẢM NỢ"}
                           </Button>
                         </div> 
                         <Table dataSource={lotDetails.vehicles} columns={detailColumns} size="small" pagination={{ pageSize: 8 }} scroll={{ x: 600 }} /> 

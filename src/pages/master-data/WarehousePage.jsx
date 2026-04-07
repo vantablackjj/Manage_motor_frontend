@@ -50,7 +50,7 @@ const WarehousePage = () => {
       'Địa điểm (Tỉnh/TP)': w.location,
       'Địa chỉ': w.address,
       'Điện thoại bàn': w.phone,
-      'Di động': w.mobile_phone,
+      'Di động': w.mobile,
       'Quản lý': w.manager_name,
     }));
 
@@ -110,7 +110,7 @@ const WarehousePage = () => {
     { title: 'Địa điểm', dataIndex: 'location', key: 'location' },
     { title: 'Địa chỉ', dataIndex: 'address', key: 'address', ellipsis: true },
     { title: 'Điện thoại bàn', dataIndex: 'phone', key: 'phone' },
-    { title: 'Di động', dataIndex: 'mobile_phone', key: 'mobile_phone' },
+    { title: 'Di động', dataIndex: 'mobile', key: 'mobile' },
     { title: 'Quản lý', dataIndex: 'manager_name', key: 'manager_name' },
     {
       title: 'Thao tác',
@@ -204,7 +204,7 @@ const WarehousePage = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="Số di động (in trên hợp đồng)" name="mobile_phone">
+              <Form.Item label="Số di động (in trên hợp đồng)" name="mobile">
                 <Input placeholder="09xxx..." />
               </Form.Item>
             </Col>

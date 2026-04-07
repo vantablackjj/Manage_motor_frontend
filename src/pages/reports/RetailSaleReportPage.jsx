@@ -188,12 +188,143 @@ const RetailSaleReportPage = () => {
     exportToExcel(exportData, `BaoCaoBanLe_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
+  const handlePrint = () => {
+    if (!data || data.length === 0) {
+        return message.warning('Không có dữ liệu để in!');
+    }
+
+    const fromDate = filters.dates[0].format('DD/MM/YYYY');
+    const toDate = filters.dates[1].format('DD/MM/YYYY');
+    const warehouseName = filters.warehouse_id ? warehouses.find(w => w.id === filters.warehouse_id)?.warehouse_name : 'Tất cả các kho';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Báo cáo bán lẻ</title>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.4; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+        .company-name { font-size: 14pt; font-weight: bold; text-transform: uppercase; }
+        .report-title { font-size: 22pt; font-weight: bold; margin: 15px 0; color: #000; }
+        .report-subtitle { font-size: 12pt; font-style: italic; }
+        .summary-box { display: flex; justify-content: space-around; margin-bottom: 25px; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
+        .summary-item { text-align: center; }
+        .summary-label { font-size: 10pt; color: #666; margin-bottom: 5px; }
+        .summary-value { font-size: 13pt; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 9pt; }
+        th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+        th { background-color: #eee; font-weight: bold; text-align: center; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
+        .signature-box { width: 250px; }
+        .signature-title { font-weight: bold; margin-bottom: 60px; }
+        @media print {
+            @page { margin: 15mm; size: A4 landscape; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">HỆ THỐNG CỬA HÀNG XE MÁY THANH HẢI</div>
+        <div class="report-title">BÁO CÁO CHI TIẾT DOANH THU BÁN LẺ</div>
+        <div class="report-subtitle">Từ ngày ${fromDate} đến ngày ${toDate} | Kho: ${warehouseName}</div>
+    </div>
+
+    <div class="summary-box">
+        <div class="summary-item">
+            <div class="summary-label">TỔNG SỐ LƯỢNG</div>
+            <div class="summary-value">${summary.total_count} chiếc</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">TỔNG DOANH THU</div>
+            <div class="summary-value">${summary.total_revenue.toLocaleString()} đ</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">THỰC THU</div>
+            <div class="summary-value" style="color: #10b981;">${summary.total_collected.toLocaleString()} đ</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">CÒN NỢ</div>
+            <div class="summary-value" style="color: #ef4444;">${summary.total_debt.toLocaleString()} đ</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;">STT</th>
+                <th style="width: 80px;">Ngày</th>
+                <th>Khách hàng</th>
+                <th>SĐT</th>
+                <th>Loại xe</th>
+                <th>Số máy</th>
+                <th>Số khung</th>
+                <th>Giá bán</th>
+                <th>Đã trả</th>
+                <th>Còn nợ</th>
+                <th>Kiểu bán</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${data.map((s, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${dayjs(s.sale_date).format('DD/MM/YYYY')}</td>
+                    <td>${s.customer_name}</td>
+                    <td>${s.phone || '-'}</td>
+                    <td>${s.Vehicle?.VehicleType?.name || 'N/A'}</td>
+                    <td>${s.engine_no}</td>
+                    <td>${s.chassis_no}</td>
+                    <td class="text-right">${Number(s.total_price).toLocaleString()}</td>
+                    <td class="text-right">${Number(s.paid_amount).toLocaleString()}</td>
+                    <td class="text-right">${(Number(s.total_price) - Number(s.paid_amount)).toLocaleString()}</td>
+                    <td class="text-center">${s.sale_type}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <div class="signature-box">
+            <div class="signature-title">Người lập biểu</div>
+            <div>(Ký và ghi rõ họ tên)</div>
+        </div>
+        <div class="signature-box">
+            <div class="signature-title">Kế toán trưởng</div>
+            <div>(Ký và ghi rõ họ tên)</div>
+        </div>
+        <div class="signature-box">
+            <div>Ngày ....... tháng ....... năm .......</div>
+            <div class="signature-title">Giám đốc</div>
+            <div>(Ký tên và đóng dấu)</div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() { window.print(); };
+        window.onafterprint = function() { window.close(); };
+    </script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } else {
+        message.warning('Vui lòng cho phép pop-up để in báo cáo.');
+    }
+  };
+
   return (
     <div style={{ padding: '0 5px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>XEM THÔNG TIN VỀ XE BÁN LẺ</Title>
         <Space>
-           <Button icon={<Printer size={16} />}>In giấy bảo hành</Button>
+           <Button icon={<Printer size={16} />} onClick={handlePrint} type="dashed">In báo cáo</Button>
            <Button 
             type="primary" 
             icon={<Download size={16} />}

@@ -41,7 +41,8 @@ import {
   CheckCircle2,
   Box,
   Fingerprint,
-  Edit2
+  Edit2,
+  Printer
 } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -178,6 +179,115 @@ const VehicleLifecyclePage = () => {
     else if (isWholesaleOnly) fileName = 'BaoCaoBanBuon_LichSu';
 
     exportToExcel(exportData, `${fileName}_${dayjs().format('YYYYMMDD_HHmm')}`);
+  };
+
+  const handlePrint = () => {
+    if (!results || results.length === 0) {
+        return message.warning('Không có dữ liệu để in!');
+    }
+
+    const reportTitle = isPurchaseOnly ? 'BÁO CÁO CHI TIẾT NHẬP XE' : 
+                       isRetailOnly ? 'BÁO CÁO CHI TIẾT XE BÁN LẺ' : 
+                       isWholesaleOnly ? 'BÁO CÁO CHI TIẾT XE BÁN BUÔN' : 
+                       'BÁO CÁO TRA CỨU XE TỔNG HỢP';
+
+    const vals = form.getFieldsValue();
+    const subTitle = (vals.dates?.[0] && vals.dates?.[1]) 
+        ? `Từ ngày ${vals.dates[0].format('DD/MM/YYYY')} đến ngày ${vals.dates[1].format('DD/MM/YYYY')}` 
+        : 'Tất cả thời gian';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Báo cáo tra cứu</title>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.4; padding: 20px; }
+        .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+        .company-name { font-size: 13pt; font-weight: bold; text-transform: uppercase; }
+        .report-title { font-size: 18pt; font-weight: bold; margin: 10px 0; }
+        .report-subtitle { font-size: 11pt; font-style: italic; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 8pt; }
+        th, td { border: 1px solid #000; padding: 5px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .footer { margin-top: 30px; display: flex; justify-content: space-between; text-align: center; }
+        .signature-box { width: 200px; }
+        .signature-title { font-weight: bold; margin-bottom: 50px; }
+        @media print {
+            @page { margin: 10mm; size: A4 landscape; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">HỆ THỐNG CỬA HÀNG XE MÁY THANH HẢI</div>
+        <div class="report-title">${reportTitle}</div>
+        <div class="report-subtitle">${subTitle}</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 30px;">STT</th>
+                <th>Ngày</th>
+                <th>Trạng thái</th>
+                <th>Loại xe</th>
+                <th>Số máy</th>
+                <th>Số khung</th>
+                <th>Khách hàng</th>
+                <th>Kênh bán</th>
+                <th>Giá tiền</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${results.map((v, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${dayjs(v.sale_date || v.import_date).format('DD/MM/YYYY')}</td>
+                    <td class="text-center">${v.sale_date ? 'Đã bán' : 'Trong kho'}</td>
+                    <td>${v.type_name}</td>
+                    <td>${v.engine_no}</td>
+                    <td>${v.chassis_no}</td>
+                    <td>${v.customer_name || '-'}</td>
+                    <td class="text-center">${v.sale_channel || '-'}</td>
+                    <td class="text-right">${Number(v.sale_price || v.purchase_price).toLocaleString()}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <div class="signature-box">
+            <div class="signature-title">Người lập báo cáo</div>
+            <div>(Ký tên)</div>
+        </div>
+        <div class="signature-box">
+            <div class="signature-title">Kế toán</div>
+            <div>(Ký tên)</div>
+        </div>
+        <div class="signature-box">
+            <div>Ngày ....... tháng ....... năm .......</div>
+            <div class="signature-title">Giám đốc</div>
+            <div>(Ký tên và đóng dấu)</div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() { window.print(); };
+        window.onafterprint = function() { window.close(); };
+    </script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+    } else {
+        message.warning('Vui lòng cho phép pop-up để in báo cáo.');
+    }
   };
 
   const onSearchSuggestions = async (searchText) => {
@@ -353,15 +463,25 @@ const VehicleLifecyclePage = () => {
                isWholesaleOnly ? 'XEM THÔNG TIN BÁN BUÔN' : 
                'TÌM XE THEO YÊU CẦU'}
           </Title>
-          <Button 
-            icon={<Download size={16} />} 
-            disabled={results.length === 0}
-            onClick={handleExport}
-            type="primary"
-            ghost
-          >
-            Xuất Báo Cáo
-          </Button>
+          <Space>
+              <Button 
+                icon={<Printer size={16} />} 
+                disabled={results.length === 0}
+                onClick={handlePrint}
+                type="dashed"
+              >
+                In Báo Cáo
+              </Button>
+              <Button 
+                icon={<Download size={16} />} 
+                disabled={results.length === 0}
+                onClick={handleExport}
+                type="primary"
+                ghost
+              >
+                Xuất Báo Cáo
+              </Button>
+          </Space>
       </div>
 
       {/* Summary Cards */}
@@ -484,6 +604,11 @@ const VehicleLifecyclePage = () => {
                             >
                                 <Input prefix={<Fingerprint size={14} opacity={0.5} />} placeholder="Gõ 2 ký tự để gợi ý..." />
                             </AutoComplete>
+                        </Form.Item>
+                      </Col>
+                      <Col span={24}>
+                        <Form.Item label="Tên Khách Hàng (Dành cho bản lẻ/bán sỉ)" name="customer_name">
+                           <Input prefix={<UserIcon size={14} opacity={0.5} />} placeholder="Tìm tên khách..." />
                         </Form.Item>
                       </Col>
                    </Row>

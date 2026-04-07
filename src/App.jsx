@@ -20,6 +20,7 @@ import RetailSaleReportPage from './pages/reports/RetailSaleReportPage';
 import WarrantyReportPage from './pages/reports/WarrantyReportPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import NotificationPage from './pages/NotificationPage';
+import DailyReportPage from './pages/reports/DailyReportPage';
 
 
 
@@ -111,6 +112,7 @@ function App() {
                     <Route path="/report/wholesale-audit" element={<WholesaleCustomerAudit />} />
                     <Route path="/report/purchases" element={<VehicleLifecyclePage />} />
                     <Route path="/report/warranty" element={<WarrantyReportPage />} />
+                    <Route path="/report/daily" element={<DailyReportPage />} />
                     <Route path="/inventory-report" element={<InventoryReportPage />} />
                     <Route path="/notifications" element={<NotificationPage />} />
                   </Routes>
