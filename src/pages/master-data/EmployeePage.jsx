@@ -61,6 +61,7 @@ const EmployeePage = () => {
       'Hủy đơn/Xóa': u.can_delete ? 'Có' : 'Không',
       'Quản lý tiền': u.can_manage_money ? 'Có' : 'Không',
       'Quản lý phụ tùng': u.can_manage_spare_parts ? 'Có' : 'Không',
+      'Quản lý danh mục': u.can_manage_master_data ? 'Có' : 'Không',
     }));
 
     exportToExcel(exportData, `DanhSachNhanVien_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -94,6 +95,7 @@ const EmployeePage = () => {
         can_delete: record.can_delete,
         can_manage_money: record.can_manage_money,
         can_manage_spare_parts: record.can_manage_spare_parts,
+        can_manage_master_data: record.can_manage_master_data,
       });
     } else {
       setEditingId(null);
@@ -103,7 +105,8 @@ const EmployeePage = () => {
         can_manage_debt: false,
         can_delete: false,
         can_manage_money: false,
-        can_manage_spare_parts: false
+        can_manage_spare_parts: false,
+        can_manage_master_data: false
       });
     }
 
@@ -182,7 +185,8 @@ const EmployeePage = () => {
           {record.can_delete && <Tag color="red" style={{fontSize: '10px'}}>Hủy/Xóa</Tag>}
           {record.can_manage_money && <Tag color="gold" style={{fontSize: '10px'}}>Tiền/Trả nợ</Tag>}
           {record.can_manage_spare_parts && <Tag color="purple" style={{fontSize: '10px'}}>Phụ tùng</Tag>}
-          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
+          {record.can_manage_master_data && <Tag color="blue" style={{fontSize: '10px'}}>Danh mục</Tag>}
+          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
         </Space>
       )
     },
@@ -337,9 +341,14 @@ const EmployeePage = () => {
                 <Checkbox>Tiền/Trả nợ</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col span={4.8}>
               <Form.Item name="can_manage_spare_parts" valuePropName="checked">
                 <Checkbox>Phụ tùng</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={4.8}>
+              <Form.Item name="can_manage_master_data" valuePropName="checked">
+                <Checkbox>Danh mục</Checkbox>
               </Form.Item>
             </Col>
           </Row>

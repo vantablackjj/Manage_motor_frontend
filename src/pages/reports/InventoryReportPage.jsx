@@ -95,6 +95,7 @@ const InventoryReportPage = () => {
 
     const exportData = reportData.vehicles.map(v => ({
       'Kho': v.Warehouse?.warehouse_name || 'N/A',
+      'Chủ hàng': v.Purchase?.Supplier?.name || 'N/A',
       'Loại xe': v.VehicleType?.name || 'N/A',
       'Màu xe': v.VehicleColor?.color_name || 'N/A',
       'Số máy': v.engine_no,
@@ -174,6 +175,7 @@ const InventoryReportPage = () => {
             <tr>
                 <th style="width: 40px;">STT</th>
                 <th>Kho</th>
+                <th>Chủ hàng</th>
                 <th>Loại xe</th>
                 <th>Màu xe</th>
                 <th>Số máy</th>
@@ -187,6 +189,7 @@ const InventoryReportPage = () => {
                 <tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${v.Warehouse?.warehouse_name || 'N/A'}</td>
+                    <td>${v.Purchase?.Supplier?.name || 'N/A'}</td>
                     <td>${v.VehicleType?.name || 'N/A'}</td>
                     <td>${v.VehicleColor?.color_name || 'N/A'}</td>
                     <td>${v.engine_no}</td>
@@ -232,6 +235,7 @@ const InventoryReportPage = () => {
 
   const columns = [
     { title: 'Tên Kho', dataIndex: ['Warehouse', 'warehouse_name'], key: 'warehouse', render: v => <Tag color="blue">{v || 'N/A'}</Tag>, responsive: ['md'] },
+    { title: 'Chủ Hàng', dataIndex: ['Purchase', 'Supplier', 'name'], key: 'supplier', render: v => <Text type="secondary">{v || 'N/A'}</Text> },
     { title: 'Loại Xe', dataIndex: ['VehicleType', 'name'], key: 'type', render: v => <Text strong>{v}</Text> },
     { title: 'Màu Xe', dataIndex: ['VehicleColor', 'color_name'], key: 'color' },
     { title: 'Số Máy', dataIndex: 'engine_no', key: 'engine', render: v => <Text code>{v}</Text> },

@@ -25,7 +25,9 @@ import {
   User,
   Clock as ClockIcon,
   History,
-  LayoutDashboard
+  LayoutDashboard,
+  Wrench,
+  Archive
 } from 'lucide-react';
 
 
@@ -235,6 +237,8 @@ const MainLayout = ({ children }) => {
   };
 
 
+  const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
+
   const menuItems = [
     isAdmin && {
       key: '/dashboard',
@@ -242,42 +246,84 @@ const MainLayout = ({ children }) => {
       label: <Link to="/dashboard">Bảng điều khiển (Admin)</Link>
     },
     {
-      key: 'input-data',
-      icon: <PlusSquare size={18} />,
-      label: 'Nhập dữ liệu chung',
+      key: 'sales-management',
+      icon: <ShoppingCart size={18} />,
+      label: 'Quản lý Bán hàng',
       children: [
-        { key: '/retail', label: <Link to="/retail">Nhập xe bán lẻ</Link> },
-        { key: '/wholesale', label: <Link to="/wholesale">Nhập xe bán buôn & trả tiền</Link> },
-        { key: '/purchase', label: <Link to="/purchase">Nhập xe mua về & trả tiền</Link> },
-        isAdmin && { key: '/expenses', label: <Link to="/expenses">Nhập chi tiêu</Link> },
-        { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
-        { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
-        { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng</Link> },
-        { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Nhập mã khách buôn</Link> },
-        { key: '/transfers', label: <Link to="/transfers">Chuyển kho chi nhánh</Link> },
-      ],
+        {
+          key: 'input-data',
+          icon: <PlusSquare size={16} />,
+          label: 'Nhập dữ liệu chung',
+          children: [
+            { key: '/retail', label: <Link to="/retail">Bán lẻ xe máy</Link> },
+            { key: '/wholesale', label: <Link to="/wholesale">Bán buôn & Thu nợ</Link> },
+            { key: '/purchase', label: <Link to="/purchase">Nhập xe mua & Trả tiền</Link> },
+            isAdmin && { key: '/expenses', label: <Link to="/expenses">Nhập chi tiêu</Link> },
+            canManageMaster && { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
+            canManageMaster && { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
+            canManageMaster && { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng</Link> },
+            canManageMaster && { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Nhập mã khách buôn</Link> },
+            { key: '/transfers', label: <Link to="/transfers">Chuyển kho chi nhánh</Link> },
+          ].filter(Boolean),
+        },
+        {
+          key: 'reports',
+          icon: <History size={16} />,
+          label: 'Xem thông tin tổng hợp',
+          children: [
+            { key: '/vehicle-search', label: <Link to="/vehicle-search">Tìm xe theo yêu cầu</Link> },
+            { 
+              key: 'sales-info', 
+              label: 'Xem thông tin bán xe', 
+              children: [
+                { key: '/report/sales-retail', label: <Link to="/report/sales-retail">Xe bán lẻ</Link> },
+                { key: '/report/sales-wholesale', label: <Link to="/report/sales-wholesale">Xe bán buôn</Link> },
+                { key: '/report/wholesale-audit', label: <Link to="/report/wholesale-audit">Đối soát khách buôn</Link> },
+              ]
+            },
+            { key: '/report/purchases', label: <Link to="/report/purchases">Xem thông tin mua xe</Link> },
+            { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn</Link> },
+            { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
+            { key: '/report/daily', label: <Link to="/report/daily">Báo cáo cuối ngày</Link> },
+          ],
+        },
+      ]
     },
 
     {
-      key: 'reports',
-      icon: <History size={18} />,
-      label: 'Xem thông tin tổng hợp',
+      key: 'after-sales-folder',
+      icon: <Wrench size={18} />,
+      label: 'Sau Bán Hàng',
       children: [
-        { key: '/vehicle-search', label: <Link to="/vehicle-search">Tìm xe theo yêu cầu</Link> },
-        { 
-          key: 'sales-info', 
-          label: 'Xem thông tin bán xe', 
+        {
+          key: 'services',
+          icon: <ClockIcon size={16} />,
+          label: 'Dịch vụ & Sửa chữa',
           children: [
-            { key: '/report/sales-retail', label: <Link to="/report/sales-retail">Xe bán lẻ</Link> },
-            { key: '/report/sales-wholesale', label: <Link to="/report/sales-wholesale">Xe bán buôn</Link> },
-            { key: '/report/wholesale-audit', label: <Link to="/report/wholesale-audit">Đối soát khách buôn</Link> },
-          ]
+            { key: '/repair-service', label: <Link to="/repair-service">Lập phiếu sửa chữa</Link> },
+            { key: '/maintenance-history', label: <Link to="/maintenance-history">Lịch sử bảo trì</Link> },
+          ],
         },
-        { key: '/report/purchases', label: <Link to="/report/purchases">Xem thông tin mua xe</Link> },
-        { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn</Link> },
-        { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
-        { key: '/report/daily', label: <Link to="/report/daily">Báo cáo cuối ngày</Link> },
-      ],
+        {
+          key: 'parts-mgmt',
+          icon: <Archive size={16} />,
+          label: 'Phụ tùng & Linh kiện',
+          children: [
+            {
+              key: 'parts-master-folder',
+              label: 'Đăng ký Mã PT & Giá',
+              children: [
+                { key: '/parts', label: <Link to="/parts">Đăng ký mã phụ tùng</Link> },
+                { key: '/part-import', label: <Link to="/part-import">Nhập mua phụ tùng</Link> },
+              ]
+            },
+            { key: '/part-inventory', label: <Link to="/part-inventory">Tồn kho phụ tùng</Link> },
+            { key: '/part-retail', label: <Link to="/part-retail">Bán lẻ phụ tùng</Link> },
+            { key: '/part-retail-debt', label: <Link to="/part-retail-debt">Nợ phụ tùng bán lẻ</Link> },
+            { key: '/part-wholesale-debt', label: <Link to="/part-wholesale-debt">Nợ phụ tùng mua sỉ</Link> },
+          ],
+        },
+      ]
     },
 
     {
@@ -286,6 +332,7 @@ const MainLayout = ({ children }) => {
       label: isAdmin ? 'Quản trị & Phân quyền' : 'Danh mục nhân sự & Kho',
       children: [
         isAdmin && { key: '/employees', label: <Link to="/employees">Quản lý nhân viên</Link> },
+        { key: '/mechanics', label: <Link to="/mechanics">Quản lý thợ sửa</Link> },
         { key: '/warehouses', label: <Link to="/warehouses">{isAdmin ? 'Quản lý kho' : 'Xem danh sách kho'}</Link> },
       ].filter(Boolean),
     },
@@ -348,15 +395,13 @@ const MainLayout = ({ children }) => {
               `}</style>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {isAdmin && (
-              <Dropdown dropdownRender={() => notificationMenu} trigger={['click']} placement="bottomRight" overlayClassName="glass-dropdown">
-                <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                  <Badge count={unreadCount} size="small" offset={[-2, 6]}>
-                    <Button type="text" shape="circle" icon={<Bell size={22} color={unreadCount > 0 ? 'var(--primary-color)' : 'white'} />} />
-                  </Badge>
-                </span>
-              </Dropdown>
-            )}
+            <Dropdown dropdownRender={() => notificationMenu} trigger={['click']} placement="bottomRight" overlayClassName="glass-dropdown">
+              <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <Badge count={unreadCount} size="small" offset={[-2, 6]}>
+                  <Button type="text" shape="circle" icon={<Bell size={22} color={unreadCount > 0 ? 'var(--primary-color)' : 'white'} />} />
+                </Badge>
+              </span>
+            </Dropdown>
 
             <Dropdown menu={userMenuItems} trigger={['click']} placement="bottomRight">
               <Space style={{ 

@@ -26,8 +26,10 @@ const WholesaleCustomerPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
 
   const fetchData = async () => {
     setLoading(true);
@@ -62,13 +64,30 @@ const WholesaleCustomerPage = () => {
 
   const onFinish = async (values) => {
     try {
-      await api.post('/wholesale-customers', values);
-      message.success('Thêm khách buôn mới thành công!');
+      if (editingId) {
+        await api.put(`/wholesale-customers/${editingId}`, values);
+        message.success('Cập nhật thông tin khách buôn thành công!');
+        setEditingId(null);
+      } else {
+        await api.post('/wholesale-customers', values);
+        message.success('Thêm khách buôn mới thành công!');
+      }
       form.resetFields();
       fetchData();
     } catch (error) {
-      message.error('Lỗi khi lưu: ' + error.message);
+      message.error('Lỗi khi lưu: ' + (error.response?.data?.message || error.message));
     }
+  };
+
+  const handleEdit = (record) => {
+    setEditingId(record.id);
+    form.setFieldsValue(record);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    form.resetFields();
   };
 
   const handleDelete = async (id) => {
@@ -97,10 +116,15 @@ const WholesaleCustomerPage = () => {
       title: 'Thao tác',
       key: 'action',
       width: '120px',
-      hidden: !isAdmin,
+      hidden: !canManageMaster,
       render: (_, record) => (
         <Space>
-          <Button type="text" icon={<Edit size={16} />} style={{ color: 'var(--primary-color)' }} />
+          <Button 
+            type="text" 
+            icon={<Edit size={16} />} 
+            style={{ color: 'var(--primary-color)' }} 
+            onClick={() => handleEdit(record)}
+          />
           <Popconfirm title="Xóa thông tin?" onConfirm={() => handleDelete(record.id)}>
             <Button type="text" danger icon={<Trash2 size={16} />} />
           </Popconfirm>
@@ -125,7 +149,7 @@ const WholesaleCustomerPage = () => {
           >
             Xuất Excel
           </Button>
-          {isAdmin && (
+          {canManageMaster && (
             <Button 
               icon={<FileSpreadsheet size={16} />} 
               ghost 
@@ -146,7 +170,7 @@ const WholesaleCustomerPage = () => {
         title="Nhập danh sách khách hàng buôn"
       />
 
-      {isAdmin && (
+      {canManageMaster && (
         <div className="glass-card" style={{ padding: 24, marginBottom: 32, border: '1px dashed var(--border-color)' }}>
           <Form
             form={form}
@@ -157,7 +181,7 @@ const WholesaleCustomerPage = () => {
             <Row gutter={16}>
               <Col xs={24} md={6}>
                 <Form.Item label="Mã khách" name="customer_code" rules={[{ required: true }]}>
-                  <Input placeholder="KB001" />
+                  <Input placeholder="KB001" disabled={!!editingId} />
                 </Form.Item>
               </Col>
               <Col xs={24} md={10}>
@@ -180,14 +204,16 @@ const WholesaleCustomerPage = () => {
               </Col>
             </Row>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Button icon={<RotateCcw size={16} />} ghost onClick={() => form.resetFields()}>Làm mới</Button>
+              <Button icon={<RotateCcw size={16} />} ghost onClick={editingId ? handleCancelEdit : () => form.resetFields()}>
+                {editingId ? 'Hủy bỏ sửa' : 'Làm mới'}
+              </Button>
               <Button 
                   icon={<Save size={16} />} 
                   type="primary" 
                   onClick={() => form.submit()} 
-                  style={{ background: 'var(--primary-color)' }}
+                  style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
               >
-                  Lưu khách buôn
+                  {editingId ? 'Cập nhật khách buôn' : 'Lưu khách buôn'}
               </Button>
             </div>
           </Form>

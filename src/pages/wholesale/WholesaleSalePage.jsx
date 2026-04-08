@@ -204,6 +204,99 @@ const WholesaleSalePage = () => {
     }
   };
 
+  const handleDeleteSale = async (sale) => {
+    Modal.confirm({
+      title: "Xác nhận xóa lô bán buôn",
+      content: `Bạn có chắc chắn muốn xóa toàn bộ lô hàng ngày ${dayjs(sale.sale_date).format("DD/MM/YYYY")} không? Hành động này sẽ đưa tất cả xe trong lô về trạng thái 'Trong kho' và xóa các khoản thu nợ liên quan.`,
+      okText: "Đồng ý xóa",
+      okType: "danger",
+      cancelText: "Hủy bỏ",
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await api.delete(`/wholesale-sales/${sale.id}`);
+          message.success("Đã xóa lô bán buôn thành công!");
+          if (selectedSale?.id === sale.id) setSelectedSale(null);
+          handleSearchHistory(form.getFieldValue("customer_id"));
+          fetchInitialData();
+        } catch (error) {
+          message.error(
+            "Lỗi: " + (error.response?.data?.message || error.message),
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteVehicle = async (saleId, vehicle) => {
+    let deductAmount = Number(vehicle.wholesale_price_vnd || 0);
+
+    Modal.confirm({
+      title: "Xác nhận xóa xe khỏi lô",
+      content: (
+        <div>
+          <p>Xe <b>{vehicle.engine_no}</b> sẽ được xóa khỏi lô và đưa về trạng thái 'Trong kho'.</p>
+          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, marginTop: 12 }}>
+             <p style={{ margin: 0 }}>Số tiền hệ thống sẽ tự động trừ vào tổng nợ lô hàng:</p>
+             <Text strong style={{ fontSize: 16, color: '#10b981' }}>{deductAmount.toLocaleString()} đ</Text>
+             <p style={{ fontSize: 11, opacity: 0.7, marginTop: 8 }}>Nếu muốn thay đổi số tiền trừ (VD: Trừ phí...), hãy nhập lại ô dưới:</p>
+             <InputNumber
+                style={{ width: "100%" }}
+                defaultValue={deductAmount}
+                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                onChange={(val) => (deductAmount = val)}
+              />
+          </div>
+        </div>
+      ),
+      okText: "Xác nhận xóa",
+      okType: "danger",
+      cancelText: "Hủy",
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await api.delete(`/wholesale-sales/${saleId}/vehicles/${vehicle.id}`, {
+            data: { deduct_amount: deductAmount },
+          });
+          message.success("Đã xóa xe khỏi lô và cập nhật tiền nợ!");
+          loadSaleDetails(selectedSale);
+          handleSearchHistory(form.getFieldValue("customer_id"));
+          fetchInitialData();
+        } catch (error) {
+          message.error("Lỗi: " + (error.response?.data?.message || error.message));
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    Modal.confirm({
+      title: "Xác nhận xóa khoản thu tiền",
+      content: "Bạn có chắc chắn muốn xóa khoản thu tiền này? Số tiền nợ của khách sẽ tự động tăng trở lại.",
+      okText: "Xóa",
+      okType: "danger",
+      cancelText: "Hủy",
+      onOk: async () => {
+        try {
+          setLoading(true);
+          await api.delete(`/wholesale-payments/${paymentId}`);
+          message.success("Đã xóa khoản thu nợ thành công!");
+          loadSaleDetails(selectedSale); 
+          handleSearchHistory(form.getFieldValue("customer_id"));
+        } catch (error) {
+          message.error("Lỗi: " + (error.response?.data?.message || error.message));
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
   const handleExport = () => {
     if (saleHistory.length === 0) return message.warning('Không có lịch sử để xuất!');
     const exportData = saleHistory.map(h => ({
@@ -430,7 +523,22 @@ const WholesaleSalePage = () => {
                         { title: 'Ngày Bán', dataIndex: 'sale_date', render: d => dayjs(d).format('DD/MM/YYYY') },
                         { title: 'Tổng Tiền', render: (_, r) => <b>{Number(r.total_amount_vnd).toLocaleString()}</b> },
                         { title: 'Còn Nợ', render: (_, r) => <Tag color="volcano">{(Number(r.total_amount_vnd) - Number(r.paid_amount_vnd)).toLocaleString()}</Tag> },
-                        { title: '', render: (_, r) => <Button size="small" onClick={() => loadSaleDetails(r)}>Chi tiết</Button> }
+                        { 
+                          title: '', 
+                          render: (_, r) => (
+                            <Space>
+                              <Button size="small" onClick={() => loadSaleDetails(r)}>Chi tiết</Button>
+                              {canDelete && (
+                                <Button 
+                                  size="small" 
+                                  danger 
+                                  icon={<Trash2 size={14} />} 
+                                  onClick={() => handleDeleteSale(r)} 
+                                />
+                              )}
+                            </Space>
+                          ) 
+                        }
                       ]}
                     />
                   </Card>
@@ -458,7 +566,32 @@ const WholesaleSalePage = () => {
                              pagination={{ pageSize: 5 }}
                              rowKey="id"
                              scroll={{ x: 'max-content' }}
-                             columns={[{ title: 'Số Máy', dataIndex: 'engine_no' }, { title: 'Số Khung', dataIndex: 'chassis_no' }, { title: 'Ghi chú xe', dataIndex: 'notes' }]}
+                             columns={[
+                               { title: 'Số Máy', dataIndex: 'engine_no', width: 140 }, 
+                               { title: 'Số Khung', dataIndex: 'chassis_no', width: 140 }, 
+                               { 
+                                 title: 'Giá bán (đ)', 
+                                 dataIndex: 'wholesale_price_vnd', 
+                                 width: 130,
+                                 render: v => <b style={{ color: 'var(--primary-color)' }}>{Number(v || 0).toLocaleString()}</b>
+                               },
+                               { title: 'Ghi chú xe', dataIndex: 'notes', ellipsis: true },
+                               {
+                                 title: '',
+                                 width: 40,
+                                 render: (_, r) => (
+                                   canDelete && (
+                                     <Button 
+                                       type="text" 
+                                       danger 
+                                       size="small"
+                                       icon={<Trash2 size={14} />} 
+                                       onClick={() => handleDeleteVehicle(selectedSale.id, r)}
+                                     />
+                                   )
+                                 )
+                               }
+                             ]}
                           />
                          <Divider />
                          <Text strong>- Lịch sử thu tiền:</Text>
@@ -467,7 +600,25 @@ const WholesaleSalePage = () => {
                             size="small" 
                             pagination={false}
                             rowKey="id"
-                            columns={[{ title: 'Ngày thu', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') }, { title: 'Số tiền thu', render: (_, r) => <Text strong color="#10b981">{Number(r.amount_paid_vnd).toLocaleString()} đ</Text> }]}
+                            columns={[
+                              { title: 'Ngày thu', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') }, 
+                              { title: 'Số tiền thu', render: (_, r) => <Text strong color="#10b981">{Number(r.amount_paid_vnd).toLocaleString()} đ</Text> },
+                              {
+                                title: '',
+                                width: 50,
+                                render: (_, r) => (
+                                  canManageMoney && (
+                                    <Button 
+                                      type="text" 
+                                      danger 
+                                      size="small"
+                                      icon={<Trash2 size={14} />} 
+                                      onClick={() => handleDeletePayment(r.id)}
+                                    />
+                                  )
+                                )
+                              }
+                            ]}
                          />
                       </div>
                     ) : (

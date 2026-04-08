@@ -12,19 +12,28 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
 
-  const handleDownloadTemplate = () => {
-    const columns = templateColumns[type] || [];
-    const emptyRow = {};
-    columns.forEach(col => {
-      emptyRow[col] = '';
-    });
-    // Add an example row for clarity
-    if (type === 'purchases') {
-        emptyRow['Số máy'] = 'ABC12345';
-        emptyRow['Số khung'] = 'XYZ67890';
+  const handleDownloadTemplate = async () => {
+    try {
+      message.loading('Đang khởi tạo file mẫu với dữ liệu thực tế...', 1.5);
+      const response = await api.get(`/import/template?type=${type}`, {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Mau_Import_${type}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      message.error('Lỗi khi tải file mẫu từ máy chủ.');
     }
-    
-    exportToExcel([emptyRow], `Mau_Excel_${type}`);
   };
 
   const handleUpload = async () => {
@@ -75,7 +84,9 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
     suppliers: ['Tên NCC', 'Địa chỉ', 'Ghi chú', 'Hình thức TT'],
     purchases: ['Số máy', 'Số khung', 'Loại xe', 'Màu sắc', 'Giá nhập', 'Tên NCC', 'Tên kho', 'Ngày nhập'],
     retail_sales: ['Ngày bán', 'Số máy', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Giá bán', 'Tiền khách trả', 'Tên kho', 'Phát sổ bảo hành'],
-    wholesale_sales: ['Ngày bán', 'Số máy', 'Mã khách hàng', 'Giá bán lẻ', 'Đã trả', 'Tên kho']
+    wholesale_sales: ['Ngày bán', 'Số máy', 'Mã khách hàng', 'Giá bán lẻ', 'Đã trả', 'Tên kho'],
+    part_master: ['Mã phụ tùng', 'Tên phụ tùng', 'Đơn vị tính', 'Giá nhập', 'Giá bán'],
+    part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho', 'Vị trí']
   };
 
   const getBadgeColor = (type) => {

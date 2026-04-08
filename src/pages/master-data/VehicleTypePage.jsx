@@ -28,6 +28,7 @@ const VehicleTypePage = () => {
   const [editingId, setEditingId] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
 
   const fetchData = async () => {
     setLoading(true);
@@ -115,7 +116,7 @@ const VehicleTypePage = () => {
       title: 'Thao tác',
       key: 'action',
       width: '120px',
-      hidden: !isAdmin,
+      hidden: !canManageMaster,
       render: (_, record) => (
         <Space>
           <Button type="text" icon={<Edit size={16} />} style={{ color: 'var(--primary-color)' }} onClick={() => handleEdit(record)} />
@@ -149,7 +150,7 @@ const VehicleTypePage = () => {
           >
             Xuất Excel
           </Button>
-          {isAdmin && (
+          {canManageMaster && (
             <Button 
               icon={<FileSpreadsheet size={16} />} 
               ghost 
@@ -170,7 +171,7 @@ const VehicleTypePage = () => {
         title="Nhập danh sách loại xe"
       />
 
-      {isAdmin && (
+      {canManageMaster && (
         <div className="glass-card" style={{ padding: 24, marginBottom: 32, border: '1px dashed var(--border-color)' }}>
           <Form
             form={form}

@@ -90,6 +90,19 @@ const RetailSaleReportPage = () => {
     fetchData(newFilters);
   };
 
+  const handleDisbursementChange = async (saleId, status) => {
+    try {
+      setLoading(true);
+      await api.put(`/retail-sales/${saleId}/disbursement`, { is_disbursed: status });
+      message.success(status ? 'Đã xác nhận giải ngân!' : 'Đã hủy xác nhận giải ngân!');
+      fetchData();
+    } catch (e) {
+      message.error(e.response?.data?.message || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const columns = [
     { 
       title: 'Ngày Bán', 
@@ -141,15 +154,17 @@ const RetailSaleReportPage = () => {
     },
     { 
       title: 'Đã trả', 
-      dataIndex: 'paid_amount',
-      width: 130,
-      render: v => <Text style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text> 
-    },
-    { 
-      title: 'Còng nợ', 
       width: 130,
       render: (_, r) => {
-        const debt = Number(r.total_price) - Number(r.paid_amount);
+        const collected = Number(r.paid_amount) + (r.is_disbursed ? Number(r.loan_amount || 0) : 0);
+        return <Text style={{ color: '#10b981' }}>{collected.toLocaleString()} đ</Text>
+      }
+    },
+    { 
+      title: 'Còn nợ', 
+      width: 130,
+      render: (_, r) => {
+        const debt = Number(r.total_price) - Number(r.paid_amount) - (r.is_disbursed ? Number(r.loan_amount || 0) : 0);
         return <Text style={{ color: debt > 0 ? '#ef4444' : 'transparent', fontWeight: 'bold' }}>{debt > 0 ? `${debt.toLocaleString()} đ` : '-'}</Text>
       }
     },
@@ -160,6 +175,34 @@ const RetailSaleReportPage = () => {
       dataIndex: 'guarantee', 
       width: 100,
       render: v => <Tag color={v === 'Có' ? 'green' : 'default'}>{v}</Tag> 
+    },
+    {
+      title: 'Giải ngân (Ngân hàng)',
+      width: 180,
+      fixed: 'right',
+      render: (_, r) => {
+        if (r.payment_method !== 'Trả góp') return <Text type="secondary">-</Text>;
+        
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const canSettle = user.role === 'ADMIN' || user.can_manage_money;
+
+        return (
+          <Space direction="vertical" size={0}>
+              <Checkbox 
+                checked={r.is_disbursed} 
+                disabled={!canSettle || (r.is_disbursed && user.role !== 'ADMIN')}
+                onChange={e => handleDisbursementChange(r.id, e.target.checked)}
+              >
+                {r.is_disbursed ? 'Đã giải ngân' : 'Chờ giải ngân'}
+              </Checkbox>
+              {r.is_disbursed && r.disbursed_at && (
+                <Text style={{ fontSize: 10, opacity: 0.6 }}>
+                  Ngày: {dayjs(r.disbursed_at).format('DD/MM/YYYY')}
+                </Text>
+              )}
+          </Space>
+        );
+      }
     }
   ];
 
@@ -179,10 +222,11 @@ const RetailSaleReportPage = () => {
       'Số máy': s.engine_no,
       'Số khung': s.chassis_no,
       'Giá bán': Number(s.total_price),
-      'Đã trả': Number(s.paid_amount),
-      'Còn nợ': Number(s.total_price) - Number(s.paid_amount),
+      'Đã trả': Number(s.paid_amount) + (s.is_disbursed ? Number(s.loan_amount || 0) : 0),
+      'Còn nợ': Number(s.total_price) - Number(s.paid_amount) - (s.is_disbursed ? Number(s.loan_amount || 0) : 0),
       'Kiểu bán': s.sale_type,
-      'Bảo hành': s.guarantee
+      'Bảo hành': s.guarantee,
+      'Giải ngân NH': s.payment_method === 'Trả góp' ? (s.is_disbursed ? `Đã giải ngân (${dayjs(s.disbursed_at).format('DD/MM/YYYY')})` : 'Chờ giải ngân') : '-'
     }));
 
     exportToExcel(exportData, `BaoCaoBanLe_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -279,8 +323,8 @@ const RetailSaleReportPage = () => {
                     <td>${s.engine_no}</td>
                     <td>${s.chassis_no}</td>
                     <td class="text-right">${Number(s.total_price).toLocaleString()}</td>
-                    <td class="text-right">${Number(s.paid_amount).toLocaleString()}</td>
-                    <td class="text-right">${(Number(s.total_price) - Number(s.paid_amount)).toLocaleString()}</td>
+                    <td class="text-right">${(Number(s.paid_amount) + (s.is_disbursed ? Number(s.loan_amount || 0) : 0)).toLocaleString()}</td>
+                    <td class="text-right">${(Number(s.total_price) - Number(s.paid_amount) - (s.is_disbursed ? Number(s.loan_amount || 0) : 0)).toLocaleString()}</td>
                     <td class="text-center">${s.sale_type}</td>
                 </tr>
             `).join('')}

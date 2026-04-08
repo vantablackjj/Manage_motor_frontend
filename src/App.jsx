@@ -21,6 +21,15 @@ import WarrantyReportPage from './pages/reports/WarrantyReportPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import NotificationPage from './pages/NotificationPage';
 import DailyReportPage from './pages/reports/DailyReportPage';
+import PartPage from './pages/master-data/PartPage';
+import PartImportPage from './pages/purchase/PartImportPage';
+import MechanicPage from './pages/master-data/MechanicPage';
+import RepairServicePage from './pages/retail/RepairServicePage';
+import PartInventoryPage from './pages/inventory/PartInventoryPage';
+import MaintenanceHistoryPage from './pages/reports/MaintenanceHistoryPage';
+import PartRetailPage from './pages/retail/PartRetailPage';
+import PartRetailDebtPage from './pages/retail/PartRetailDebtPage';
+import PartWholesaleDebtPage from './pages/purchase/PartWholesaleDebtPage';
 
 
 
@@ -105,6 +114,10 @@ function App() {
                         </ProtectedRoute>
                       } 
                     />
+                    <Route 
+                      path="/mechanics" 
+                      element={<MechanicPage />} 
+                    />
                     <Route path="/transfers" element={<TransferPage />} />
                     <Route path="/vehicle-search" element={<VehicleLifecyclePage />} />
                     <Route path="/report/sales-retail" element={<RetailSaleReportPage />} />
@@ -115,6 +128,16 @@ function App() {
                     <Route path="/report/daily" element={<DailyReportPage />} />
                     <Route path="/inventory-report" element={<InventoryReportPage />} />
                     <Route path="/notifications" element={<NotificationPage />} />
+                    
+                    {/* HỆ THUẬT PHỤ TÙNG & DỊCH VỤ MỚI */}
+                    <Route path="/parts" element={<PartPage />} />
+                    <Route path="/part-import" element={<PartImportPage />} />
+                    <Route path="/part-inventory" element={<PartInventoryPage />} />
+                    <Route path="/repair-service" element={<RepairServicePage />} />
+                    <Route path="/maintenance-history" element={<MaintenanceHistoryPage />} />
+                    <Route path="/part-retail" element={<PartRetailPage />} />
+                    <Route path="/part-retail-debt" element={<PartRetailDebtPage />} />
+                    <Route path="/part-wholesale-debt" element={<PartWholesaleDebtPage />} />
                   </Routes>
 
 

@@ -24,8 +24,10 @@ const VehicleColorPage = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
 
   // Fetch initial data
   const fetchColors = async () => {
@@ -40,6 +42,10 @@ const VehicleColorPage = () => {
     }
   };
 
+  useEffect(() => {
+    fetchColors();
+  }, []);
+
   const handleExport = () => {
     if (!data || data.length === 0) {
       return message.warning('Không có dữ liệu để xuất!');
@@ -52,19 +58,32 @@ const VehicleColorPage = () => {
     exportToExcel(exportData, `DanhMucMauXe_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
-  useEffect(() => {
-    fetchColors();
-  }, []);
-
   const onFinish = async (values) => {
     try {
-      await api.post('/colors', values);
-      message.success('Thêm màu xe mới thành công!');
+      if (editingId) {
+        await api.put(`/colors/${editingId}`, values);
+        message.success('Cập nhật màu xe thành công!');
+        setEditingId(null);
+      } else {
+        await api.post('/colors', values);
+        message.success('Thêm màu xe mới thành công!');
+      }
       form.resetFields();
-      fetchColors(); // Refresh list
+      fetchColors(); 
     } catch (error) {
-      message.error('Lỗi khi thêm màu xe: ' + error.message);
+      message.error('Lỗi khi lưu màu xe: ' + (error.response?.data?.message || error.message));
     }
+  };
+
+  const handleEdit = (record) => {
+    setEditingId(record.id);
+    form.setFieldsValue(record);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    form.resetFields();
   };
 
   const handleDelete = async (id) => {
@@ -88,10 +107,15 @@ const VehicleColorPage = () => {
       title: 'Thao tác',
       key: 'action',
       width: '120px',
-      hidden: !isAdmin,
+      hidden: !canManageMaster,
       render: (_, record) => (
         <Space>
-          <Button type="text" icon={<Edit size={16} />} style={{ color: 'var(--primary-color)' }} />
+          <Button 
+            type="text" 
+            icon={<Edit size={16} />} 
+            style={{ color: 'var(--primary-color)' }} 
+            onClick={() => handleEdit(record)}
+          />
           <Popconfirm title="Xóa màu này?" onConfirm={() => handleDelete(record.id)}>
             <Button type="text" danger icon={<Trash2 size={16} />} />
           </Popconfirm>
@@ -116,7 +140,7 @@ const VehicleColorPage = () => {
           >
             Xuất Excel
           </Button>
-          {isAdmin && (
+          {canManageMaster && (
             <Button 
               icon={<FileSpreadsheet size={16} />} 
               ghost 
@@ -137,7 +161,7 @@ const VehicleColorPage = () => {
         title="Nhập danh sách màu xe"
       />
 
-      {isAdmin && (
+      {canManageMaster && (
         <div className="glass-card" style={{ padding: 24, marginBottom: 32, border: '1px dashed var(--border-color)' }}>
           <Form
             form={form}
@@ -145,17 +169,20 @@ const VehicleColorPage = () => {
             onFinish={onFinish}
           >
             <Row gutter={16} align="bottom">
-              <Col xs={24} md={18}>
+              <Col xs={24} md={14}>
                 <Form.Item label="Tên màu xe" name="color_name" rules={[{ required: true }]}>
                   <Input placeholder="Ví dụ: Đỏ Đen Nhám, Xanh GP..." />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={6}>
-                <Form.Item>
-                  <Button block icon={<Save size={16} />} type="primary" onClick={() => form.submit()} style={{ background: 'var(--primary-color)' }}>
-                    Lưu màu
+              <Col xs={24} md={10}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+                  <Button ghost icon={<RotateCcw size={16} />} onClick={editingId ? handleCancelEdit : () => form.resetFields()}>
+                    {editingId ? 'Hủy' : 'Làm mới'}
                   </Button>
-                </Form.Item>
+                  <Button flex={1} icon={<Save size={16} />} type="primary" onClick={() => form.submit()} style={{ background: editingId ? '#10b981' : 'var(--primary-color)', flex: 1 }}>
+                    {editingId ? 'Cập nhật' : 'Lưu màu'}
+                  </Button>
+                </div>
               </Col>
             </Row>
           </Form>
