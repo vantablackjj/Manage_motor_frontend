@@ -20,11 +20,12 @@ import {
   Tag,
   Alert
 } from 'antd';
-import { ShoppingCart, Save, RotateCcw, Plus, Trash2, DollarSign, History, CheckCircle2, AlertTriangle, Search, FileSpreadsheet, Download } from 'lucide-react';
+import { ShoppingCart, Save, RotateCcw, Plus, Trash2, DollarSign, History, CheckCircle2, AlertTriangle, Search, FileSpreadsheet, Download, Printer } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../../utils/api';
 import ImportExcelModal from '../../components/ImportExcelModal';
 import { exportToExcel } from '../../utils/excelExport';
+import numberToWords from '../../utils/numberToWords';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -48,6 +49,11 @@ const WholesaleSalePage = () => {
   const [activeTab, setActiveTab] = useState('1');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+
+  // Search states
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [detailSearchTerm, setDetailSearchTerm] = useState('');
+  const [searchBy, setSearchBy] = useState('all'); // 'all', 'engine', 'chassis'
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
@@ -164,7 +170,7 @@ const WholesaleSalePage = () => {
       setLoading(true);
       await api.post('/wholesale-sales', {
         customer_id: formValues.customer_id,
-        sale_date: formValues.sale_date.toISOString(),
+        sale_date: formValues.sale_date.format('YYYY-MM-DD'),
         items: validItems.map(item => ({ 
           vehicle_id: item.vehicle_id, 
           price_vnd: item.sale_price,
@@ -191,7 +197,7 @@ const WholesaleSalePage = () => {
       await api.post('/wholesale-sales/payment', {
         wholesale_sale_id: selectedSale.id,
         amount_paid_vnd: values.amount,
-        payment_date: values.date.toISOString(),
+        payment_date: values.date.format('YYYY-MM-DD'),
         notes: values.notes
       });
       message.success('Đã ghi nhận tiền trả từ khách buôn!');
@@ -309,6 +315,116 @@ const WholesaleSalePage = () => {
         'Kho xuất': h.Warehouse?.warehouse_name || 'N/A'
     }));
     exportToExcel(exportData, `LichSuBanBuon_${dayjs().format('YYYYMMDD_HHmm')}`);
+  };
+
+  const handlePrintLot = (sale, details = saleDetails) => {
+    if (!sale) return;
+    const items = details.vehicles || [];
+    const warehouse = sale.Warehouse || {};
+    const customer = sale.WholesaleCustomer || {};
+    const date = dayjs(sale.sale_date);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>In Phiếu Xuất Lô</title>
+        <style>
+          body { font-family: "Times New Roman", Times, serif; font-size: 14pt; color: black; background: white; padding: 20px; line-height: 1.5; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+          .logo-side { font-weight: bold; font-size: 16pt; }
+          .title { text-align: center; font-size: 24pt; font-weight: bold; margin: 30px 0; }
+          .info-sec { display: flex; flex-wrap: wrap; border-top: 2px solid black; border-bottom: 2px solid black; padding: 15px 0; margin-bottom: 30px; }
+          .info-item { flex: 1; min-width: 300px; font-size: 15pt; }
+          .info-label { font-weight: normal; }
+          .info-value { font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13pt; }
+          th, td { border: 1px solid black; padding: 10px 8px; text-align: left; }
+          th { background: #f2f2f2; font-weight: bold; text-align: center; }
+          .footer { margin-top: 60px; display: flex; justify-content: space-between; text-align: center; font-size: 14pt; }
+          .sig-box { width: 230px; }
+          .total-sec { margin-top: 30px; text-align: right; }
+          @media print {
+            body { padding: 0; }
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo-side">
+            HEAD ${(warehouse.warehouse_name || 'HỆ THỐNG').toUpperCase()}
+            <div style="font-weight: normal; font-size: 12pt;">${warehouse.address || ''}</div>
+          </div>
+          <div style="text-align: right; font-weight: bold;">
+            Ngày: ${date.format('DD/MM/YYYY')}
+          </div>
+        </div>
+        
+        <div class="title">PHIẾU XUẤT KHO LÔ HÀNG</div>
+        
+        <div class="info-sec">
+          <div class="info-item"><span class="info-label">Khách hàng:</span> <span class="info-value">${customer.name || 'N/A'}</span></div>
+          <div class="info-item"><span class="info-label">Mã khách:</span> <span class="info-value">${customer.customer_code || 'N/A'}</span></div>
+          <div class="info-item" style="width: 100%; margin-top: 8px;"><span class="info-label">Ghi chú:</span> <span>${sale.notes || ''}</span></div>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px;">STT</th>
+              <th style="width: 110px;">Ngày bán</th>
+              <th>Loại xe</th>
+              <th>Màu xe</th>
+              <th>Số Máy</th>
+              <th>Số Khung</th>
+              <th style="text-align: right; width: 130px;">Đơn giá</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((v, i) => `
+              <tr>
+                <td style="text-align: center;">${i + 1}</td>
+                <td style="text-align: center;">${date.format('DD/MM/YYYY')}</td>
+                <td>${v.VehicleType?.name || v.Type?.name || 'N/A'}</td>
+                <td style="text-align: center;">${v.VehicleColor?.color_name || v.Color?.color_name || 'N/A'}</td>
+                <td><b>${v.engine_no}</b></td>
+                <td><b>${v.chassis_no}</b></td>
+                <td style="text-align: right;"><b>${Number(v.wholesale_price_vnd).toLocaleString()}</b></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <div class="total-sec">
+          <div style="font-size: 18pt;">Tổng cộng: <b style="color: black;">${Number(sale.total_amount_vnd).toLocaleString()}</b></div>
+          <div style="font-style: italic; margin-top: 10px; font-size: 13pt;">(Bằng chữ: ${numberToWords(sale.total_amount_vnd).replace(' đồng', '')})</div>
+        </div>
+        
+        <div class="footer">
+          <div class="sig-box">
+            <b>Người nhận hàng</b><br/><i>(Ký và ghi rõ họ tên)</i>
+          </div>
+          <div class="sig-box">
+             <b>Người lập phiếu</b><br/><i>(Ký tên)</i>
+          </div>
+          <div class="sig-box">
+            <b>Đại diện bên bán</b><br/><i>(Đóng dấu)</i>
+          </div>
+        </div>
+        
+        <script>
+          window.onload = function() { window.print(); };
+          window.onafterprint = function() { window.close(); };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const entryColumns = [
@@ -514,8 +630,21 @@ const WholesaleSalePage = () => {
                     className="glass-card"
                     styles={{ body: { padding: 0 } }}
                   >
+                    <div style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                       <Input 
+                         placeholder="Tìm ngày hoặc ghi chú lô..." 
+                         prefix={<Search size={16} />}
+                         value={historySearchTerm}
+                         onChange={e => setHistorySearchTerm(e.target.value)}
+                         allowClear
+                       />
+                    </div>
                     <Table 
-                      dataSource={saleHistory} 
+                      dataSource={saleHistory.filter(h => {
+                        const term = historySearchTerm.toLowerCase();
+                        return dayjs(h.sale_date).format('DD/MM/YYYY').includes(term) || 
+                               (h.notes && h.notes.toLowerCase().includes(term));
+                      })} 
                       size="small" 
                       rowKey="id"
                       scroll={{ x: 'max-content' }}
@@ -528,6 +657,15 @@ const WholesaleSalePage = () => {
                           render: (_, r) => (
                             <Space>
                               <Button size="small" onClick={() => loadSaleDetails(r)}>Chi tiết</Button>
+                              <Button 
+                                size="small" 
+                                icon={<Printer size={14} />} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Find the details if they match, otherwise the print template will rely on basic lot info
+                                  handlePrintLot(r);
+                                }}
+                              />
                               {canDelete && (
                                 <Button 
                                   size="small" 
@@ -544,7 +682,21 @@ const WholesaleSalePage = () => {
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title={selectedSale ? `Hóa đơn: ${dayjs(selectedSale?.sale_date).format('DD/MM/YYYY')}` : 'Chi tiết đơn'} className="glass-card">
+                  <Card 
+                    title={selectedSale ? `Hóa đơn: ${dayjs(selectedSale?.sale_date).format('DD/MM/YYYY')}` : 'Chi tiết đơn'} 
+                    className="glass-card"
+                    extra={selectedSale && (
+                      <Button 
+                        icon={<Printer size={16} />} 
+                        type="primary" 
+                        ghost 
+                        size="small"
+                        onClick={() => handlePrintLot(selectedSale)}
+                      >
+                        In phiếu lô
+                      </Button>
+                    )}
+                  >
                     {selectedSale ? (
                       <div className="lot-details">
                          <div style={{ marginBottom: 20 }}>
@@ -559,16 +711,60 @@ const WholesaleSalePage = () => {
                                 {canManageMoney ? "THU TIỀN TỪ KHÁCH BUÔN" : "XEM LỊCH SỬ THU TIỀN"}
                              </Button>
                          </div>
-                         <Text strong>- Xe trong lô:</Text>
+                          <div style={{ marginBottom: 12 }}>
+                             <Row gutter={8}>
+                               <Col flex="auto">
+                                 <Input 
+                                   placeholder="Tìm nhanh Xe (Số máy, Số khung, Ghi chú...)" 
+                                   prefix={<Search size={16} />}
+                                   value={detailSearchTerm}
+                                   onChange={e => setDetailSearchTerm(e.target.value)}
+                                   allowClear
+                                   size="small"
+                                 />
+                               </Col>
+                               <Col>
+                                 <Select 
+                                   size="small" 
+                                   value={searchBy} 
+                                   onChange={setSearchBy}
+                                   style={{ width: 100 }}
+                                 >
+                                   <Option value="all">Tất cả</Option>
+                                   <Option value="engine">Số Máy</Option>
+                                   <Option value="chassis">Số Khung</Option>
+                                 </Select>
+                               </Col>
+                             </Row>
+                          </div>
+                          <Text strong>- Xe trong lô:</Text>
                           <Table 
-                             dataSource={saleDetails.vehicles} 
+                             dataSource={saleDetails.vehicles.filter(v => {
+                               const term = detailSearchTerm.toLowerCase();
+                               if (!term) return true;
+                               
+                               const matchesEngine = v.engine_no.toLowerCase().includes(term);
+                               const matchesChassis = v.chassis_no.toLowerCase().includes(term);
+                               const matchesNotes = (v.notes || '').toLowerCase().includes(term);
+                               const matchesType = (v.VehicleType?.name || '').toLowerCase().includes(term);
+
+                               if (searchBy === 'engine') return matchesEngine;
+                               if (searchBy === 'chassis') return matchesChassis;
+                               return matchesEngine || matchesChassis || matchesNotes || matchesType;
+                             })} 
                              size="small" 
                              pagination={{ pageSize: 5 }}
                              rowKey="id"
                              scroll={{ x: 'max-content' }}
                              columns={[
-                               { title: 'Số Máy', dataIndex: 'engine_no', width: 140 }, 
-                               { title: 'Số Khung', dataIndex: 'chassis_no', width: 140 }, 
+                               { title: 'Số Máy', dataIndex: 'engine_no', width: 120 }, 
+                               { title: 'Số Khung', dataIndex: 'chassis_no', width: 120 }, 
+                               { 
+                                 title: 'Loại xe', 
+                                 key: 'type', 
+                                 width: 150,
+                                 render: (_, r) => <Text strong style={{ fontSize: 12, color: 'var(--primary-color)' }}>{r.VehicleType?.name || 'N/A'}</Text>
+                               },
                                { 
                                  title: 'Giá bán (đ)', 
                                  dataIndex: 'wholesale_price_vnd', 
@@ -656,7 +852,7 @@ const WholesaleSalePage = () => {
          </Form>
       </Modal>
 
-      <style>{` .ant-table { background: transparent !important; } .ant-table-cell { background: transparent !important; color: white !important; } .ant-table-thead > tr > th { background: rgba(255,255,255,0.05) !important; color: var(--primary-color) !important; } `}</style>
+      <style>{` .ant-table { background: #ffffff !important; } .ant-table-cell { background: #ffffff !important; color: #000000 !important; font-weight: 600; } .ant-table-thead > tr > th { background: #f1f5fb !important; color: #0f172a !important; font-weight: 700 !important; } `}</style>
     </div>
   );
 };

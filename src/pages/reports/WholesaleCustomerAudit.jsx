@@ -13,7 +13,8 @@ import {
   Divider, 
   Statistic,
   message,
-  Tag
+  Tag,
+  Input
 } from 'antd';
 import { 
   Search, 
@@ -35,14 +36,17 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 const WholesaleCustomerAudit = () => {
-// ... existing state ...
   const [form] = Form.useForm();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ vehicles: [], payments: [], summary: { total_amount: 0, paid_amount: 0, balance: 0 } });
+  
+  // Search state
+  const [vehicleSearchTerm, setVehicleSearchTerm] = useState('');
+  const [searchBy, setSearchBy] = useState('all'); // 'all', 'engine', 'chassis'
 
   useEffect(() => {
-    fetchCustomers();
+     api.get('/wholesale-customers').then(res => setCustomers(res.data)).catch(e => message.error('Lỗi tải khách hàng'));
   }, []);
 
   const handleExport = () => {
@@ -65,13 +69,21 @@ const WholesaleCustomerAudit = () => {
     exportToExcel(exportData, `DoiSoat_${customerName}_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
-  const fetchCustomers = async () => {
-// ... existing fetchCustomers ...
-  };
-// ... rest of the component ...
-
   const handleSearch = async (values) => {
-// ... existing handleSearch ...
+    setLoading(true);
+    try {
+      const params = {
+          customer_id: values.customer_id,
+          from_date: values.dates?.[0]?.format('YYYY-MM-DD'),
+          to_date: values.dates?.[1]?.format('YYYY-MM-DD')
+      };
+      const res = await api.get('/reports/wholesale-audit', { params });
+      setData(res.data);
+    } catch (e) {
+      message.error(e.response?.data?.message || 'Lỗi tra cứu!');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const vehicleColumns = [
@@ -84,7 +96,7 @@ const WholesaleCustomerAudit = () => {
     { 
       title: 'Ngày Bán', 
       dataIndex: 'sale_date', 
-      render: d => <Text strong color="var(--primary-color)">{dayjs(d).format('DD/MM/YYYY')}</Text> 
+      render: d => <Text strong style={{ color: 'var(--primary-color)' }}>{dayjs(d).format('DD/MM/YYYY')}</Text> 
     },
     { title: 'Loại Xe', dataIndex: 'type_name' },
     { title: 'Số Máy', dataIndex: 'engine_no', className: 'strong-text' },
@@ -93,9 +105,9 @@ const WholesaleCustomerAudit = () => {
     { 
       title: 'Giá Bán (VNĐ)', 
       render: (_, r) => {
-          // Tính toán giá xấp xỉ vì dữ liệu hiện tại chưa lưu giá lẻ trong lô
-          const avgPrice = Number(r.sale_price_lot) / (Number(r.lot_vehicles_count) || 1);
-          return <Text strong style={{ color: '#10b981' }}>{avgPrice.toLocaleString()} đ</Text>
+          // Use vehicle's specific wholesale price if available, fallback to lot average
+          const price = Number(r.wholesale_price_vnd) || (Number(r.sale_price_lot) / (Number(r.lot_vehicles_count) || 1));
+          return <Text strong style={{ color: '#10b981' }}>{price.toLocaleString()} đ</Text>
       }
     }
   ];
@@ -158,9 +170,49 @@ const WholesaleCustomerAudit = () => {
 
       <Row gutter={24}>
         <Col span={24}>
-          <Card title={<Space><Car size={18} /> DANH SÁCH XE ĐÃ BÁN</Space>} className="glass-card table-card" style={{ marginBottom: 24 }}>
+          <Card 
+            title={(
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: 10 }}>
+                <Space><Car size={18} /> DANH SÁCH XE ĐÃ BÁO CÁO</Space>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                   <Input 
+                     placeholder="Tìm Số máy, Số khung..." 
+                     size="small" 
+                     prefix={<Search size={14} />} 
+                     style={{ width: 250 }}
+                     value={vehicleSearchTerm}
+                     onChange={e => setVehicleSearchTerm(e.target.value)}
+                     allowClear
+                   />
+                   <Select 
+                     size="small" 
+                     value={searchBy} 
+                     onChange={setSearchBy}
+                     style={{ width: 100 }}
+                   >
+                     <Option value="all">Tất cả</Option>
+                     <Option value="engine">Số Máy</Option>
+                     <Option value="chassis">Số Khung</Option>
+                   </Select>
+                </div>
+              </div>
+            )} 
+            className="glass-card table-card" 
+            style={{ marginBottom: 24 }}
+          >
             <Table 
-              dataSource={data.vehicles} 
+              dataSource={data.vehicles.filter(v => {
+                const term = vehicleSearchTerm.toLowerCase();
+                if (!term) return true;
+                
+                const matchesEngine = (v.engine_no || '').toLowerCase().includes(term);
+                const matchesChassis = (v.chassis_no || '').toLowerCase().includes(term);
+                const matchesType = (v.type_name || '').toLowerCase().includes(term);
+
+                if (searchBy === 'engine') return matchesEngine;
+                if (searchBy === 'chassis') return matchesChassis;
+                return matchesEngine || matchesChassis || matchesType;
+              })} 
               columns={vehicleColumns} 
               rowKey="id" 
               size="small" 

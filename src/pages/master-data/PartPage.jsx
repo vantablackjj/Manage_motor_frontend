@@ -14,7 +14,8 @@ import {
   InputNumber,
   Tag,
   Divider,
-  Radio
+  Radio,
+  AutoComplete
 } from 'antd';
 import { Package, Trash2, Edit, Plus, Search, Archive, Info, FileStack } from 'lucide-react';
 import api from '../../utils/api';
@@ -111,7 +112,10 @@ const PartPage = () => {
             <Space direction="vertical" size={0}>
                 <Text>{record.unit}</Text>
                 {record.default_conversion_rate > 1 && (
-                    <Text type="secondary" style={{ fontSize: '12px' }}>1 Thùng = {record.default_conversion_rate} {record.unit}</Text>
+                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                        1 {record.unit} = {record.default_conversion_rate} {record.LinkedPart?.unit || 'đơn vị base'} 
+                        {record.LinkedPart && ` (${record.LinkedPart.code})`}
+                    </Text>
                 )}
             </Space>
         )
@@ -178,12 +182,29 @@ const PartPage = () => {
       </div>
 
       <div className="glass-card" style={{ padding: 16, marginBottom: 24 }}>
-        <Input 
-            placeholder="Tìm theo Mã hoặc Tên phụ tùng..." 
-            prefix={<Search size={18} />} 
-            size="large"
-            onChange={(e) => setSearchText(e.target.value)}
-        />
+        <AutoComplete
+            style={{ width: '100%' }}
+            options={data.filter(item => 
+                item.code.toLowerCase().includes(searchText.toLowerCase()) ||
+                item.name.toLowerCase().includes(searchText.toLowerCase())
+            ).slice(0, 10).map(item => ({
+                value: item.code,
+                label: (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span><Text strong>{item.code}</Text> - {item.name}</span>
+                        <Tag color="blue">{item.unit}</Tag>
+                    </div>
+                )
+            }))}
+            onSelect={(val) => setSearchText(val)}
+            onSearch={(val) => setSearchText(val)}
+        >
+            <Input 
+                placeholder="Tìm theo Mã hoặc Tên phụ tùng..." 
+                prefix={<Search size={18} />} 
+                size="large"
+            />
+        </AutoComplete>
       </div>
 
       <Table 
@@ -237,13 +258,29 @@ const PartPage = () => {
               <Form.Item 
                 label={
                     <Space>
-                        Tỉ lệ (Thùng {'->'} Lẻ)
+                        Tỉ lệ quy đổi
                         <Info size={14} style={{ color: 'var(--primary-color)' }} />
                     </Space>
                 } 
                 name="default_conversion_rate"
+                help="Ví dụ: 1 Thùng = 24 Chai thì nhập 24"
               >
                 <InputNumber style={{ width: '100%' }} min={1} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Quy đổi về mã" name="linked_part_id">
+                <AutoComplete
+                    options={data.filter(p => p.id !== editingId).map(p => ({
+                        value: p.id,
+                        label: `${p.code} - ${p.name} (${p.unit})`
+                    }))}
+                    filterOption={(inputValue, option) =>
+                        option.label.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                    }
+                >
+                    <Input placeholder="Chọn mã cơ sở (ví dụ: chai)" />
+                </AutoComplete>
               </Form.Item>
             </Col>
           </Row>

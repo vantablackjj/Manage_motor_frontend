@@ -27,7 +27,8 @@ import {
   History,
   LayoutDashboard,
   Wrench,
-  Archive
+  Archive,
+  Gift as GiftIcon
 } from 'lucide-react';
 
 
@@ -64,9 +65,10 @@ const MainLayout = ({ children }) => {
     const socket = io(socketUrl); // URL Backend linh hoạt
     
     socket.on("connect", () => {
-      console.log("Connected to Real-time server");
+      console.log("✅ Socket.io connected. Room ID:", user.id);
       socket.emit("join_room", user.id);
       if (user.warehouse_id) {
+          console.log("Joining warehouse room:", user.warehouse_id);
           socket.emit("join_warehouse", user.warehouse_id);
       }
       if (isAdmin) {
@@ -75,6 +77,7 @@ const MainLayout = ({ children }) => {
     });
 
     socket.on("notification_new", (noti) => {
+      console.log("🔔 New Real-time Notification:", noti);
       setNotifications(prev => [noti, ...prev]);
       setUnreadCount(prev => prev + 1);
       
@@ -95,7 +98,7 @@ const MainLayout = ({ children }) => {
       // Phát âm thanh chuông nếu trình duyệt cho phép
       try {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play();
+        audio.play().catch(e => console.warn('Audio play auto-blocked by browser'));
       } catch (e) {}
     });
 
@@ -136,12 +139,12 @@ const MainLayout = ({ children }) => {
     <Card 
       title={<Space><Bell size={18} /> Thông báo công việc</Space>} 
       size="small" 
-      style={{ width: 350, boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', background: '#1f1f1f' }}
+      style={{ width: 350, boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid rgba(0,0,0,0.08)', background: '#ffffff' }}
       styles={{ body: { padding: '0 12px' } }}
     >
       <div style={{ maxHeight: 400, overflowY: 'auto', padding: '10px 0' }}>
         {notifications.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>Không có thông báo mới</div>
+          <div style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>Không có thông báo mới</div>
         ) : (
           notifications.map(n => (
             <div 
@@ -159,14 +162,14 @@ const MainLayout = ({ children }) => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text strong style={{ fontSize: 13, color: n.is_read ? 'rgba(255,255,255,0.5)' : 'white' }}>{n.title}</Text>
-                <Text style={{ fontSize: 10, opacity: 0.5 }}>{dayjs(n.createdAt).fromNow()}</Text>
+                <Text strong style={{ fontSize: 13, color: n.is_read ? '#64748b' : '#0f172a' }}>{n.title}</Text>
+                <Text style={{ fontSize: 10, color: '#64748b' }}>{dayjs(n.createdAt).fromNow()}</Text>
               </div>
-              <div style={{ fontSize: 12, opacity: 0.8, color: 'rgba(255,255,255,0.9)' }}>{n.message}</div>
+              <div style={{ fontSize: 12, color: '#334155' }}>{n.message}</div>
               <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     {n.Warehouse && <Tag size="small" color="blue" style={{ fontSize: 9, margin: 0, height: 18, lineHeight: '16px', background: 'rgba(59, 130, 246, 0.1)', border: 'none' }}>{n.Warehouse.warehouse_name}</Tag>}
-                    {n.creator && <Text style={{ fontSize: 10, opacity: 0.5 }}>bởi {n.creator.full_name}</Text>}
+                    {n.creator && <Text style={{ fontSize: 10, color: '#64748b' }}>bởi {n.creator.full_name}</Text>}
                  </div>
                  {!n.is_read && <div style={{ fontSize: 10, color: 'var(--primary-color)', fontWeight: 'bold' }}>Xử lý &raquo;</div>}
               </div>
@@ -175,7 +178,7 @@ const MainLayout = ({ children }) => {
           ))
         )}
       </div>
-      <div style={{ padding: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
+      <div style={{ padding: '8px 4px', borderTop: '1px solid rgba(0,0,0,0.06)', textAlign: 'center' }}>
         <Button 
           type="link" 
           size="small" 
@@ -238,6 +241,9 @@ const MainLayout = ({ children }) => {
 
 
   const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
+  const canManageSales = isAdmin || user.can_manage_sales === true || user.can_manage_sales === 1;
+  const canManageSpareParts = isAdmin || user.can_manage_spare_parts === true || user.can_manage_spare_parts === 1;
+  const canManageExpenses = isAdmin || user.can_manage_expenses === true || user.can_manage_expenses === 1;
 
   const menuItems = [
     isAdmin && {
@@ -245,7 +251,7 @@ const MainLayout = ({ children }) => {
       icon: <LayoutDashboard size={18} />,
       label: <Link to="/dashboard">Bảng điều khiển (Admin)</Link>
     },
-    {
+    canManageSales && {
       key: 'sales-management',
       icon: <ShoppingCart size={18} />,
       label: 'Quản lý Bán hàng',
@@ -258,7 +264,7 @@ const MainLayout = ({ children }) => {
             { key: '/retail', label: <Link to="/retail">Bán lẻ xe máy</Link> },
             { key: '/wholesale', label: <Link to="/wholesale">Bán buôn & Thu nợ</Link> },
             { key: '/purchase', label: <Link to="/purchase">Nhập xe mua & Trả tiền</Link> },
-            isAdmin && { key: '/expenses', label: <Link to="/expenses">Nhập chi tiêu</Link> },
+            canManageExpenses && { key: '/expenses', label: <Link to="/expenses">Nhập chi tiêu</Link> },
             canManageMaster && { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
             canManageMaster && { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
             canManageMaster && { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng</Link> },
@@ -284,24 +290,22 @@ const MainLayout = ({ children }) => {
             { key: '/report/purchases', label: <Link to="/report/purchases">Xem thông tin mua xe</Link> },
             { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn</Link> },
             { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
-            { key: '/report/daily', label: <Link to="/report/daily">Báo cáo cuối ngày</Link> },
           ],
         },
       ]
     },
-
-    {
+    
+    canManageSpareParts && {
       key: 'after-sales-folder',
       icon: <Wrench size={18} />,
-      label: 'Sau Bán Hàng',
+      label: 'Sau Bán Hàng (Dịch vụ/PT)',
       children: [
         {
           key: 'services',
           icon: <ClockIcon size={16} />,
-          label: 'Dịch vụ & Sửa chữa',
+          label: 'Bảo trì & Sửa chữa',
           children: [
-            { key: '/repair-service', label: <Link to="/repair-service">Lập phiếu sửa chữa</Link> },
-            { key: '/maintenance-history', label: <Link to="/maintenance-history">Lịch sử bảo trì</Link> },
+            { key: '/maintenance-hub', label: <Link to="/maintenance-hub">Trung tâm Bảo trì (Hub)</Link> },
           ],
         },
         {
@@ -321,6 +325,15 @@ const MainLayout = ({ children }) => {
             { key: '/part-retail', label: <Link to="/part-retail">Bán lẻ phụ tùng</Link> },
             { key: '/part-retail-debt', label: <Link to="/part-retail-debt">Nợ phụ tùng bán lẻ</Link> },
             { key: '/part-wholesale-debt', label: <Link to="/part-wholesale-debt">Nợ phụ tùng mua sỉ</Link> },
+            { key: '/gifts', label: <Link to="/gifts"><Space><GiftIcon size={14} /> Quản lý quà tặng</Space></Link> },
+            {
+              key: 'parts-reports-folder',
+              label: 'Báo cáo phụ tùng',
+              children: [
+                { key: '/report/parts-inventory', label: <Link to="/report/parts-inventory">Xem tồn kho phụ tùng</Link> },
+                { key: '/report/parts-purchases', label: <Link to="/report/parts-purchases">Xem nhập mua phụ tùng</Link> },
+              ]
+            },
           ],
         },
       ]
@@ -343,43 +356,42 @@ const MainLayout = ({ children }) => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider 
-        width={260}
-        theme="dark"
+        width={250}
         className="desktop-sider"
         breakpoint="lg"
         collapsedWidth={0}
         trigger={null}
+        style={{ background: '#1e1b4b' }}
       >
-
-        <div style={{ height: 64, margin: '16px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ minWidth: 40, width: 40, height: 40, background: 'var(--primary-color)', borderRadius: 8, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Truck color="white" size={24} />
+        <div style={{ height: 64, margin: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ minWidth: 36, width: 36, height: 36, background: '#4f46e5', borderRadius: 8, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <Truck color="white" size={20} />
           </div>
-          <span style={{ fontSize: 18, fontWeight: 'bold' }} className="gradient-text">QUẢN LÝ XE MÁY</span>
-
+          <span style={{ fontSize: 16, fontWeight: 'bold', color: 'white', letterSpacing: -0.5 }}>QUẢN LÝ XE MÁY</span>
         </div>
         <Menu 
           theme="dark" 
           defaultOpenKeys={['input-data']}
           selectedKeys={[location.pathname]} 
-          mode="inline" 
-          items={menuItems} 
+          mode="inline"
+          items={menuItems}
+          style={{ background: 'transparent', border: 'none', fontSize: 14, fontWeight: 700 }}
         />
       </Sider>
       <Layout>
         <Header style={{ 
           padding: '0 24px', 
-          background: 'rgba(24, 24, 27, 0.4)', 
-          backdropFilter: 'blur(10px)',
+          background: '#ffffff', 
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          borderBottom: '1px solid var(--border-color)'
+          borderBottom: '1px solid #cbd5e1',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.05)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <Button 
                 type="text" 
-                icon={<MenuIcon color="white" />} 
+                icon={<MenuIcon color="#1e1b4b" />} 
                 className="mobile-only-btn"
                 onClick={() => setDrawerVisible(true)}
               />
@@ -398,7 +410,7 @@ const MainLayout = ({ children }) => {
             <Dropdown dropdownRender={() => notificationMenu} trigger={['click']} placement="bottomRight" overlayClassName="glass-dropdown">
               <span style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <Badge count={unreadCount} size="small" offset={[-2, 6]}>
-                  <Button type="text" shape="circle" icon={<Bell size={22} color={unreadCount > 0 ? 'var(--primary-color)' : 'white'} />} />
+                  <Button type="text" shape="circle" icon={<Bell size={22} color={unreadCount > 0 ? 'var(--primary-color)' : '#1e1b4b'} />} />
                 </Badge>
               </span>
             </Dropdown>
@@ -409,8 +421,8 @@ const MainLayout = ({ children }) => {
                 padding: '6px 12px', 
                 borderRadius: '10px', 
                 transition: 'all 0.3s',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.05)'
+                background: 'rgba(0,0,0,0.04)',
+                border: '1px solid rgba(0,0,0,0.08)'
               }} className="user-dropdown-trigger">
                 <Avatar 
                   style={{ backgroundColor: 'var(--primary-color)', boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)' }} 

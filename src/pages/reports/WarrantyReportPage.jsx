@@ -9,7 +9,8 @@ import {
   Button, 
   Space, 
   message,
-  Statistic
+  Statistic,
+  Checkbox
 } from 'antd';
 import { 
   Printer, 
@@ -83,6 +84,18 @@ const WarrantyReportPage = () => {
         fetchData(newFilters);
     };
 
+    const toggleGuaranteeBook = async (id, currentStatus) => {
+        try {
+            await api.put(`/retail-sales/${id}/guarantee-book`, {
+                guarantee_book_issued: !currentStatus
+            });
+            message.success(!currentStatus ? 'Đã xác nhận cấp sổ!' : 'Đã hủy xác nhận cấp sổ!');
+            fetchData();
+        } catch (e) {
+            message.error('Lỗi khi cập nhật trạng thái sổ: ' + e.message);
+        }
+    };
+
     const columns = [
         { 
             title: 'Ngày bán', 
@@ -120,6 +133,26 @@ const WarrantyReportPage = () => {
             title: 'Lượt bảo hành', 
             width: 150,
             render: () => <Tag color="blue">Lần {filters.turn}</Tag>
+        },
+        {
+            title: 'Sổ bảo hành',
+            width: 150,
+            fixed: 'right',
+            render: (_, r) => (
+                <Space direction="vertical" size={0}>
+                    <Checkbox 
+                        checked={r.guarantee_book_issued}
+                        onChange={() => toggleGuaranteeBook(r.id, r.guarantee_book_issued)}
+                    >
+                        {r.guarantee_book_issued ? 'Đã cấp sổ' : 'Chưa cấp'}
+                    </Checkbox>
+                    {r.guarantee_book_issued && r.guarantee_book_issued_at && (
+                        <Text style={{ fontSize: 10, opacity: 0.6 }}>
+                            {dayjs(r.guarantee_book_issued_at).format('DD/MM/YYYY')}
+                        </Text>
+                    )}
+                </Space>
+            )
         }
     ];
 
@@ -142,7 +175,6 @@ const WarrantyReportPage = () => {
                                 value={filters.month} 
                                 style={{ width: 70 }} 
                                 onChange={v => handleFilterChange('month', v)}
-                                dropdownStyle={{ background: '#1f2937' }}
                             >
                                 {months.map(m => <Option key={m} value={m}>{m}</Option>)}
                             </Select>
@@ -163,7 +195,7 @@ const WarrantyReportPage = () => {
                 </Row>
 
                 <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                    <Title level={3} className="responsive-title" style={{ color: 'rgba(255,255,255,0.85)', letterSpacing: 1 }}>DANH SÁCH XE ĐẾN HẠN BẢO HÀNH</Title>
+                    <Title level={3} className="responsive-title" style={{ color: 'var(--text-primary)', letterSpacing: 1 }}>DANH SÁCH XE ĐẾN HẠN BẢO HÀNH</Title>
                 </div>
 
                 <Row gutter={[24, 24]}>
@@ -186,46 +218,27 @@ const WarrantyReportPage = () => {
                     <Col xs={24} lg={6}>
                         <Card title="Chọn lượt bảo hành" size="small" className="glass-card">
                             <Row gutter={[8, 8]}>
-                                <Col xs={12} lg={24}>
-                                    <Button 
-                                        type={filters.turn === '1' ? 'primary' : 'default'} 
-                                        block 
-                                        onClick={() => handleFilterChange('turn', '1')}
-                                        icon={<ShieldCheck size={16} />}
-                                    >
-                                        Lần 1 (1 th)
-                                    </Button>
-                                </Col>
-                                <Col xs={12} lg={24}>
-                                    <Button 
-                                        type={filters.turn === '2' ? 'primary' : 'default'} 
-                                        block 
-                                        onClick={() => handleFilterChange('turn', '2')}
-                                        icon={<ShieldCheck size={16} />}
-                                    >
-                                        Lần 2 (6 th)
-                                    </Button>
-                                </Col>
-                                <Col xs={12} lg={24}>
-                                    <Button 
-                                        type={filters.turn === '3' ? 'primary' : 'default'} 
-                                        block 
-                                        onClick={() => handleFilterChange('turn', '3')}
-                                        icon={<ShieldCheck size={16} />}
-                                    >
-                                        Lần 3 (12 th)
-                                    </Button>
-                                </Col>
-                                <Col xs={12} lg={24}>
-                                    <Button 
-                                        type={filters.turn === '4' ? 'primary' : 'default'} 
-                                        block 
-                                        onClick={() => handleFilterChange('turn', '4')}
-                                        icon={<ShieldCheck size={16} />}
-                                    >
-                                        Lần 4 (18 th)
-                                    </Button>
-                                </Col>
+                                {[
+                                    { key: '1', label: 'Lần 1', sub: '1 th' },
+                                    { key: '2', label: 'Lần 2', sub: '6 th' },
+                                    { key: '3', label: 'Lần 3', sub: '12 th' },
+                                    { key: '4', label: 'Lần 4', sub: '18 th' },
+                                    { key: '5', label: 'Lần 5', sub: '24 th' },
+                                    { key: '6', label: 'Lần 6', sub: '30 th' },
+                                    { key: '7', label: 'Lần 7', sub: '36 th' },
+                                ].map(t => (
+                                    <Col xs={12} lg={24} key={t.key}>
+                                        <Button 
+                                            type={filters.turn === t.key ? 'primary' : 'default'} 
+                                            block 
+                                            onClick={() => handleFilterChange('turn', t.key)}
+                                            icon={<ShieldCheck size={16} />}
+                                            style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}
+                                        >
+                                            {t.label} ({t.sub})
+                                        </Button>
+                                    </Col>
+                                ))}
                             </Row>
                             
                             <Divider style={{ margin: '12px 0' }} />
@@ -249,8 +262,8 @@ const WarrantyReportPage = () => {
 
             <style>{`
                 .ant-table-thead > tr > th {
-                    background: rgba(255,255,255,0.03) !important;
-                    color: rgba(255,255,255,0.6) !important;
+                    background: #f1f1f7 !important;
+                    color: #475569 !important;
                     font-size: 11px;
                     text-transform: uppercase;
                 }
@@ -265,8 +278,8 @@ const WarrantyReportPage = () => {
 // Tag fallback for columns
 const Tag = ({ color, children }) => (
     <span style={{ 
-        background: color === 'blue' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.1)',
-        color: color === 'blue' ? '#60a5fa' : 'white',
+        background: color === 'blue' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(0,0,0,0.05)',
+        color: color === 'blue' ? '#2563eb' : '#000000',
         padding: '2px 8px',
         borderRadius: 4,
         fontSize: 12
@@ -275,6 +288,6 @@ const Tag = ({ color, children }) => (
     </span>
 );
 
-const Divider = ({ style }) => <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', ...style }} />;
+const Divider = ({ style }) => <div style={{ borderTop: '1px solid #cbd5e1', ...style }} />;
 
 export default WarrantyReportPage;

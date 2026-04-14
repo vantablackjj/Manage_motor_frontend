@@ -17,9 +17,10 @@ import {
   Divider,
   AutoComplete
 } from 'antd';
-import { PlusCircle, Search, Trash2, Save, RotateCcw, Box, User, Receipt, Calculator, ChevronRight } from 'lucide-react';
+import { PlusCircle, Search, Trash2, Save, RotateCcw, Box, User, Receipt, Calculator, ChevronRight, FileStack } from 'lucide-react';
 import api from '../../utils/api';
 import dayjs from 'dayjs';
+import ImportExcelModal from '../../components/ImportExcelModal';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -43,6 +44,7 @@ const PartImportPage = () => {
   const [allParts, setAllParts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Search Results for Parts
   const [partOptions, setPartOptions] = useState([]);
@@ -77,7 +79,15 @@ const PartImportPage = () => {
     setPartOptions(
       filtered.slice(0, 15).map((p) => ({
         value: p.code,
-        label: `${p.code} - ${p.name}`,
+        label: (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+            <div>
+              <Text strong style={{ display: 'block' }}>{p.code}</Text>
+              <Text type="secondary" style={{ fontSize: '12px' }}>{p.name}</Text>
+            </div>
+            <Tag color="blue">{p.unit}</Tag>
+          </div>
+        ),
         part: p,
       })),
     );
@@ -439,13 +449,21 @@ const PartImportPage = () => {
               <Title level={4} style={{ margin: 0 }}>
                 CHI TIẾT LINH KIỆN NHẬP
               </Title>
-              <Button
-                type="primary"
-                icon={<PlusCircle size={18} />}
-                onClick={addRow}
-              >
-                Thêm linh kiện
-              </Button>
+              <Space>
+                <Button
+                    type="primary"
+                    icon={<PlusCircle size={18} />}
+                    onClick={addRow}
+                >
+                    Thêm linh kiện
+                </Button>
+                <Button
+                    icon={<FileStack size={18} />}
+                    onClick={() => setIsImportModalOpen(true)}
+                >
+                    Nhập từ Excel (HVN)
+                </Button>
+              </Space>
             </div>
 
             <Table 
@@ -479,6 +497,17 @@ const PartImportPage = () => {
           </div>
         </Col>
       </Row>
+
+      <ImportExcelModal 
+        visible={isImportModalOpen}
+        onCancel={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+            fetchData();
+            setIsImportModalOpen(false);
+        }}
+        type="part_purchases"
+        title="Nhập kho linh kiện từ Excel (Hóa đơn HVN)"
+      />
     </div>
   );
 };

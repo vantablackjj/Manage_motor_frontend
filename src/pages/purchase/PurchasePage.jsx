@@ -31,6 +31,8 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Download,
+  Wand2,
+  Settings,
 } from "lucide-react";
 import dayjs from "dayjs";
 import api from "../../utils/api";
@@ -66,9 +68,16 @@ const PurchasePage = () => {
   const [selectedLot, setSelectedLot] = useState(null);
   const [lotDetails, setLotDetails] = useState({ vehicles: [], payments: [] });
   const [loading, setLoading] = useState(false);
+  const [isEditingLot, setIsEditingLot] = useState(false);
+  const [editLotData, setEditLotData] = useState({ purchase_date: null, notes: "" });
   const [activeTab, setActiveTab] = useState("1");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+
+  // Search states
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const [detailSearchTerm, setDetailSearchTerm] = useState("");
+  const [searchBy, setSearchBy] = useState("all"); // 'all', 'engine', 'chassis'
 
   useEffect(() => {
     fetchMasterData();
@@ -183,7 +192,7 @@ const PurchasePage = () => {
       await api.post("/purchases", {
         supplier_id: formValues.supplier_id,
         warehouse_id: formValues.warehouse_id,
-        purchase_date: formValues.purchase_date.toISOString(),
+        purchase_date: formValues.purchase_date.format('YYYY-MM-DD'),
         items: inputItems,
         notes: formValues.notes,
       });
@@ -214,7 +223,7 @@ const PurchasePage = () => {
       await api.post("/purchases/payment", {
         purchase_id: selectedLot.id,
         amount_paid_vnd: values.amount,
-        payment_date: values.date.toISOString(),
+        payment_date: values.date.format('YYYY-MM-DD'),
         notes: values.notes,
       });
       message.success("Đã ghi nhận thanh toán!");
@@ -315,6 +324,49 @@ const PurchasePage = () => {
         }
       }
     });
+  };
+
+  const handleBulkFix = async () => {
+    if (!selectedLot) return;
+    Modal.confirm({
+      title: 'Tự động sửa mã số khung/máy?',
+      content: 'Hệ thống sẽ lấy Tiền tố từ Loại xe đã khai báo và tự động thêm vào trước các Số máy/Số khung đang bị thiếu trong lô hàng này. Bạn có chắc chắn muốn thực hiện?',
+      okText: 'Bắt đầu sửa',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          const response = await api.put(`/purchases/${selectedLot.id}/bulk-fix-codes`);
+          message.success(response.data.message);
+          loadLotDetails(selectedLot);
+        } catch (error) {
+          message.error("Lỗi: " + (error.response?.data?.message || error.message));
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleUpdateLot = async () => {
+    try {
+      setLoading(true);
+      await api.put(`/purchases/${selectedLot.id}`, {
+        purchase_date: editLotData.purchase_date.format('YYYY-MM-DD'),
+        notes: editLotData.notes
+      });
+      message.success("Cập nhật lô hàng thành công!");
+      setIsEditingLot(false);
+      // Refresh list
+      const res = await api.get('/purchases', { params: { supplier_id: selectedSupplier } });
+      setPurchaseHistory(res.data);
+      const updatedLot = res.data.find(l => l.id === selectedLot.id);
+      setSelectedLot(updatedLot);
+    } catch (e) {
+      message.error("Lỗi khi cập nhật!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExport = () => {
@@ -732,17 +784,31 @@ const PurchasePage = () => {
                     title="Danh sách các Lô đã nhập"
                     className="glass-card"
                     extra={
-                      <Button
-                        icon={<Download size={14} />}
-                        onClick={handleExport}
-                        size="small"
-                      >
-                        Xuất danh sách
-                      </Button>
+                      <Space>
+                        <Input 
+                          placeholder="Tìm lô..." 
+                          size="small" 
+                          prefix={<Search size={14} />} 
+                          value={historySearchTerm}
+                          onChange={e => setHistorySearchTerm(e.target.value)}
+                          allowClear
+                        />
+                        <Button
+                          icon={<Download size={14} />}
+                          onClick={handleExport}
+                          size="small"
+                        >
+                          Xuất
+                        </Button>
+                      </Space>
                     }
                   >
                     <Table
-                      dataSource={purchaseHistory}
+                      dataSource={purchaseHistory.filter(h => {
+                        const term = historySearchTerm.toLowerCase();
+                        return dayjs(h.purchase_date).format('DD/MM/YYYY').includes(term) || 
+                               (h.notes && h.notes.toLowerCase().includes(term));
+                      })} 
                       size="small"
                       rowKey="id"
                       scroll={{ x: "max-content" }}
@@ -797,9 +863,25 @@ const PurchasePage = () => {
                 <Col xs={24} xl={14}>
                   <Card
                     title={
-                      selectedLot
-                        ? `Lô hàng ngày ${dayjs(selectedLot.purchase_date).format("DD/MM/YYYY")}`
-                        : "Thông tin chi tiết lô"
+                      selectedLot ? (
+                        <Space>
+                          <span>{`Lô hàng ngày ${dayjs(selectedLot.purchase_date).format("DD/MM/YYYY")}`}</span>
+                          <Button 
+                            icon={<Settings size={14} />} 
+                            size="small" 
+                            type="text" 
+                            onClick={() => {
+                              setEditLotData({
+                                purchase_date: dayjs(selectedLot.purchase_date),
+                                notes: selectedLot.notes || ""
+                              });
+                              setIsEditingLot(true);
+                            }} 
+                          />
+                        </Space>
+                      ) : (
+                        "Thông tin chi tiết lô"
+                      )
                     }
                     className="glass-card"
                   >
@@ -814,6 +896,18 @@ const PurchasePage = () => {
                         >
                           <Space>
                             <Text strong>DANH SÁCH XE TRONG LÔ</Text>
+                            {isAdmin && (
+                              <Button 
+                                size="small" 
+                                icon={<Wand2 size={14} />} 
+                                type="primary"
+                                ghost
+                                onClick={handleBulkFix}
+                                loading={loading}
+                              >
+                                Thêm tiền tố hàng loạt
+                              </Button>
+                            )}
                           </Space>
                           <Button
                             type="primary"
@@ -831,8 +925,46 @@ const PurchasePage = () => {
                               : "LỊCH SỬ GIẢM NỢ"}
                           </Button>
                         </div>
+                        <div style={{ marginBottom: 12 }}>
+                           <Row gutter={8}>
+                             <Col flex="auto">
+                               <Input 
+                                 placeholder="Tìm nhanh Xe (Số máy, Số khung, Ghi chú...)" 
+                                 prefix={<Search size={16} />}
+                                 value={detailSearchTerm}
+                                 onChange={e => setDetailSearchTerm(e.target.value)}
+                                 allowClear
+                                 size="small"
+                               />
+                             </Col>
+                             <Col>
+                               <Select 
+                                 size="small" 
+                                 value={searchBy} 
+                                 onChange={setSearchBy}
+                                 style={{ width: 100 }}
+                               >
+                                 <Option value="all">Tất cả</Option>
+                                 <Option value="engine">Số Máy</Option>
+                                 <Option value="chassis">Số Khung</Option>
+                               </Select>
+                             </Col>
+                           </Row>
+                        </div>
                         <Table
-                          dataSource={lotDetails.vehicles}
+                          dataSource={lotDetails.vehicles.filter(v => {
+                            const term = detailSearchTerm.toLowerCase();
+                            if (!term) return true;
+                            
+                            const matchesEngine = (v.engine_no || '').toLowerCase().includes(term);
+                            const matchesChassis = (v.chassis_no || '').toLowerCase().includes(term);
+                            const matchesNotes = (v.notes || '').toLowerCase().includes(term);
+                            const matchesType = (vehicleTypes.find(t => t.id === v.type_id)?.name || '').toLowerCase().includes(term);
+
+                            if (searchBy === 'engine') return matchesEngine;
+                            if (searchBy === 'chassis') return matchesChassis;
+                            return matchesEngine || matchesChassis || matchesNotes || matchesType;
+                          })} 
                           columns={detailColumns}
                           size="small"
                           pagination={{ pageSize: 8 }}
@@ -948,6 +1080,35 @@ const PurchasePage = () => {
             XÁC NHẬN TRẢ TIỀN
           </Button>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Chỉnh sửa thông tin lô hàng"
+        open={isEditingLot}
+        onCancel={() => setIsEditingLot(false)}
+        onOk={handleUpdateLot}
+        confirmLoading={loading}
+      >
+        <div style={{ padding: '10px 0' }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8 }}><Text strong>Ngày nhập thực tế:</Text></div>
+            <DatePicker 
+              style={{ width: '100%' }} 
+              value={editLotData.purchase_date}
+              onChange={(d) => setEditLotData({...editLotData, purchase_date: d})}
+              format="DD/MM/YYYY"
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 8 }}><Text strong>Ghi chú:</Text></div>
+            <Input.TextArea 
+              rows={4}
+              value={editLotData.notes}
+              onChange={(e) => setEditLotData({...editLotData, notes: e.target.value})}
+              placeholder="Ghi chú về lô hàng..."
+            />
+          </div>
+        </div>
       </Modal>
 
       <style>{` .ant-table { background: transparent !important; } .ant-table-cell { background: transparent !important; color: white !important; } .ant-table-thead > tr > th { background: rgba(255,255,255,0.05) !important; color: var(--primary-color) !important; } `}</style>

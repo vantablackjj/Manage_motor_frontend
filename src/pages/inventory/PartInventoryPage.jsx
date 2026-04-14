@@ -29,6 +29,7 @@ const PartInventoryPage = () => {
   
   const [warehouses, setWarehouses] = useState([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isPurchaseImportOpen, setIsPurchaseImportOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -112,7 +113,20 @@ const PartInventoryPage = () => {
                 onClick={() => setIsImportModalOpen(true)}
                 style={{ display: 'flex', alignItems: 'center' }}
             >
-                Nhập tồn từ Excel
+                Cân đối tồn kho
+            </Button>
+            <Button 
+                type="primary"
+                icon={<FileStack size={16} />} 
+                onClick={() => setIsPurchaseImportOpen(true)}
+                style={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    background: 'linear-gradient(90deg, #10b981, #059669)',
+                    border: 'none'
+                }}
+            >
+                Nhập kho (Hóa đơn HVN)
             </Button>
             <Button icon={<Download size={16} />} ghost type="primary">Xuất báo cáo</Button>
             <Button icon={<RotateCcw size={16} />} onClick={fetchData}>Làm mới</Button>
@@ -192,6 +206,16 @@ const PartInventoryPage = () => {
         }}
         type="part_inventory"
         title="Nhập số lượng tồn kho phụ tùng"
+      />
+      <ImportExcelModal 
+        visible={isPurchaseImportOpen}
+        onCancel={() => setIsPurchaseImportOpen(false)}
+        onSuccess={() => {
+            fetchData();
+            setIsPurchaseImportOpen(false);
+        }}
+        type="part_purchases"
+        title="Nhập kho phụ tùng từ Hóa đơn HVN"
       />
     </div>
   );

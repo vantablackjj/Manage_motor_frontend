@@ -155,22 +155,30 @@ const NotificationPage = () => {
               {!item.is_read && <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', background: 'var(--primary-color)' }} />}
               
               <div className="noti-flex-container">
-                <div className="noti-icon-box" style={{ background: item.is_read ? 'rgba(255,255,255,0.05)' : 'rgba(59, 130, 246, 0.1)' }}>
+                <div className="noti-icon-box" style={{ background: item.is_read ? '#f1f5f9' : '#eff6ff' }}>
                   {getIcon(item.type)}
                 </div>
                 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="noti-header-row">
-                    <Title level={5} className="noti-title-text" style={{ margin: 0, color: item.is_read ? 'rgba(255,255,255,0.5)' : 'white', letterSpacing: '0.3px' }}>
-                      {item.title}
-                    </Title>
-                    <Text className="noti-time-text" style={{ fontSize: 11, opacity: 0.4 }}>
-                       {dayjs(item.createdAt).format('HH:mm - DD/MM/YYYY')}
-                    </Text>
-                  </div>
-                  <Text className="noti-message-text" style={{ display: 'block', margin: '8px 0 16px 0', fontSize: 13, color: item.is_read ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
-                    {item.message}
-                  </Text>
+                <Title level={5} className="noti-title-text" style={{ margin: 0, color: item.is_read ? '#64748b' : '#0f172a', letterSpacing: '0.3px', fontWeight: 'bold' }}>
+                  {item.title}
+                </Title>
+              </div>
+              <div 
+                className="noti-badge" 
+                style={{ 
+                  background: item.is_read ? '#f1f1f7' : 'var(--primary-color)',
+                  color: item.is_read ? '#64748b' : 'white'
+                }}
+              >
+                {item.is_read ? 'Đã đọc' : 'Mới'}
+              </div>
+            </div>
+            <div className="noti-content-body">
+              <Text className="noti-message-text" style={{ display: 'block', margin: '8px 0 16px 0', fontSize: 13, color: item.is_read ? '#64748b' : '#334155', lineHeight: 1.6, fontWeight: 500 }}>
+                {item.message}
+              </Text>
                   
                   <div className="noti-footer-row">
                     <Space size="middle" wrap>
@@ -211,8 +219,10 @@ const NotificationPage = () => {
         .noti-list-item {
           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
+        .ant-table-thead > tr > th { background: #f1f5fb !important; color: #0f172a !important; border-bottom: 1px solid var(--border-color) !important; font-weight: 700 !important; }
+        .ant-table-cell { border-bottom: 1px solid #cbd5e1 !important; color: #000000 !important; font-weight: 600; }
         .noti-list-item:hover {
-          background: rgba(255,255,255,0.06) !important;
+          background: #ffffff !important;
           border-color: var(--primary-color) !important;
           transform: translateY(-2px);
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);

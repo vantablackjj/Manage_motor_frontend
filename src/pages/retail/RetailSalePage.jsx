@@ -39,9 +39,11 @@ import {
   Banknote,
   RotateCcw,
   Printer,
+  Gift,
 } from "lucide-react";
 import dayjs from "dayjs";
 import api from "../../utils/api";
+import { capitalizeName } from "../../utils/stringHelper";
 import ImportExcelModal from "../../components/ImportExcelModal";
 import { exportToExcel } from "../../utils/excelExport";
 import PrintInvoice from "../../components/PrintInvoice";
@@ -157,7 +159,8 @@ const RetailSalePage = () => {
         ...values,
         vehicle_id: selectedVehicle ? selectedVehicle.id : null,
         warehouse_id: selectedWarehouseId,
-        sale_date: values.sale_date.toISOString(),
+        sale_date: values.sale_date.format("YYYY-MM-DD"),
+        birthday: values.birthday ? values.birthday.format("YYYY-MM-DD") : null,
         guarantee: values.guarantee ? "Có" : "Không",
         loan_amount: values.loan_amount || 0,
       });
@@ -214,7 +217,7 @@ const RetailSalePage = () => {
       await api.post("/retail-payments", {
         ...values,
         retail_sale_id: selectedSale.id,
-        payment_date: values.payment_date.toISOString(),
+        payment_date: values.payment_date.format("YYYY-MM-DD"),
       });
       message.success("Đã thêm khoản thanh toán!");
       paymentForm.resetFields(["amount", "notes"]);
@@ -387,11 +390,14 @@ const RetailSalePage = () => {
     <div class="col"><span class="lbl">Chức vụ :</span><span class="val">Cửa hàng trưởng</span></div>
   </div>
   <div style="font-weight:bold;margin-top:10px; font-size: 11pt">2 - ĐẠI DIỆN BÊN MUA XE (B) :</div>
-  <div class="row">
+    <div class="row">
     <div class="col"><span class="lbl">Do ông (bà) :</span><span class="val">${sale.customer_name || ""}</span></div>
-    <div class="col"><span class="lbl">Số CMND :</span><span class="val">${sale.id_card || "................"}</span></div>
+    <div class="col"><span class="lbl">Ngày sinh :</span><span class="val">${sale.birthday ? dayjs(sale.birthday).format("DD/MM/YYYY") : "................"}</span></div>
   </div>
-  <div class="row"><span class="lbl">Địa chỉ :</span><span class="val">${sale.address || "................................................................................"}</span></div>
+  <div class="row">
+    <div class="col"><span class="lbl">Số CMND :</span><span class="val">${sale.id_card || "................"}</span></div>
+    <div class="col"><span class="lbl">Địa chỉ :</span><span class="val">${sale.address || "................................"}</span></div>
+  </div>
   <div class="row">
     <div class="col"><span class="lbl">Điện thoại :</span><span class="val">${sale.phone || "......................"}</span></div>
     <div class="col"><span class="lbl">Người bảo lãnh :</span><span class="val">${sale.guarantor_name || "................................"}</span></div>
@@ -463,6 +469,12 @@ const RetailSalePage = () => {
     { title: "Số Máy", dataIndex: "engine_no", key: "engine_no" },
     { title: "Tên Khách", dataIndex: "customer_name", key: "customer" },
     {
+      title: "Ngày sinh",
+      dataIndex: "birthday",
+      key: "birthday",
+      render: (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-"),
+    },
+    {
       title: "Giá bán",
       dataIndex: "sale_price",
       render: (v) => <b>{Number(v).toLocaleString()}</b>,
@@ -476,6 +488,22 @@ const RetailSalePage = () => {
       title: "Đã trả",
       dataIndex: "paid_amount",
       render: (v) => <Text type="success">{Number(v).toLocaleString()}</Text>,
+    },
+    {
+      title: "Quà tặng",
+      dataIndex: "gifts",
+      key: "gifts",
+      render: (gifts) => (
+        <Space size={[0, 4]} wrap>
+          {gifts &&
+            Array.isArray(gifts) &&
+            gifts.map((g) => (
+              <Tag color="blue" key={g} style={{ fontSize: 10, margin: 0 }}>
+                {g}
+              </Tag>
+            ))}
+        </Space>
+      ),
     },
     {
       title: "Còn nợ",
@@ -543,7 +571,9 @@ const RetailSalePage = () => {
       "Số Máy": s.engine_no,
       "Số Khung": s.chassis_no,
       "Tên Khách": s.customer_name,
+      "Ngày sinh": s.birthday ? dayjs(s.birthday).format("DD/MM/YYYY") : "",
       SĐT: s.phone,
+      CCCD: s.id_card,
       "Hình thức": s.payment_method,
       "Ngân hàng": s.bank_name || "",
       "Số hợp đồng": s.contract_number || "",
@@ -619,8 +649,11 @@ const RetailSalePage = () => {
               form={form}
               layout="vertical"
               onFinish={onFinish}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.preventDefault();
+              }}
               initialValues={{
-                sale_type: "Hồ sơ xe",
+                sale_type: "Đăng ký",
                 guarantee: false,
                 seller_id: user.id,
                 payment_method: "Trả thẳng",
@@ -742,6 +775,11 @@ const RetailSalePage = () => {
                       size="large"
                       placeholder="Họ và tên khách hàng..."
                       prefix={<User size={16} />}
+                      onBlur={(e) =>
+                        form.setFieldsValue({
+                          customer_name: capitalizeName(e.target.value),
+                        })
+                      }
                     />
                   </Form.Item>
                 </Col>
@@ -762,7 +800,7 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={16} md={18}>
+                <Col xs={12} md={12}>
                   <Form.Item label="Địa chỉ" name="address">
                     <Input
                       size="large"
@@ -771,11 +809,21 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={8} md={6}>
+                <Col xs={12} md={6}>
+                  <Form.Item label="Ngày sinh" name="birthday">
+                    <DatePicker
+                      style={{ width: "100%" }}
+                      format="DD/MM/YYYY"
+                      size="large"
+                      placeholder="Hán/Ngày/Năm"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={12} md={6}>
                   <Form.Item label="Giới tính" name="gender">
                     <Select size="large">
-                      <Option value="Trai">Nam</Option>
-                      <Option value="Gái">Nữ</Option>
+                      <Option value="Nam">Nam</Option>
+                      <Option value="Nữ">Nữ</Option>
                     </Select>
                   </Form.Item>
                 </Col>
@@ -802,8 +850,8 @@ const RetailSalePage = () => {
                 <Col xs={24} md={12}>
                   <Form.Item label="Hồ sơ / Đăng ký" name="sale_type">
                     <Select size="large">
-                      <Option value="Hồ sơ xe">Giao hồ sơ</Option>
                       <Option value="Đăng ký">Làm đăng ký</Option>
+                      <Option value="Hồ sơ xe">Giao hồ sơ</Option>
                     </Select>
                   </Form.Item>
                 </Col>
@@ -1023,6 +1071,11 @@ const RetailSalePage = () => {
                           size="large"
                           placeholder="Tên..."
                           prefix={<UserPlus size={16} />}
+                          onBlur={(e) =>
+                            form.setFieldsValue({
+                              guarantor_name: capitalizeName(e.target.value),
+                            })
+                          }
                         />
                       </Form.Item>
                     </Col>
@@ -1044,11 +1097,58 @@ const RetailSalePage = () => {
                 </Panel>
               </Collapse>
               <Form.Item
+                label={
+                  <Space>
+                    <Gift size={16} color="var(--primary-color)" />
+                    Quà tặng kèm theo
+                  </Space>
+                }
+                name="gifts"
+                style={{ marginTop: 16 }}
+              >
+                <Checkbox.Group style={{ width: "100%" }}>
+                  <Row gutter={[8, 8]}>
+                    <Col span={8}>
+                      <Checkbox value="Mũ bảo hiểm">Mũ bảo hiểm</Checkbox>
+                    </Col>
+                    <Col span={8}>
+                      <Checkbox value="Áo mưa">Áo mưa</Checkbox>
+                    </Col>
+                    <Col span={8}>
+                      <Checkbox value="Phiếu thay dầu">Phiếu thay dầu</Checkbox>
+                    </Col>
+                    <Col span={8}>
+                      <Checkbox value="Thẻ bảo dưỡng xe cũ">
+                        Thẻ BD xe cũ
+                      </Checkbox>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        noStyle
+                        shouldUpdate={(prev, curr) =>
+                          prev.sale_type !== curr.sale_type
+                        }
+                      >
+                        {({ getFieldValue }) => (
+                          <Checkbox
+                            value="Bảo hiểm đi đường"
+                            disabled={getFieldValue("sale_type") !== "Đăng ký"}
+                          >
+                            Bảo hiểm đi đường
+                          </Checkbox>
+                        )}
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </Checkbox.Group>
+              </Form.Item>
+
+              <Form.Item
                 label="Ghi chú thêm"
                 name="notes"
                 style={{ marginTop: 16 }}
               >
-                <Input.TextArea rows={2} placeholder="Các quà tặng đi kèm..." />
+                <Input.TextArea rows={2} placeholder="Thông tin thêm..." />
               </Form.Item>
 
               <Button
@@ -1131,7 +1231,12 @@ const RetailSalePage = () => {
         title={
           <Space>
             <Banknote size={20} />
-            Lịch sử & Thu tiền: {selectedSale?.customer_name}
+            Lịch sử & Thu tiền: {selectedSale?.customer_name}{" "}
+            {selectedSale?.birthday && (
+              <span style={{ fontSize: 13, fontWeight: "normal" }}>
+                ({dayjs(selectedSale.birthday).format("DD/MM/YYYY")})
+              </span>
+            )}
           </Space>
         }
         open={paymentModalVisible}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Form, 
   Input, 
@@ -21,23 +22,30 @@ import {
 import { 
     Search, Trash2, Save, RotateCcw, Wrench, User, 
     Smartphone, Calendar, CreditCard, ChevronRight,
-    Bike, ShieldCheck, HelpCircle, FileText, PlusCircle
+    Bike, ShieldCheck, HelpCircle, FileText, PlusCircle, Clock, CheckCircle, AlertCircle
 } from 'lucide-react';
 import api from '../../utils/api';
+import { capitalizeName } from '../../utils/stringHelper';
 import dayjs from 'dayjs';
 
 const { Text, Title, Paragraph } = Typography;
 
 const RepairServicePage = () => {
   const [form] = Form.useForm();
-  const [items, setItems] = useState([]); // Both Parts and Services
+  const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const isEditing = !!id;
+  const selectedWarehouse = Form.useWatch('warehouse_id', form);
   
   // Master Data
   const [warehouses, setWarehouses] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [allParts, setAllParts] = useState([]);
+  const [liftTables, setLiftTables] = useState([]);
   const [partOptions, setPartOptions] = useState([]);
   const [vehicleOptions, setVehicleOptions] = useState([]);
 
@@ -48,19 +56,58 @@ const RepairServicePage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [whRes, mechanicsRes, partsRes] = await Promise.all([
+      const [whRes, mechanicsRes, partsRes, liftRes] = await Promise.all([
         api.get('/warehouses'),
         api.get('/mechanics'),
-        api.get('/parts')
+        api.get('/parts'),
+        api.get('/lift-tables')
       ]);
       setWarehouses(whRes.data);
       setMechanics(mechanicsRes.data.filter(m => m.is_active));
       setAllParts(partsRes.data);
+      setLiftTables(liftRes.data);
+
+      if (isEditing) {
+          fetchOrderDetails();
+      } else if (location.state?.lift_id) {
+          form.setFieldsValue({ 
+              lift_table_id: location.state.lift_id,
+              warehouse_id: location.state.warehouse_id
+          });
+      }
     } catch (error) {
       message.error('Lỗi tải dữ liệu: ' + error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchOrderDetails = async () => {
+      try {
+          const res = await api.get('/maintenance-orders'); // In a real app, use /maintenance-orders/:id if exists
+          // Since the dummy API search uses full text, we find the specific one
+          const order = res.data.find(o => o.id === id);
+          if (order) {
+              form.setFieldsValue({
+                  ...order,
+                  maintenance_date: dayjs(order.maintenance_date)
+              });
+              setItems(order.MaintenanceItems.map(item => ({
+                  key: item.id,
+                  id: item.id,
+                  type: item.type,
+                  part_id: item.part_id,
+                  description: item.type === 'PART' ? item.Part?.name : item.description,
+                  unit: item.unit,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  total_price: item.total_price
+              })));
+              setVehicleFound({ internal: order.is_internal_vehicle });
+          }
+      } catch (e) {
+          message.error('Lỗi tải chi tiết phiếu: ' + e.message);
+      }
   };
 
   useEffect(() => {
@@ -231,11 +278,27 @@ const RepairServicePage = () => {
         maintenance_date: values.maintenance_date.toISOString(),
         items: items
       };
-      await api.post('/maintenance-order', payload);
-      message.success('Đã lưu hóa đơn bảo trì!');
-      form.resetFields();
-      setItems([]);
-      setVehicleFound(null);
+      
+      if (isEditing) {
+          await api.put(`/maintenance-order/${id}`, payload);
+          message.success('Đã cập nhật hóa đơn bảo trì!');
+          // If status completed/cancelled, free up the lift table automatically (handled by status field in order)
+      } else {
+          // If creating new and assigning lift, it will trigger BUSY status logic (via status field)
+          await api.post('/maintenance-order', payload);
+          message.success('Đã lưu hóa đơn bảo trì!');
+      }
+
+      const goToBoard = confirm('Bạn có muốn quay lại Bảng điều phối bàn nâng?');
+      if (goToBoard) {
+          navigate('/lift-tables');
+      } else {
+          if (!isEditing) {
+              form.resetFields();
+              setItems([]);
+              setVehicleFound(null);
+          }
+      }
     } catch (error) {
       message.error('Lỗi khi lưu: ' + (error.response?.data?.message || error.message));
     } finally {
@@ -318,7 +381,7 @@ const RepairServicePage = () => {
         <Col xs={24} lg={8}>
           <div className="glass-card" style={{ padding: 24 }}>
             <Title level={4} style={{ marginBottom: 20 }}>
-                <Wrench size={20} style={{ marginRight: 8, marginBottom: -3 }} /> THÔNG TIN DỊCH VỤ
+                <Wrench size={20} style={{ marginRight: 8, marginBottom: -3 }} /> THÔNG TIN BẢO TRÌ
             </Title>
             
             <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ maintenance_date: dayjs(), vat_percent: 0 }}>
@@ -391,7 +454,7 @@ const RepairServicePage = () => {
                 <Row gutter={12}>
                     <Col span={12}>
                         <Form.Item label="Tên khách" name="customer_name">
-                            <Input />
+                            <Input onBlur={(e) => form.setFieldsValue({ customer_name: capitalizeName(e.target.value) })} />
                         </Form.Item>
                     </Col>
                     <Col span={12}>
@@ -443,6 +506,30 @@ const RepairServicePage = () => {
                             </Select>
                         </Form.Item>
                     </Col>
+                    <Col span={12}>
+                        <Form.Item label="Vị trí bàn nâng" name="lift_table_id">
+                            <Select placeholder="Chọn bàn nâng" allowClear>
+                                {liftTables
+                                    .filter(l => !selectedWarehouse || l.warehouse_id === selectedWarehouse)
+                                    .map(l => (
+                                        <Select.Option key={l.id} value={l.id}>
+                                            {l.name} {l.status === 'BUSY' && l.id !== form.getFieldValue('lift_table_id') ? '(Đang bận)' : ''}
+                                        </Select.Option>
+                                    ))
+                                }
+                            </Select>
+                        </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                        <Form.Item label="Trạng thái xử lý" name="status" initialValue="PENDING">
+                            <Select>
+                                <Select.Option value="PENDING">🕒 Đang chờ</Select.Option>
+                                <Select.Option value="IN_PROGRESS">🛠️ Đang sửa</Select.Option>
+                                <Select.Option value="COMPLETED">✅ Hoàn thành</Select.Option>
+                                <Select.Option value="CANCELLED">❌ Hủy bỏ</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </Col>
                 </Row>
 
                 <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: 20, borderRadius: 16, marginTop: 24, border: '1px solid rgba(255, 255, 255, 0.1)' }}>
@@ -469,17 +556,45 @@ const RepairServicePage = () => {
                     </div>
                 </div>
 
-                <Button 
-                    type="primary" 
-                    size="large" 
-                    block 
-                    icon={<Save size={20} />} 
-                    onClick={() => form.submit()}
-                    loading={submitLoading}
-                    style={{ height: 54, borderRadius: 12, marginTop: 24 }}
-                >
-                    LƯU HÓA ĐƠN
-                </Button>
+                <Space direction="vertical" style={{ width: '100%', marginTop: 24 }}>
+                    <Button 
+                        type="primary" 
+                        size="large" 
+                        block 
+                        icon={<Save size={20} />} 
+                        onClick={() => form.submit()}
+                        loading={submitLoading}
+                        style={{ height: 50, borderRadius: 12 }}
+                    >
+                        {isEditing ? 'LƯU THAY ĐỔI' : 'TẠO PHIẾU MỚI'}
+                    </Button>
+                    
+                    {isEditing && form.getFieldValue('status') !== 'COMPLETED' && (
+                        <Popconfirm
+                            title="Bạn có chắc chắn muốn thanh toán và hoàn thành phiếu này?"
+                            onConfirm={() => {
+                                form.setFieldsValue({ 
+                                    status: 'COMPLETED',
+                                    paid_amount: calculateTotal()
+                                });
+                                form.submit();
+                            }}
+                            okText="Đồng ý"
+                            cancelText="Hủy"
+                        >
+                            <Button 
+                                type="primary" 
+                                size="large" 
+                                block 
+                                icon={<CheckCircle size={20} />} 
+                                loading={submitLoading}
+                                style={{ height: 50, borderRadius: 12, backgroundColor: '#10b981', borderColor: '#10b981' }}
+                            >
+                                THANH TOÁN & HOÀN THÀNH
+                            </Button>
+                        </Popconfirm>
+                    )}
+                </Space>
             </Form>
           </div>
         </Col>
@@ -488,7 +603,7 @@ const RepairServicePage = () => {
         <Col xs={24} lg={16}>
           <div className="glass-card" style={{ padding: 24, minHeight: 'calc(100vh - 48px)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <Title level={4} style={{ margin: 0 }}>CHI TIẾT PHIẾU DỊCH VỤ</Title>
+                <Title level={4} style={{ margin: 0 }}>CHI TIẾT PHIẾU BẢO TRÌ</Title>
                 <Space>
                     <Button icon={<PlusCircle size={16} />} onClick={addServiceItem}>Thêm tiền công</Button>
                     <div style={{ width: 350 }}>

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Modal, Upload, Button, message, Space, Typography, Table } from 'antd';
-import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, HelpCircle, RotateCcw, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Modal, Upload, Button, message, Space, Typography, Table, Select, Divider } from 'antd';
+import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, HelpCircle, RotateCcw, Download, Home, User } from 'lucide-react';
 import api from '../utils/api';
 import { exportToExcel } from '../utils/excelExport';
 
@@ -11,11 +11,34 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
   const [fileList, setFileList] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(null);
+
+  useEffect(() => {
+    if (visible) {
+      fetchWarehouses();
+    }
+  }, [visible]);
+
+  const fetchWarehouses = async () => {
+    try {
+      console.log('Fetching warehouses for Import Modal...');
+      const response = await api.get('/warehouses');
+      console.log('Warehouses fetched:', response.data);
+      setWarehouses(response.data);
+    } catch (error) {
+      console.error('Lỗi khi tải danh sách kho:', error);
+    }
+  };
 
   const handleDownloadTemplate = async () => {
     try {
       message.loading('Đang khởi tạo file mẫu với dữ liệu thực tế...', 1.5);
-      const response = await api.get(`/import/template?type=${type}`, {
+      let endpointUrl = `/import/template?type=${type}`;
+      if (selectedWarehouseId) {
+        endpointUrl += `&warehouse_id=${selectedWarehouseId}`;
+      }
+      const response = await api.get(endpointUrl, {
         responseType: 'blob'
       });
       
@@ -51,7 +74,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
       const response = await api.post('/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      message.success(response.data.message);
+      message.success(response.data.message || 'Import thành công!');
       setResults(response.data.results);
       if (onSuccess) onSuccess();
     } catch (error) {
@@ -86,7 +109,8 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
     retail_sales: ['Ngày bán', 'Số máy', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Giá bán', 'Tiền khách trả', 'Tên kho', 'Phát sổ bảo hành'],
     wholesale_sales: ['Ngày bán', 'Số máy', 'Mã khách hàng', 'Giá bán lẻ', 'Đã trả', 'Tên kho'],
     part_master: ['Mã phụ tùng', 'Tên phụ tùng', 'Đơn vị tính', 'Giá nhập', 'Giá bán'],
-    part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho', 'Vị trí']
+    part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho', 'Vị trí'],
+    part_purchases: ['SỐ PO', 'SỐ HOÁ ĐƠN HVN', 'MÃ PHỤ TÙNG', 'TÊN PHỤ TÙNG', 'SỐ LƯỢNG', 'DNP', 'THÀNH TIỀN CHƯA VAT', 'VAT', 'VAT THÀNH TIỀN', 'NGÀY NHẬP', 'TÊN KHO', 'TÊN NCC']
   };
 
   const getBadgeColor = (type) => {
@@ -109,7 +133,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
       title={
         <Space>
           <FileSpreadsheet size={18} color="var(--primary-color)" />
-          <span style={{ color: 'white' }}>{title || 'Nhập dữ liệu từ Excel'}</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{title || 'Nhập dữ liệu từ Excel'}</span>
         </Space>
       }
       open={visible}
@@ -142,9 +166,9 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
       styles={{
         mask: { backdropFilter: 'blur(4px)' },
         content: { 
-          background: '#1c1c21', 
+          background: '#ffffff', 
           border: '1px solid var(--border-color)',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.4)' 
+          boxShadow: '0 20px 40px rgba(0,0,0,0.2)' 
         },
         header: { background: 'transparent', borderBottom: '1px solid var(--border-color)', paddingBottom: 15 },
         body: { padding: '24px 20px' }
@@ -162,21 +186,44 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
              <Space direction="vertical" style={{ width: '100%' }} size={12}>
                 <Space>
                     <HelpCircle size={18} color="#3b82f6" />
-                    <Text strong style={{ color: 'white', fontSize: 15 }}>Hướng dẫn định dạng file Excel:</Text>
+                    <Text strong style={{ color: 'var(--text-primary)', fontSize: 15 }}>Hướng dẫn định dạng file Excel:</Text>
                 </Space>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block' }}>
                         File của bạn cần có các cột tiêu đề sau (chính xác tên):
                     </Text>
-                    <Button 
-                        size="small" 
-                        type="link" 
-                        icon={<Download size={14} />} 
-                        onClick={handleDownloadTemplate}
-                        style={{ color: '#3b82f6', padding: 0 }}
-                    >
-                        Tải file mẫu
-                    </Button>
+                    <Space>
+                        {(['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases'].includes(type)) && (
+                            <Select
+                                placeholder="Lọc xe theo kho..."
+                                style={{ width: 170 }}
+                                size="small"
+                                allowClear
+                                onChange={(val) => setSelectedWarehouseId(val)}
+                                value={selectedWarehouseId}
+                                aria-label="Chọn kho để lọc xe"
+                            >
+                                {warehouses && warehouses.length > 0 ? warehouses.map(w => (
+                                    <Select.Option key={w.id} value={w.id}>
+                                        {w.warehouse_name}
+                                    </Select.Option>
+                                )) : (
+                                    <Select.Option disabled value="none">
+                                        Đang tải dữ liệu kho...
+                                    </Select.Option>
+                                )}
+                            </Select>
+                        )}
+                        <Button 
+                            size="small" 
+                            type="link" 
+                            icon={<Download size={14} />} 
+                            onClick={handleDownloadTemplate}
+                            style={{ color: '#3b82f6', padding: 0 }}
+                        >
+                            Tải file mẫu
+                        </Button>
+                    </Space>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                     {(templateColumns[type] || []).map(col => {
@@ -184,13 +231,13 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                           <span 
                             key={col} 
                             style={{ 
-                              background: 'rgba(255, 255, 255, 0.05)', 
-                              color: 'white', 
+                              background: 'rgba(59, 130, 246, 0.08)', 
+                              color: 'var(--text-primary)', 
                               padding: '5px 12px', 
                               borderRadius: 6, 
                               fontSize: 12,
-                              fontWeight: 500,
-                              border: `1px solid rgba(255, 255, 255, 0.1)`,
+                              fontWeight: 700,
+                              border: `1px solid var(--border-color)`,
                               display: 'inline-block'
                             }}
                           >
@@ -201,7 +248,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                 </div>
              </Space>
           </div>
-
+          
           <div style={{ marginTop: 8 }}>
             <Dragger {...uploadProps} style={{ 
                 background: 'rgba(255, 255, 255, 0.02)', 
@@ -212,7 +259,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                 <p className="ant-upload-drag-icon">
                 <UploadCloud size={48} style={{ margin: '0 auto', color: '#3b82f6', opacity: 0.8 }} />
                 </p>
-                <p className="ant-upload-text" style={{ color: 'white', fontSize: 15, fontWeight: 500 }}>
+                <p className="ant-upload-text" style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 700 }}>
                     Kéo thả file Excel vào đây hoặc nhấp để chọn
                 </p>
                 <p className="ant-upload-hint" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
@@ -227,12 +274,12 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                 {results.failed === 0 ? (
                     <div style={{ marginBottom: 16 }}>
                         <CheckCircle2 size={56} color="#10b981" style={{ margin: '0 auto' }} />
-                        <Title level={4} style={{ color: 'white', marginTop: 16 }}>Import thành công!</Title>
+                        <Title level={4} style={{ color: 'var(--text-primary)', marginTop: 16 }}>Import thành công!</Title>
                     </div>
                 ) : (
                     <div style={{ marginBottom: 16 }}>
                         <AlertCircle size={56} color="#f59e0b" style={{ margin: '0 auto' }} />
-                        <Title level={4} style={{ color: 'white', marginTop: 16 }}>Hoàn tất với một số lỗi</Title>
+                        <Title level={4} style={{ color: 'var(--text-primary)', marginTop: 16 }}>Hoàn tất với một số lỗi</Title>
                     </div>
                 )}
                 
@@ -252,7 +299,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                <div style={{ textAlign: 'left', marginTop: 20 }}>
                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                         <AlertCircle size={16} color="#ef4444" />
-                        <Text strong style={{ color: 'white' }}>Chi tiết các dòng lỗi:</Text>
+                        <Text strong style={{ color: 'var(--text-primary)' }}>Chi tiết các dòng lỗi:</Text>
                    </div>
                    <div style={{ 
                         maxHeight: 200, 
@@ -262,7 +309,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
                         borderRadius: 8,
                         border: '1px solid rgba(239, 68, 68, 0.1)'
                     }}>
-                       <ul style={{ paddingLeft: 20, margin: 0, fontSize: 13, color: '#fca5a5' }}>
+                       <ul style={{ paddingLeft: 20, margin: 0, fontSize: 13, color: '#ef4444' }}>
                            {results.errors.slice(0, 50).map((err, idx) => <li key={idx} style={{ marginBottom: 4 }}>{err}</li>)}
                            {results.errors.length > 50 && <li style={{ opacity: 0.7, fontStyle: 'italic' }}>...và {results.errors.length - 50} lỗi khác</li>}
                        </ul>

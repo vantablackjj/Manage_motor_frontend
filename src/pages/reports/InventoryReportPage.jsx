@@ -103,7 +103,7 @@ const InventoryReportPage = () => {
       'Giá nhập': Number(v.price_vnd),
       'Trạng thái': v.status === 'In Stock' ? 'Sẵn sàng' : 'Đang chuyển',
       'Đang khóa': v.is_locked ? 'Có' : 'Không',
-      'Ngày nhập': dayjs(v.createdAt).format('DD/MM/YYYY')
+      'Ngày nhập': dayjs(v.Purchase?.purchase_date || v.createdAt).format('DD/MM/YYYY')
     }));
 
     exportToExcel(exportData, `BaoCaoTonKho_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -195,7 +195,7 @@ const InventoryReportPage = () => {
                     <td>${v.engine_no}</td>
                     <td>${v.chassis_no}</td>
                     <td class="text-right">${Number(v.price_vnd).toLocaleString()}</td>
-                    <td class="text-center">${dayjs(v.createdAt).format('DD/MM/YYYY')}</td>
+                    <td class="text-center">${dayjs(v.Purchase?.purchase_date || v.createdAt).format('DD/MM/YYYY')}</td>
                 </tr>
             `).join('')}
         </tbody>
@@ -263,9 +263,29 @@ const InventoryReportPage = () => {
         title: 'Thời gian nhập', 
         dataIndex: 'createdAt', 
         key: 'age',
-        render: d => {
-            const days = dayjs().diff(dayjs(d), 'day');
-            return <div style={{ fontSize: 12, opacity: 0.7 }}>{dayjs(d).format('DD/MM/YYYY')} <br/> ({days} ngày)</div>;
+        render: (_, v) => {
+            const date = v.Purchase?.purchase_date || v.createdAt;
+            const dayjsDate = dayjs(date);
+            
+            // Check for invalid dates or epoch fallbacks (1970)
+            if (!date || !dayjsDate.isValid() || dayjsDate.year() < 2010) {
+                return (
+                    <div style={{ fontSize: 12, opacity: 0.5 }}>
+                        <Tag color="default">Chưa cập nhật</Tag>
+                    </div>
+                );
+            }
+
+            const diff = dayjs().startOf('day').diff(dayjsDate.startOf('day'), 'day');
+            return (
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {dayjsDate.format('DD/MM/YYYY')} 
+                    <br/> 
+                    <span style={{ color: diff < 0 ? '#ef4444' : 'inherit' }}>
+                        ({diff >= 0 ? `${diff} ngày` : 'Ngày ở tương lai'})
+                    </span>
+                </div>
+            );
         },
         responsive: ['xl']
     }

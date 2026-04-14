@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { UserPlus, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
 import api from '../../utils/api';
+import { capitalizeName } from '../../utils/stringHelper';
 import ImportExcelModal from '../../components/ImportExcelModal';
 import { exportToExcel } from '../../utils/excelExport';
 import dayjs from 'dayjs';
@@ -181,7 +182,10 @@ const SupplierPage = () => {
             <Row gutter={16}>
               <Col xs={24} md={12}>
                 <Form.Item label="Họ tên chủ hàng" name="name" rules={[{ required: true }]}>
-                  <Input placeholder="Nhập tên" />
+                  <Input 
+                    placeholder="Nhập tên" 
+                    onBlur={(e) => form.setFieldsValue({ name: capitalizeName(e.target.value) })}
+                  />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>

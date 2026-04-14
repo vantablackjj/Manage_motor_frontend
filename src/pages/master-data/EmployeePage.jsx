@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import { UserPlus, Trash2, Edit, Save, Plus, Shield, MapPin, Eye, EyeOff, Download } from 'lucide-react';
 import api from '../../utils/api';
+import { capitalizeName } from '../../utils/stringHelper';
 import { exportToExcel } from '../../utils/excelExport';
 import dayjs from 'dayjs';
 
@@ -62,6 +63,7 @@ const EmployeePage = () => {
       'Quản lý tiền': u.can_manage_money ? 'Có' : 'Không',
       'Quản lý phụ tùng': u.can_manage_spare_parts ? 'Có' : 'Không',
       'Quản lý danh mục': u.can_manage_master_data ? 'Có' : 'Không',
+      'Quản lý bán hàng': u.can_manage_sales ? 'Có' : 'Không',
     }));
 
     exportToExcel(exportData, `DanhSachNhanVien_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -96,6 +98,9 @@ const EmployeePage = () => {
         can_manage_money: record.can_manage_money,
         can_manage_spare_parts: record.can_manage_spare_parts,
         can_manage_master_data: record.can_manage_master_data,
+        can_manage_sales: record.can_manage_sales,
+        can_manage_expenses: record.can_manage_expenses,
+        expense_warehouses: record.expense_warehouses ? record.expense_warehouses.split(',') : [],
       });
     } else {
       setEditingId(null);
@@ -105,8 +110,10 @@ const EmployeePage = () => {
         can_manage_debt: false,
         can_delete: false,
         can_manage_money: false,
-        can_manage_spare_parts: false,
-        can_manage_master_data: false
+        can_manage_master_data: false,
+        can_manage_sales: true, // Mặc định nhân viên mới thường cho bán hàng
+        can_manage_expenses: false,
+        expense_warehouses: []
       });
     }
 
@@ -115,7 +122,11 @@ const EmployeePage = () => {
 
   const handleOk = async () => {
     try {
-      const values = await form.validateFields();
+      const fields = await form.validateFields();
+      const values = {
+        ...fields,
+        expense_warehouses: fields.expense_warehouses ? fields.expense_warehouses.join(',') : ''
+      };
       if (editingId) {
         // Cập nhật
         await api.put(`/auth/users/${editingId}`, values);
@@ -185,8 +196,9 @@ const EmployeePage = () => {
           {record.can_delete && <Tag color="red" style={{fontSize: '10px'}}>Hủy/Xóa</Tag>}
           {record.can_manage_money && <Tag color="gold" style={{fontSize: '10px'}}>Tiền/Trả nợ</Tag>}
           {record.can_manage_spare_parts && <Tag color="purple" style={{fontSize: '10px'}}>Phụ tùng</Tag>}
-          {record.can_manage_master_data && <Tag color="blue" style={{fontSize: '10px'}}>Danh mục</Tag>}
-          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
+          {record.can_manage_sales && <Tag color="green" style={{fontSize: '10px'}}>Bán hàng</Tag>}
+          {record.can_manage_expenses && <Tag color="volcano" style={{fontSize: '10px'}}>Chi tiêu</Tag>}
+          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && !record.can_manage_sales && !record.can_manage_expenses && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
         </Space>
       )
     },
@@ -212,9 +224,11 @@ const EmployeePage = () => {
             onClick={() => showModal(record)}
             style={{ color: '#10b981' }} 
           />
-          <Popconfirm title="Xóa nhân viên này?" onConfirm={() => handleDelete(record.id)}>
-            <Button type="text" danger icon={<Trash2 size={16} />} />
-          </Popconfirm>
+          {record.username !== 'admin' && (
+            <Popconfirm title="Xóa nhân viên này?" onConfirm={() => handleDelete(record.id)}>
+              <Button type="text" danger icon={<Trash2 size={16} />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -280,7 +294,10 @@ const EmployeePage = () => {
           <Row gutter={16}>
             <Col span={8}>
               <Form.Item label="Họ và tên" name="full_name" rules={[{ required: true, message: 'Nhập họ tên' }]}>
-                <Input placeholder="Nguyễn Văn A" />
+                <Input 
+                  placeholder="Nguyễn Văn A" 
+                  onBlur={(e) => form.setFieldsValue({ full_name: capitalizeName(e.target.value) })}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -290,16 +307,23 @@ const EmployeePage = () => {
             </Col>
             <Col span={8}>
               <Form.Item label="Tên đăng nhập" name="username" rules={[{ required: true, message: 'Nhập tên đăng nhập' }]}>
-                <Input placeholder="user_01" disabled={!!editingId} />
+                <Input 
+                  placeholder="user_01" 
+                  disabled={!!editingId && form.getFieldValue('username') === 'admin'} 
+                />
               </Form.Item>
             </Col>
           </Row>
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="Mật khẩu" name="password" rules={[{ required: !editingId, message: 'Nhập mật khẩu' }]}>
+              <Form.Item 
+                label={editingId ? "Đổi mật khẩu mới" : "Mật khẩu"} 
+                name="password" 
+                rules={[{ required: !editingId, message: 'Nhập mật khẩu' }]}
+              >
                 <Input.Password 
-                  placeholder={editingId ? "Để trống nếu không đổi" : "Nhập mật khẩu"} 
+                  placeholder={editingId ? "Nhập mật khẩu mới (để trống nếu không đổi)" : "Nhập mật khẩu"} 
                   iconRender={(visible) => (visible ? <Eye size={16} /> : <EyeOff size={16} />)}
                 />
               </Form.Item>
@@ -351,7 +375,34 @@ const EmployeePage = () => {
                 <Checkbox>Danh mục</Checkbox>
               </Form.Item>
             </Col>
+            <Col span={4.8}>
+              <Form.Item name="can_manage_sales" valuePropName="checked">
+                <Checkbox>Bán hàng</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col span={4.8}>
+              <Form.Item name="can_manage_expenses" valuePropName="checked">
+                <Checkbox>Chi tiêu</Checkbox>
+              </Form.Item>
+            </Col>
           </Row>
+
+          <Form.Item 
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.can_manage_expenses !== currentValues.can_manage_expenses}
+          >
+            {({ getFieldValue }) => 
+              getFieldValue('can_manage_expenses') && (
+                <Form.Item label="Kho được quyền nhập chi tiêu" name="expense_warehouses">
+                    <Select mode="multiple" placeholder="Chọn các kho được phép chi tiêu">
+                        {warehouses.map(w => (
+                            <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>
+                        ))}
+                    </Select>
+                </Form.Item>
+              )
+            }
+          </Form.Item>
 
         </Form>
       </Modal>

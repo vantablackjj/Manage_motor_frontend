@@ -124,8 +124,8 @@ const ExpensePage = () => {
       key: 'action', 
       width: '80px',
       align: 'center',
-      hidden: !isAdmin,
-      render: (_, r) => isAdmin ? (
+      hidden: !isAdmin && !user.can_delete,
+      render: (_, r) => (isAdmin || user.can_delete) ? (
         <Popconfirm title="Xóa khoản chi này?" onConfirm={() => handleDelete(r.id)}>
           <Button type="text" danger icon={<Trash2 size={16} />} />
         </Popconfirm>
@@ -156,16 +156,23 @@ const ExpensePage = () => {
                     showSearch 
                     allowClear
                     placeholder="Chọn xe nếu chi riêng cho xe"
-                    filterOption={(input, option) => option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0}
+                    optionFilterProp="children"
                 >
-                    {vehicles.map(v => <Option key={v.id} value={v.id}>{v.engine_no} ({v.VehicleType?.name})</Option>)}
+                    {vehicles
+                      .filter(v => isAdmin || !v.warehouse_id || (user.expense_warehouses?.split(',').includes(v.warehouse_id)))
+                      .map(v => (
+                        <Option key={v.id} value={v.id}>
+                          {`${v.engine_no} (${v.VehicleType?.name || 'N/A'})`}
+                        </Option>
+                      ))
+                    }
                 </Select>
               </Form.Item>
             </Col>
             <Col xs={24} md={6}>
               <Form.Item label="Cửa hàng / Kho" name="warehouse_id">
                 <Select placeholder="Chọn cửa hàng" allowClear>
-                    {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+                    {warehouses.filter(w => isAdmin || (user.expense_warehouses?.split(',').includes(w.id))).map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                 </Select>
               </Form.Item>
             </Col>
@@ -196,9 +203,9 @@ const ExpensePage = () => {
                 icon={<Save size={16} />} 
                 type="primary" 
                 onClick={() => form.submit()}
-                disabled={!isAdmin}
+                disabled={!isAdmin && !user.can_manage_expenses}
             >
-                {isAdmin ? "Ghi nhận ngay" : "CHẾ ĐỘ XEM"}
+                {isAdmin || user.can_manage_expenses ? "Ghi nhận ngay" : "CHẾ ĐỘ XEM CHỈ ĐỌC"}
             </Button>
           </div>
         </Form>

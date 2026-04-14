@@ -20,16 +20,18 @@ import RetailSaleReportPage from './pages/reports/RetailSaleReportPage';
 import WarrantyReportPage from './pages/reports/WarrantyReportPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import NotificationPage from './pages/NotificationPage';
-import DailyReportPage from './pages/reports/DailyReportPage';
+// import DailyReportPage from './pages/reports/DailyReportPage';
 import PartPage from './pages/master-data/PartPage';
 import PartImportPage from './pages/purchase/PartImportPage';
 import MechanicPage from './pages/master-data/MechanicPage';
-import RepairServicePage from './pages/retail/RepairServicePage';
 import PartInventoryPage from './pages/inventory/PartInventoryPage';
-import MaintenanceHistoryPage from './pages/reports/MaintenanceHistoryPage';
 import PartRetailPage from './pages/retail/PartRetailPage';
 import PartRetailDebtPage from './pages/retail/PartRetailDebtPage';
 import PartWholesaleDebtPage from './pages/purchase/PartWholesaleDebtPage';
+import PartInventoryReportPage from './pages/reports/PartInventoryReportPage';
+import PartPurchasesReportPage from './pages/reports/PartPurchasesReportPage';
+import MaintenanceHub from './pages/retail/MaintenanceHub';
+import GiftManagementPage from './pages/inventory/GiftManagementPage';
 
 
 
@@ -58,11 +60,16 @@ function App() {
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#3b82f6',
+          colorPrimary: '#4f46e5',
           borderRadius: 8,
-          colorBgContainer: 'rgba(24, 24, 27, 0.4)',
+          colorBgContainer: '#fcfcff',
+          colorText: '#1e1b4b',
+          colorTextSecondary: '#475569',
+          colorBgElevated: '#ffffff',
+          colorBgLayout: '#e9e9f0',
+          colorBorder: '#cbd5e1',
         },
       }}
     >
@@ -92,11 +99,7 @@ function App() {
                     <Route path="/purchase" element={<PurchasePage />} />
                     <Route 
                       path="/expenses" 
-                      element={
-                        <ProtectedRoute adminOnly={true}>
-                          <ExpensePage />
-                        </ProtectedRoute>
-                      } 
+                      element={<ExpensePage />} 
                     />
                     <Route path="/vehicle-types" element={<VehicleTypePage />} />
                     <Route path="/suppliers" element={<SupplierPage />} />
@@ -125,7 +128,7 @@ function App() {
                     <Route path="/report/wholesale-audit" element={<WholesaleCustomerAudit />} />
                     <Route path="/report/purchases" element={<VehicleLifecyclePage />} />
                     <Route path="/report/warranty" element={<WarrantyReportPage />} />
-                    <Route path="/report/daily" element={<DailyReportPage />} />
+                    {/* <Route path="/report/daily" element={<DailyReportPage />} /> */}
                     <Route path="/inventory-report" element={<InventoryReportPage />} />
                     <Route path="/notifications" element={<NotificationPage />} />
                     
@@ -133,11 +136,24 @@ function App() {
                     <Route path="/parts" element={<PartPage />} />
                     <Route path="/part-import" element={<PartImportPage />} />
                     <Route path="/part-inventory" element={<PartInventoryPage />} />
-                    <Route path="/repair-service" element={<RepairServicePage />} />
-                    <Route path="/maintenance-history" element={<MaintenanceHistoryPage />} />
+                    {/* BÀO TRÌ & DỊCH VỤ HỢP NHẤT */}
+                    <Route path="/maintenance-hub" element={<MaintenanceHub />} />
+                    <Route path="/maintenance-hub/:id" element={<MaintenanceHub />} />
                     <Route path="/part-retail" element={<PartRetailPage />} />
                     <Route path="/part-retail-debt" element={<PartRetailDebtPage />} />
                     <Route path="/part-wholesale-debt" element={<PartWholesaleDebtPage />} />
+                    <Route 
+                      path="/gifts" 
+                      element={
+                        <ProtectedRoute>
+                          <GiftManagementPage />
+                        </ProtectedRoute>
+                      } 
+                    />
+                    
+                    {/* BÁO CÁO PHỤ TÙNG */}
+                    <Route path="/report/parts-inventory" element={<PartInventoryReportPage />} />
+                    <Route path="/report/parts-purchases" element={<PartPurchasesReportPage />} />
                   </Routes>
 
 

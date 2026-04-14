@@ -23,7 +23,8 @@ import {
   Calendar,
   Warehouse as WarehouseIcon,
   Download,
-  Wallet
+  Wallet,
+  Gift,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../../utils/api';
@@ -181,13 +182,15 @@ const DailyReportPage = () => {
             </Col>
 
             <Col xs={24} md={12}>
-              <Card title={<Space><TrendingDown size={18} /> CHI TIẾT CHI PHÍ & NHẬP HÀNG</Space>} className="glass-card">
+              <Card title={<Space><TrendingDown size={18} /> CHI TIẾT CHI TIỀN (HÀNG & PHÍ)</Space>} className="glass-card">
                  <Row gutter={[16, 16]}>
                     <Col span={12}>
-                        <Statistic title="Số xe nhập về" value={data.purchaseCount} suffix="xe" valueStyle={{ fontSize: 18 }} />
+                        <Statistic title="Tiền nhập hàng" value={data.purchasesPaid} suffix="đ" valueStyle={{ fontSize: 18 }} />
+                        <Text type="secondary" style={{ fontSize: 12 }}>Thanh toán cho nhà cung cấp</Text>
                     </Col>
                     <Col span={12}>
-                        <Statistic title="Chi phí khác" value={data.expenses} suffix="đ" valueStyle={{ fontSize: 18 }} />
+                        <Statistic title="Chi phí phát sinh" value={data.expenses} suffix="đ" valueStyle={{ fontSize: 18 }} />
+                        <Text type="secondary" style={{ fontSize: 12 }}>Điện, nước, mặt bằng, lương...</Text>
                     </Col>
                     <Divider style={{ margin: '12px 0' }} />
                     <Col span={24}>
@@ -196,25 +199,45 @@ const DailyReportPage = () => {
                             <Text strong color="#f43f5e">{formatMoney(data.totalOutcome)}</Text>
                         </div>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                            (Bao gồm trả tiền xe cho chủ hàng và các chi phí vận hành)
+                            (Vốn nhập hàng + Tất cả các chi phí vận hành)
                         </Text>
                     </Col>
                  </Row>
               </Card>
             </Col>
+
+
+            {data.giftDistribution && Object.keys(data.giftDistribution).length > 0 && (
+              <Col xs={24}>
+                <Card title={<Space><Gift size={18} /> QUÀ TẶNG KHUYẾN MẠI ĐÃ PHÁT</Space>} className="glass-card">
+                  <Row gutter={[16, 16]}>
+                    {Object.entries(data.giftDistribution).map(([name, count]) => (
+                      <Col xs={12} sm={8} md={6} lg={4} key={name}>
+                        <div style={{ 
+                          padding: '12px', 
+                          background: 'rgba(255, 255, 255, 0.05)', 
+                          borderRadius: 12, 
+                          textAlign: 'center',
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{name}</div>
+                          <div style={{ fontSize: 20, fontWeight: 'bold', color: 'var(--primary-color)' }}>{count}</div>
+                          <div style={{ fontSize: 10, opacity: 0.6 }}>Chiếc</div>
+                        </div>
+                      </Col>
+                    ))}
+                  </Row>
+                </Card>
+              </Col>
+            )}
           </Row>
 
-          <div style={{ marginTop: 24, textAlign: 'center', opacity: 0.5 }}>
-            <Text type="secondary">
-                Dữ liệu được cập nhật đến: {dayjs().format('HH:mm:ss DD/MM/YYYY')}
-            </Text>
-          </div>
         </div>
       ) : (
         <Card className="glass-card" style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Calendar size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
+            <Calendar size={48} style={{ color: '#cbd5e1', marginBottom: 16 }} />
             <br />
-            <Text type="secondary">Chưa có dữ liệu cho ngày này hoặc kho này.</Text>
+            <Text style={{ color: '#64748b' }}>Chưa có dữ liệu cho ngày này hoặc kho này.</Text>
         </Card>
       )}
     </div>

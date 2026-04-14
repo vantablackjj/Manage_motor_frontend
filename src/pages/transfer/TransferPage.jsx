@@ -38,7 +38,8 @@ import {
   Calendar,
   Search,
   User as UserIcon,
-  Edit
+  Edit,
+  Printer
 } from 'lucide-react';
 
 import api from '../../utils/api';
@@ -237,6 +238,89 @@ const TransferPage = () => {
     }
   };
 
+  const handlePrintTransfer = (data) => {
+    if (!data) return;
+    const { transfer, vehicles } = data;
+    const fromWH = warehouses.find(w => w.id === transfer.from_warehouse_id)?.warehouse_name || 'N/A';
+    const toWH = warehouses.find(w => w.id === transfer.to_warehouse_id)?.warehouse_name || 'N/A';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Phiếu chuyển kho ${transfer.transfer_code}</title>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 12pt; padding: 30px; line-height: 1.5; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .title { font-size: 18pt; font-weight: bold; margin-bottom: 10px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+        th { background: #eee; text-align: center; }
+        .center { text-align: center; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; }
+        .signature-box { text-align: center; width: 200px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">PHIẾU CHUYỂN KHO NỘI BỘ</div>
+        <div>Mã phiếu: <strong>${transfer.transfer_code}</strong></div>
+        <div>Ngày lập: ${dayjs(transfer.createdAt).format('DD/MM/YYYY HH:mm')}</div>
+    </div>
+
+    <div class="info-grid">
+        <div><strong>Kho xuất:</strong> ${fromWH}</div>
+        <div><strong>Kho nhận:</strong> ${toWH}</div>
+        <div><strong>Người lập:</strong> ${transfer.creator?.full_name || 'N/A'}</div>
+        <div><strong>Ghi chú:</strong> ${transfer.notes || '---'}</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px">STT</th>
+                <th>Loại xe</th>
+                <th>Màu xe</th>
+                <th>Số Máy</th>
+                <th>Số Khung</th>
+                <th style="width: 100px">Kiểm tra</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${vehicles.map((v, i) => `
+                <tr>
+                    <td class="center">${i + 1}</td>
+                    <td>${v.VehicleType?.name || 'N/A'}</td>
+                    <td>${v.VehicleColor?.color_name || 'N/A'}</td>
+                    <td>${v.engine_no}</td>
+                    <td>${v.chassis_no}</td>
+                    <td></td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <div class="signature-box">
+            <strong>Người xuất hàng</strong><br/>
+            (Ký, họ tên)
+        </div>
+        <div class="signature-box">
+            <strong>Người nhận hàng</strong><br/>
+            (Ký, họ tên)
+        </div>
+    </div>
+
+    <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+    const pw = window.open('', '_blank', 'width=800,height=600');
+    pw.document.write(html);
+    pw.document.close();
+  };
+
   const getStatusTag = (status) => {
     const config = {
       'PENDING_ADMIN': { color: 'orange', text: 'Chờ Admin duyệt', icon: <Clock size={14} /> },
@@ -363,6 +447,27 @@ const TransferPage = () => {
                 </Divider>
                 
                 <div style={{ marginBottom: 16 }}>
+                  {selectedVehicleIds.length > 0 && (
+                    <Card size="small" style={{ marginBottom: 16, background: 'rgba(59, 130, 246, 0.05)', borderRadius: 10 }}>
+                        <div style={{ marginBottom: 8 }}><Text strong size="small">XE ĐÃ CHỌN:</Text></div>
+                        <Space wrap>
+                            {selectedVehicleIds.map(id => {
+                                const v = availableVehicles.find(av => av.id === id);
+                                return v ? (
+                                    <Tag 
+                                        key={id} 
+                                        color="blue" 
+                                        closable 
+                                        onClose={() => setSelectedVehicleIds(prev => prev.filter(i => i !== id))}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+                                    >
+                                        {v.engine_no}
+                                    </Tag>
+                                ) : null;
+                            })}
+                        </Space>
+                    </Card>
+                  )}
                   <Input 
                     placeholder="Tìm theo số máy hoặc số khung..." 
                     prefix={<Search size={18} opacity={0.6} />} 
@@ -383,7 +488,8 @@ const TransferPage = () => {
                    rowSelection={{
                      type: 'checkbox',
                      selectedRowKeys: selectedVehicleIds,
-                     onChange: (keys) => setSelectedVehicleIds(keys)
+                     onChange: (keys) => setSelectedVehicleIds(keys),
+                     preserveSelectedRowKeys: true
                    }}
                 />
 
@@ -508,6 +614,9 @@ const TransferPage = () => {
                     <Button icon={<Edit size={16} />} onClick={() => handleEdit(detailData.transfer, detailData.vehicles)}>CHỈNH SỬA</Button>
                   )}
 
+                  {/* PRINT ANYTIME */}
+                  <Button icon={<Printer size={16} />} onClick={() => handlePrintTransfer(detailData)}>IN PHIẾU KIỂM</Button>
+
                   {/* ADMIN APPROVE */}
                   {isAdmin && detailData.transfer.status === 'PENDING_ADMIN' && (
                     <Button type="primary" icon={<ShieldCheck size={18} />} style={{ background: '#10b981', height: 45 }} block onClick={() => handleApprove(detailData.transfer.id)}>XÁC NHẬN DUYỆT PHIẾU</Button>
@@ -578,8 +687,9 @@ const TransferPage = () => {
 
       <style>{`
         .ant-table { background: transparent !important; }
-        .ant-table-cell { background: transparent !important; color: white !important; }
-        .ant-table-thead > tr > th { background: rgba(255,255,255,0.05) !important; color: var(--primary-color) !important; border-bottom: 1px solid var(--border-color) !important; }
+        .ant-table-cell { background: transparent !important; }
+        .ant-table-thead > tr > th { background: #f1f5fb !important; color: #0f172a !important; border-bottom: 1px solid var(--border-color) !important; font-weight: 700 !important; }
+        .ant-table-cell { border-bottom: 1px solid #cbd5e1 !important; color: #000000 !important; font-weight: 600; }
         .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active { background: var(--primary-color) !important; border-color: var(--primary-color) !important; }
         .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn { color: white !important; }
       `}</style>
