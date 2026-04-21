@@ -10,9 +10,10 @@ import {
   Typography, 
   Popconfirm, 
   message, 
-  Select 
+  Select,
+  Tag
 } from 'antd';
-import { UserPlus, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
+import { Users, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download, Contact } from 'lucide-react';
 import api from '../../utils/api';
 import { capitalizeName } from '../../utils/stringHelper';
 import ImportExcelModal from '../../components/ImportExcelModal';
@@ -22,7 +23,7 @@ import dayjs from 'dayjs';
 const { Text } = Typography;
 const { Option } = Select;
 
-const SupplierPage = () => {
+const PartWholesaleCustomerPage = () => {
   const [form] = Form.useForm();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -35,10 +36,11 @@ const SupplierPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/suppliers');
+      // Filter for PART customers (includes BOTH)
+      const response = await api.get('/wholesale-customers?type=PART');
       setData(response.data);
     } catch (error) {
-      message.error('Lỗi tải danh mục chủ hàng: ' + error.message);
+      message.error('Lỗi tải danh mục khách buôn phụ tùng: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -53,25 +55,26 @@ const SupplierPage = () => {
       return message.warning('Không có dữ liệu để xuất!');
     }
 
-    const exportData = data.map(s => ({
-      'Họ tên': s.name,
-      'Địa chỉ': s.address,
-      'Ghi chú': s.notes,
-      'Kiểu thanh toán': s.payment_type
+    const exportData = data.map(c => ({
+      'Mã khách': c.customer_code,
+      'Họ tên': c.name,
+      'Địa chỉ': c.address,
+      'Kiểu thanh toán': c.payment_type,
+      'Phân loại': c.customer_type === 'VEHICLE' ? 'Xe máy' : (c.customer_type === 'PART' ? 'Phụ tùng' : 'Cả hai')
     }));
 
-    exportToExcel(exportData, `DanhSachChuHang_${dayjs().format('YYYYMMDD_HHmm')}`);
+    exportToExcel(exportData, `DanhSachKhachBuonPhuTung_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
   const onFinish = async (values) => {
     try {
       if (editingId) {
-        await api.put(`/suppliers/${editingId}`, values);
-        message.success('Cập nhật thông tin chủ hàng thành công!');
+        await api.put(`/wholesale-customers/${editingId}`, values);
+        message.success('Cập nhật thông tin khách buôn thành công!');
         setEditingId(null);
       } else {
-        await api.post('/suppliers', values);
-        message.success('Thêm chủ hàng mới thành công!');
+        await api.post('/wholesale-customers', values);
+        message.success('Thêm khách buôn mới thành công!');
       }
       form.resetFields();
       fetchData();
@@ -93,8 +96,8 @@ const SupplierPage = () => {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/suppliers/${id}`);
-      message.success('Đã xóa chủ hàng');
+      await api.delete(`/wholesale-customers/${id}`);
+      message.success('Đã xóa khách buôn');
       fetchData();
     } catch (error) {
       message.error('Lỗi khi xóa: ' + error.message);
@@ -102,15 +105,18 @@ const SupplierPage = () => {
   };
 
   const columns = [
+    { title: 'Mã khách', dataIndex: 'customer_code', key: 'customer_code' },
     { title: 'Họ tên', dataIndex: 'name', key: 'name' },
+    { title: 'Số điện thoại', dataIndex: 'phone', key: 'phone' },
     { title: 'Địa chỉ', dataIndex: 'address', key: 'address' },
-    { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     { 
-      title: 'Kiểu thanh toán', 
-      dataIndex: 'payment_type', 
-      key: 'payment_type',
+      title: 'Phân loại', 
+      dataIndex: 'customer_type', 
+      key: 'customer_type',
       render: (val) => (
-        <span style={{ color: val === 'Trả gộp' ? '#3b82f6' : '#10b981' }}>{val}</span>
+        <Tag color={val === 'VEHICLE' ? 'blue' : (val === 'PART' ? 'purple' : 'gold')}>
+          {val === 'VEHICLE' ? 'Xe máy' : (val === 'PART' ? 'Phụ tùng' : 'Cả hai')}
+        </Tag>
       )
     },
     {
@@ -138,8 +144,10 @@ const SupplierPage = () => {
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
       <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h2 className="gradient-text" style={{ fontSize: 24, margin: 0 }}>NHẬP CHỦ HÀNG</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Quản lý danh sách các đối tác cung cấp xe máy.</p>
+          <h2 className="gradient-text" style={{ fontSize: 24, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Contact size={28} /> DANH MỤC KHÁCH BUÔN PHỤ TÙNG
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Quản lý dữ liệu đối tác lấy sỉ linh kiện, phụ tùng.</p>
         </div>
         <Space>
           <Button 
@@ -167,8 +175,9 @@ const SupplierPage = () => {
         visible={importVisible}
         onCancel={() => setImportVisible(false)}
         onSuccess={fetchData}
-        type="suppliers"
-        title="Nhập danh sách chủ hàng"
+        type="customers"
+        extraData={{ customer_type: 'PART' }}
+        title="Nhập danh sách khách hàng buôn phụ tùng"
       />
 
       {canManageMaster && (
@@ -177,36 +186,49 @@ const SupplierPage = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ payment_type: 'Trả gộp' }}
+            initialValues={{ payment_type: 'Trả theo lô', customer_type: 'PART' }}
           >
             <Row gutter={16}>
-              <Col xs={24} md={12}>
-                <Form.Item label="Họ tên chủ hàng" name="name" rules={[{ required: true }]}>
+              <Col xs={24} md={6}>
+                <Form.Item label="Mã khách" name="customer_code" rules={[{ required: true }]}>
+                  <Input placeholder="KBP001" disabled={!!editingId} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={6}>
+                <Form.Item label="Họ tên" name="name" rules={[{ required: true }]}>
                   <Input 
-                    placeholder="Nhập tên" 
+                    placeholder="Ví dụ: Cửa hàng phụ tùng B" 
                     onBlur={(e) => form.setFieldsValue({ name: capitalizeName(e.target.value) })}
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} md={4}>
+                <Form.Item label="Số điện thoại" name="phone">
+                  <Input placeholder="09xxx" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
                 <Form.Item label="Kiểu thanh toán" name="payment_type" rules={[{ required: true }]}>
                   <Select>
-                    <Option value="Trả gộp">Trả gộp</Option>
                     <Option value="Trả theo lô">Trả theo lô</Option>
+                    <Option value="Trả gộp">Trả gộp</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item label="Đối tượng sỉ" name="customer_type" rules={[{ required: true }]}>
+                  <Select>
+                    <Option value="PART">Phụ tùng</Option>
+                    <Option value="BOTH">Cả hai</Option>
                   </Select>
                 </Form.Item>
               </Col>
               <Col xs={24}>
                 <Form.Item label="Địa chỉ" name="address">
                   <Input 
-                    placeholder="Nhập địa chỉ của chủ hàng" 
+                    placeholder="Nhập địa chỉ" 
                     onBlur={(e) => form.setFieldsValue({ address: capitalizeName(e.target.value) })}
                   />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item label="Ghi chú" name="notes">
-                  <Input placeholder="Thông tin liên lạc hoặc ghi chú thêm" />
                 </Form.Item>
               </Col>
             </Row>
@@ -220,7 +242,7 @@ const SupplierPage = () => {
                   onClick={() => form.submit()} 
                   style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
               >
-                  {editingId ? 'Cập nhật chủ hàng' : 'Lưu chủ hàng'}
+                  {editingId ? 'Cập nhật khách buôn' : 'Lưu khách buôn'}
               </Button>
             </div>
           </Form>
@@ -233,10 +255,10 @@ const SupplierPage = () => {
         rowKey="id"
         className="modern-table"
         loading={loading}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 12 }}
       />
     </div>
   );
 };
 
-export default SupplierPage;
+export default PartWholesaleCustomerPage;

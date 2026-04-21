@@ -151,6 +151,7 @@ const RetailSaleReportPage = () => {
     }
   };
 
+
   const onAddPayment = async (values) => {
     try {
       setPaymentLoading(true);
@@ -388,16 +389,12 @@ const RetailSaleReportPage = () => {
   ];
 
   const handleExport = () => {
-    if (!data || data.length === 0) {
-      return message.warning('Không có dữ liệu để xuất!');
-    }
-
-    const exportData = data.map(s => ({
-      'Ngày Bán': dayjs(s.sale_date).format('DD/MM/YYYY'),
+    if (!filteredData || filteredData.length === 0) return message.warning('Không có dữ liệu để xuất!');
+    const exportData = filteredData.map(s => ({
+      'Ngày bán': dayjs(s.sale_date).format('DD/MM/YYYY'),
       'Khách hàng': s.customer_name,
       'SĐT': s.phone,
       'Địa chỉ': s.address,
-      'Người bán': s.seller?.full_name || 'N/A',
       'Loại xe': s.Vehicle?.VehicleType?.name || 'N/A',
       'Màu xe': s.Vehicle?.VehicleColor?.color_name || 'N/A',
       'Số máy': s.engine_no,
@@ -406,10 +403,11 @@ const RetailSaleReportPage = () => {
       'Đã trả': Number(s.paid_amount) + (s.is_disbursed ? Number(s.loan_amount || 0) : 0),
       'Còn nợ': Number(s.total_price) - Number(s.paid_amount) - (s.is_disbursed ? Number(s.loan_amount || 0) : 0),
       'Kiểu bán': s.sale_type,
-      'Bảo hành': s.guarantee,
-      'Giải ngân NH': s.payment_method === 'Trả góp' ? (s.is_disbursed ? `Đã giải ngân (${dayjs(s.disbursed_at).format('DD/MM/YYYY')})` : 'Chờ giải ngân') : '-'
+      'Người bán': s.seller?.full_name || 'N/A',
+      'Kho hàng': s.Warehouse?.warehouse_name || 'N/A',
+      'Ghi chú': s.notes || ''
     }));
-    exportToExcel(exportData, `BaoCaoBanLe_${dayjs().format('YYYYMMDD_HHmm')}`);
+    exportToExcel(exportData, `BaoCaoBanLeXe_${dayjs().format('YYYYMMDD')}`);
   };
 
   const handlePrint = () => {

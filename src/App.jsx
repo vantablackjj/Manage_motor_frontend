@@ -30,8 +30,14 @@ import PartRetailDebtPage from './pages/retail/PartRetailDebtPage';
 import PartWholesaleDebtPage from './pages/purchase/PartWholesaleDebtPage';
 import PartInventoryReportPage from './pages/reports/PartInventoryReportPage';
 import PartPurchasesReportPage from './pages/reports/PartPurchasesReportPage';
+import PartSalesReportPage from './pages/reports/PartSalesReportPage';
 import MaintenanceHub from './pages/retail/MaintenanceHub';
 import GiftManagementPage from './pages/inventory/GiftManagementPage';
+import PartTransferPage from './pages/transfer/PartTransferPage';
+import PartUsageReportPage from './pages/reports/PartUsageReportPage';
+import PartWholesalePage from './pages/wholesale/PartWholesalePage';
+import PartWholesaleCustomerPage from './pages/master-data/PartWholesaleCustomerPage';
+import PartWholesaleReportPage from './pages/reports/PartWholesaleReportPage';
 
 
 
@@ -39,6 +45,19 @@ import { ConfigProvider, theme } from 'antd';
 
 
 import './App.css';
+
+const getDefaultPath = (user) => {
+  if (!user || !user.role) return "/login";
+  if (user.role === 'ADMIN') return '/dashboard';
+  
+  const canManageSales = user.can_manage_sales === true || user.can_manage_sales === 1;
+  const canManageSpareParts = user.can_manage_spare_parts === true || user.can_manage_spare_parts === 1;
+
+  if (canManageSales) return "/retail";
+  if (canManageSpareParts) return "/part-retail";
+  
+  return "/retail"; // Default fallback
+};
 
 // Tấm khiên bảo vệ (Hợp nhất Đăng nhập)
 const ProtectedRoute = ({ children, adminOnly = false }) => {
@@ -50,7 +69,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   if (adminOnly && user.role !== 'ADMIN') {
-    return <Navigate to="/retail" replace />;
+    return <Navigate to={getDefaultPath(user)} replace />;
   }
 
   return children;
@@ -85,7 +104,7 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <Routes>
-                    <Route path="/" element={<Navigate to="/retail" replace />} />
+                    <Route path="/" element={<Navigate to={getDefaultPath(JSON.parse(localStorage.getItem('user') || '{}'))} replace />} />
                     <Route 
                       path="/dashboard" 
                       element={
@@ -134,12 +153,15 @@ function App() {
                     
                     {/* HỆ THUẬT PHỤ TÙNG & DỊCH VỤ MỚI */}
                     <Route path="/parts" element={<PartPage />} />
+                    <Route path="/part-wholesale-customers" element={<PartWholesaleCustomerPage />} />
                     <Route path="/part-import" element={<PartImportPage />} />
                     <Route path="/part-inventory" element={<PartInventoryPage />} />
                     {/* BÀO TRÌ & DỊCH VỤ HỢP NHẤT */}
                     <Route path="/maintenance-hub" element={<MaintenanceHub />} />
                     <Route path="/maintenance-hub/:id" element={<MaintenanceHub />} />
+                    <Route path="/part-transfer" element={<PartTransferPage />} />
                     <Route path="/part-retail" element={<PartRetailPage />} />
+                    <Route path="/part-wholesale" element={<PartWholesalePage />} />
                     <Route path="/part-retail-debt" element={<PartRetailDebtPage />} />
                     <Route path="/part-wholesale-debt" element={<PartWholesaleDebtPage />} />
                     <Route 
@@ -154,6 +176,9 @@ function App() {
                     {/* BÁO CÁO PHỤ TÙNG */}
                     <Route path="/report/parts-inventory" element={<PartInventoryReportPage />} />
                     <Route path="/report/parts-purchases" element={<PartPurchasesReportPage />} />
+                    <Route path="/report/parts-sales" element={<PartSalesReportPage />} />
+                    <Route path="/report/parts-wholesale" element={<PartWholesaleReportPage />} />
+                    <Route path="/report/parts-usage" element={<PartUsageReportPage />} />
                   </Routes>
 
 

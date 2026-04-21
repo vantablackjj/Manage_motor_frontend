@@ -7,7 +7,7 @@ import { exportToExcel } from '../utils/excelExport';
 const { Dragger } = Upload;
 const { Text, Title } = Typography;
 
-const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
+const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData = {} }) => {
   const [fileList, setFileList] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
@@ -68,6 +68,11 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
     const formData = new FormData();
     formData.append('file', fileList[0]);
     formData.append('type', type);
+    
+    // Append extra data (like customer_type)
+    Object.keys(extraData).forEach(key => {
+      formData.append(key, extraData[key]);
+    });
 
     setUploading(true);
     try {
@@ -103,14 +108,17 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title }) => {
   const templateColumns = {
     colors: ['Tên màu'],
     types: ['Tên loại xe', 'Phân loại', 'Tiền tố khung', 'Tiền tố máy'],
-    customers: ['Mã khách', 'Tên khách', 'Địa chỉ', 'Hình thức TT'],
+    customers: ['Mã khách', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Hình thức TT'],
     suppliers: ['Tên NCC', 'Địa chỉ', 'Ghi chú', 'Hình thức TT'],
     purchases: ['Số máy', 'Số khung', 'Loại xe', 'Màu sắc', 'Giá nhập', 'Tên NCC', 'Tên kho', 'Ngày nhập'],
     retail_sales: ['Ngày bán', 'Số máy', 'Tên khách', 'Số điện thoại', 'Địa chỉ', 'Giá bán', 'Tiền khách trả', 'Tên kho', 'Phát sổ bảo hành'],
-    wholesale_sales: ['Ngày bán', 'Số máy', 'Mã khách hàng', 'Giá bán lẻ', 'Đã trả', 'Tên kho'],
-    part_master: ['Mã phụ tùng', 'Tên phụ tùng', 'Đơn vị tính', 'Giá nhập', 'Giá bán'],
-    part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho', 'Vị trí'],
+    wholesale_sales: ['Ngày bán', 'Số máy', 'Mã khách hàng', 'Giá bán lẻ', 'Đã trả', 'Hình thức TT', 'Tên kho'],
+    part_master: ['Mã phụ tùng', 'Tên phụ tùng', 'Đơn vị tính', 'Giá nhập', 'Giá bán', 'Phân loại mã', 'Tỷ lệ quy đổi', 'Mã liên kết', 'Mô tả'],
+    part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho'],
+    part_retail_sales: ['Ngày bán', 'Tên khách', 'Số điện thoại', 'Mã PT', 'Số lượng', 'Đơn giá', 'Đã trả', 'VAT (%)', 'Tên kho'],
+    part_wholesale_sales: ['Ngày bán', 'Mã khách hàng', 'Mã PT', 'Số lượng', 'Giá sỉ', 'Đã trả', 'VAT (%)', 'Tên kho'],
     part_purchases: ['SỐ PO', 'SỐ HOÁ ĐƠN HVN', 'MÃ PHỤ TÙNG', 'TÊN PHỤ TÙNG', 'SỐ LƯỢNG', 'DNP', 'THÀNH TIỀN CHƯA VAT', 'VAT', 'VAT THÀNH TIỀN', 'NGÀY NHẬP', 'TÊN KHO', 'TÊN NCC']
+
   };
 
   const getBadgeColor = (type) => {

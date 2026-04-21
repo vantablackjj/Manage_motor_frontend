@@ -251,103 +251,127 @@ const MainLayout = ({ children }) => {
       icon: <LayoutDashboard size={18} />,
       label: <Link to="/dashboard">Bảng điều khiển (Admin)</Link>
     },
+    
+    // --- MẢNG XE MÁY ---
     canManageSales && {
-      key: 'sales-management',
-      icon: <ShoppingCart size={18} />,
-      label: 'Quản lý Bán hàng',
+      key: 'motorcycle-folder',
+      icon: <ShoppingCart size={20} />, // Primary icon for Motorcycle Dept
+      label: 'QUẢN LÝ XE MÁY',
       children: [
         {
-          key: 'input-data',
+          key: 'mc-transactions',
           icon: <PlusSquare size={16} />,
-          label: 'Nhập dữ liệu chung',
+          label: 'Giao dịch xe máy',
           children: [
             { key: '/retail', label: <Link to="/retail">Bán lẻ xe máy</Link> },
             { key: '/wholesale', label: <Link to="/wholesale">Bán buôn & Thu nợ</Link> },
             { key: '/purchase', label: <Link to="/purchase">Nhập xe mua & Trả tiền</Link> },
-            canManageExpenses && { key: '/expenses', label: <Link to="/expenses">Nhập chi tiêu</Link> },
-            canManageMaster && { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
-            canManageMaster && { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
-            canManageMaster && { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng</Link> },
-            canManageMaster && { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Nhập mã khách buôn</Link> },
             { key: '/transfers', label: <Link to="/transfers">Chuyển kho chi nhánh</Link> },
-          ].filter(Boolean),
+          ]
         },
         {
-          key: 'reports',
+          key: 'mc-reports',
           icon: <History size={16} />,
-          label: 'Xem thông tin tổng hợp',
+          label: 'Báo cáo xe máy',
           children: [
-            { key: '/vehicle-search', label: <Link to="/vehicle-search">Tìm xe theo yêu cầu</Link> },
             { 
               key: 'sales-info', 
-              label: 'Xem thông tin bán xe', 
+              label: 'Nhật ký bán xe', 
               children: [
                 { key: '/report/sales-retail', label: <Link to="/report/sales-retail">Xe bán lẻ</Link> },
                 { key: '/report/sales-wholesale', label: <Link to="/report/sales-wholesale">Xe bán buôn</Link> },
                 { key: '/report/wholesale-audit', label: <Link to="/report/wholesale-audit">Đối soát khách buôn</Link> },
               ]
             },
-            { key: '/report/purchases', label: <Link to="/report/purchases">Xem thông tin mua xe</Link> },
-            { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn</Link> },
+            { key: '/report/purchases', label: <Link to="/report/purchases">Nhật ký mua xe</Link> },
+            { key: '/inventory-report', label: <Link to="/inventory-report">Xem xe tồn kho</Link> },
             { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
-          ],
+            { key: '/vehicle-search', label: <Link to="/vehicle-search">Tìm xe theo yêu cầu</Link> },
+          ]
         },
-      ]
-    },
-    
-    canManageSpareParts && {
-      key: 'after-sales-folder',
-      icon: <Wrench size={18} />,
-      label: 'Sau Bán Hàng (Dịch vụ/PT)',
-      children: [
-        {
-          key: 'services',
-          icon: <ClockIcon size={16} />,
-          label: 'Bảo trì & Sửa chữa',
+        canManageMaster && {
+          key: 'mc-master-data',
+          icon: <Layers size={16} />,
+          label: 'Danh mục xe máy',
           children: [
-            { key: '/maintenance-hub', label: <Link to="/maintenance-hub">Trung tâm Bảo trì (Hub)</Link> },
-          ],
-        },
-        {
-          key: 'parts-mgmt',
-          icon: <Archive size={16} />,
-          label: 'Phụ tùng & Linh kiện',
-          children: [
-            {
-              key: 'parts-master-folder',
-              label: 'Đăng ký Mã PT & Giá',
-              children: [
-                { key: '/parts', label: <Link to="/parts">Đăng ký mã phụ tùng</Link> },
-                { key: '/part-import', label: <Link to="/part-import">Nhập mua phụ tùng</Link> },
-              ]
-            },
-            { key: '/part-inventory', label: <Link to="/part-inventory">Tồn kho phụ tùng</Link> },
-            { key: '/part-retail', label: <Link to="/part-retail">Bán lẻ phụ tùng</Link> },
-            { key: '/part-retail-debt', label: <Link to="/part-retail-debt">Nợ phụ tùng bán lẻ</Link> },
-            { key: '/part-wholesale-debt', label: <Link to="/part-wholesale-debt">Nợ phụ tùng mua sỉ</Link> },
-            { key: '/gifts', label: <Link to="/gifts"><Space><GiftIcon size={14} /> Quản lý quà tặng</Space></Link> },
-            {
-              key: 'parts-reports-folder',
-              label: 'Báo cáo phụ tùng',
-              children: [
-                { key: '/report/parts-inventory', label: <Link to="/report/parts-inventory">Xem tồn kho phụ tùng</Link> },
-                { key: '/report/parts-purchases', label: <Link to="/report/parts-purchases">Xem nhập mua phụ tùng</Link> },
-              ]
-            },
-          ],
-        },
-      ]
+            { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
+            { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
+            { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng (NCC)</Link> },
+            { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Danh mục khách buôn xe</Link> },
+          ]
+        }
+      ].filter(Boolean)
     },
 
-    {
-      key: 'admin-area',
-      icon: <Users size={18} />,
-      label: isAdmin ? 'Quản trị & Phân quyền' : 'Danh mục nhân sự & Kho',
+    // --- MẢNG PHỤ TÙNG & DỊCH VỤ ---
+    canManageSpareParts && {
+      key: 'parts-service-folder',
+      icon: <Wrench size={20} />, // Primary icon for Parts & Service Dept
+      label: 'QUẢN LÝ PHỤ TÙNG & DV',
       children: [
-        isAdmin && { key: '/employees', label: <Link to="/employees">Quản lý nhân viên</Link> },
-        { key: '/mechanics', label: <Link to="/mechanics">Quản lý thợ sửa</Link> },
-        { key: '/warehouses', label: <Link to="/warehouses">{isAdmin ? 'Quản lý kho' : 'Xem danh sách kho'}</Link> },
-      ].filter(Boolean),
+        {
+          key: 'pts-transactions',
+          icon: <Archive size={16} />,
+          label: 'Giao dịch phụ tùng',
+          children: [
+            { key: '/part-retail', label: <Link to="/part-retail">Bán lẻ phụ tùng</Link> },
+            { key: '/part-wholesale', label: <Link to="/part-wholesale">Bán buôn phụ tùng</Link> },
+            { key: '/part-import', label: <Link to="/part-import">Nhập mua phụ tùng</Link> },
+            { key: '/part-transfer', label: <Link to="/part-transfer">Luân chuyển phụ tùng</Link> },
+            { 
+              key: 'pts-debt-folder',
+              label: 'Quản lý nợ phụ tùng',
+              children: [
+                { key: '/part-retail-debt', label: <Link to="/part-retail-debt">Nợ bán lẻ</Link> },
+                { key: '/part-wholesale-debt', label: <Link to="/part-wholesale-debt">Nợ mua sỉ</Link> },
+              ]
+            }
+          ]
+        },
+        {
+          key: 'pts-services',
+          icon: <ClockIcon size={16} />,
+          label: 'Dịch vụ sửa chữa',
+          children: [
+            { key: '/maintenance-hub', label: <Link to="/maintenance-hub">Trung tâm Bảo trì (Hub)</Link> },
+          ]
+        },
+        {
+          key: 'pts-reports',
+          icon: <History size={16} />,
+          label: 'Báo cáo phụ tùng',
+          children: [
+            { key: '/report/parts-sales', label: <Link to="/report/parts-sales">Nhật ký bán lẻ PT</Link> },
+            { key: '/report/parts-wholesale', label: <Link to="/report/parts-wholesale">Nhật ký bán buôn PT</Link> },
+            { key: '/report/parts-purchases', label: <Link to="/report/parts-purchases">Nhật ký nhập mua PT</Link> },
+            { key: '/report/parts-usage', label: <Link to="/report/parts-usage">Chi tiết xuất phụ tùng</Link> },
+            { key: '/part-inventory', label: <Link to="/part-inventory">Tồn kho phụ tùng</Link> },
+          ]
+        },
+        canManageMaster && {
+          key: 'pts-master-data',
+          icon: <Layers size={16} />,
+          label: 'Danh mục phụ tùng',
+          children: [
+            { key: '/parts', label: <Link to="/parts">Đăng ký mã phụ tùng</Link> },
+            { key: '/part-wholesale-customers', label: <Link to="/part-wholesale-customers">Đăng ký khách sỉ PT</Link> },
+            { key: '/gifts', label: <Link to="/gifts"><Space><GiftIcon size={14} /> Quản lý quà tặng</Space></Link> },
+          ]
+        }
+      ].filter(Boolean)
+    },
+
+    // --- QUẢN TRỊ HỆ THỐNG ---
+    {
+      key: 'system-management',
+      icon: <Settings size={18} />,
+      label: isAdmin ? 'QUẢN TRỊ HỆ THỐNG' : 'HỆ THỐNG & KHO',
+      children: [
+        canManageExpenses && { key: '/expenses', icon: <Wallet size={16} />, label: <Link to="/expenses">Quản lý chi tiêu</Link> },
+        isAdmin && { key: '/employees', icon: <Users size={16} />, label: <Link to="/employees">Quản lý nhân viên</Link> },
+        { key: '/mechanics', icon: <UserPlus size={16} />, label: <Link to="/mechanics">Danh sách thợ sửa</Link> },
+        { key: '/warehouses', icon: <ClipboardList size={16} />, label: <Link to="/warehouses">Quản lý kho hàng</Link> },
+      ].filter(Boolean)
     },
   ].filter(Boolean);
 
@@ -364,8 +388,8 @@ const MainLayout = ({ children }) => {
         style={{ background: '#1e1b4b' }}
       >
         <div style={{ height: 64, margin: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ minWidth: 36, width: 36, height: 36, background: '#4f46e5', borderRadius: 8, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Truck color="white" size={20} />
+          <div style={{ minWidth: 36, width: 36, height: 36, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <img src="/honda-logo.png" style={{ width: 32, height: 32, objectFit: 'contain' }} alt="Honda" />
           </div>
           <span style={{ fontSize: 16, fontWeight: 'bold', color: 'white', letterSpacing: -0.5 }}>QUẢN LÝ XE MÁY</span>
         </div>

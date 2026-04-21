@@ -21,7 +21,6 @@ const { Title, Text } = Typography;
 const PartRetailDebtPage = () => {
   const [activeTab, setActiveTab] = useState("1");
   const [salesDebt, setSalesDebt] = useState([]);
-  const [serviceDebt, setServiceDebt] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -30,14 +29,9 @@ const PartRetailDebtPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [salesRes, serviceRes] = await Promise.all([
-        api.get("/part-sales?sale_type=Retail"),
-        api.get("/maintenance-orders"),
-      ]);
-
+      const salesRes = await api.get("/part-sales?sale_type=Retail");
       // Filter for debts
       setSalesDebt(salesRes.data.filter((s) => Number(s.total_amount) > Number(s.paid_amount)));
-      setServiceDebt(serviceRes.data.filter((s) => Number(s.total_amount) > Number(s.paid_amount)));
     } catch (error) {
       message.error("Lỗi tải dữ liệu nợ: " + error.message);
     } finally {
@@ -111,41 +105,6 @@ const PartRetailDebtPage = () => {
     },
   ];
 
-  const serviceColumns = [
-    {
-      title: "Ngày sửa",
-      dataIndex: "maintenance_date",
-      render: (d) => dayjs(d).format("DD/MM/YYYY"),
-    },
-    { title: "Biển số / Xe", render: (_, r) => r.license_plate || r.model_name },
-    { title: "Khách hàng", dataIndex: "customer_name" },
-    {
-      title: "Tổng tiền",
-      dataIndex: "total_amount",
-      render: (v) => <Text strong>{Number(v).toLocaleString()} đ</Text>,
-    },
-    {
-      title: "Còn nợ",
-      render: (_, r) => (
-        <Tag color="volcano">
-          {(Number(r.total_amount) - Number(r.paid_amount)).toLocaleString()} đ
-        </Tag>
-      ),
-    },
-    {
-      title: "Thanh toán",
-      render: (_, r) => (
-        <Button
-          type="primary"
-          size="small"
-          onClick={() => handleOpenPayment(r, 'SERVICE')}
-        >
-          Trả nợ
-        </Button>
-      ),
-    },
-  ];
-
   return (
     <div className="page-container">
       <div className="page-header">
@@ -153,35 +112,11 @@ const PartRetailDebtPage = () => {
       </div>
 
       <Card className="glass-card">
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: "1",
-              label: <Space><ShoppingBag size={18} /> NỢ TỪ BÁN LẺ</Space>,
-              children: (
-                <Table
-                  dataSource={salesDebt}
-                  columns={salesColumns}
-                  rowKey="id"
-                  loading={loading}
-                />
-              ),
-            },
-            {
-              key: "2",
-              label: <Space><Wrench size={18} /> NỢ TỪ DỊCH VỤ SỬA CHỮA</Space>,
-              children: (
-                <Table
-                  dataSource={serviceDebt}
-                  columns={serviceColumns}
-                  rowKey="id"
-                  loading={loading}
-                />
-              ),
-            },
-          ]}
+        <Table
+          dataSource={salesDebt}
+          columns={salesColumns}
+          rowKey="id"
+          loading={loading}
         />
       </Card>
 

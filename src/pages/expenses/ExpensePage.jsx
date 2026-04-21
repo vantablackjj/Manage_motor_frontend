@@ -15,7 +15,7 @@ import {
   Select,
   Tag
 } from 'antd';
-import { Wallet, Save, RotateCcw, Trash2, Search, Download } from 'lucide-react';
+import { Wallet, Save, RotateCcw, Trash2, Search, Download, UploadCloud, FileSpreadsheet } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../../utils/api';
 import { exportToExcel } from '../../utils/excelExport';
@@ -29,6 +29,7 @@ const ExpensePage = () => {
   const [data, setData] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [vehicles, setVehicles] = useState([]);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
@@ -69,6 +70,41 @@ const ExpensePage = () => {
     }));
 
     exportToExcel(exportData, `DanhSachChiPhi_${dayjs().format('YYYYMMDD_HHmm')}`);
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await api.get('/import/template?type=expenses', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Mau_Import_Chi_Tieu.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      message.error('Không thể tải file mẫu');
+    }
+  };
+
+  const handleImportExcel = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', 'expenses');
+
+    setImporting(true);
+    try {
+      const res = await api.post('/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      message.success(res.data.message || 'Import thành công!');
+      fetchData();
+    } catch (error) {
+      message.error('Lỗi khi import: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setImporting(false);
+    }
+    return false; // Prevent default upload
   };
 
   const onFinish = async (values) => {
@@ -216,14 +252,46 @@ const ExpensePage = () => {
             <Wallet size={20} color="var(--primary-color)" />
             <Text strong style={{ color: 'var(--text-primary)', fontSize: 16 }}>LỊCH SỬ CHI PHÍ ĐÃ GHI</Text>
         </div>
-        <Button 
-            icon={<Download size={16} />} 
-            onClick={handleExport}
-            ghost
-            type="primary"
-        >
-            Xuất Excel
-        </Button>
+        <Space>
+            <Button 
+                icon={<Download size={16} />} 
+                onClick={handleExport}
+                ghost
+                type="primary"
+            >
+                Xuất Excel
+            </Button>
+            <Button
+                icon={<FileSpreadsheet size={16} />}
+                onClick={handleDownloadTemplate}
+                style={{ color: '#107c41', borderColor: '#107c41' }}
+            >
+                Mẫu Import
+            </Button>
+            <div style={{ display: (isAdmin || user.can_manage_expenses) ? 'block' : 'none' }}>
+                <input
+                    type="file"
+                    id="excel-upload"
+                    hidden
+                    accept=".xlsx, .xls"
+                    onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                            handleImportExcel(e.target.files[0]);
+                            e.target.value = ''; // Reset for same file re-upload
+                        }
+                    }}
+                />
+                <Button 
+                    icon={<UploadCloud size={16} />} 
+                    loading={importing}
+                    onClick={() => document.getElementById('excel-upload').click()}
+                    type="primary"
+                    style={{ background: '#107c41', borderColor: '#107c41' }}
+                >
+                    Nhập Excel
+                </Button>
+            </div>
+        </Space>
       </div>
       <Table 
         dataSource={data} 

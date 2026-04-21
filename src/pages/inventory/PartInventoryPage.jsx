@@ -15,6 +15,8 @@ import {
 } from 'antd';
 import { Search, Box, Layers, Download, RotateCcw, FileStack } from 'lucide-react';
 import api from '../../utils/api';
+import dayjs from 'dayjs';
+import { exportToExcel } from '../../utils/excelExport';
 import ImportExcelModal from '../../components/ImportExcelModal';
 
 const { Text, Title } = Typography;
@@ -53,6 +55,19 @@ const PartInventoryPage = () => {
 
   const handleSearch = () => fetchData();
 
+  const handleExport = () => {
+    if (!data || data.length === 0) return message.warning('Không có dữ liệu để xuất!');
+    const exportData = data.map(item => ({
+      'Mã phụ tùng (SKU)': item.Part?.code,
+      'Loại': item.Part?.code_type === 'HONDA' ? 'Honda' : 'Tự tạo',
+      'Tên phụ tùng': item.Part?.name,
+      'Đơn vị lẻ': item.Part?.unit,
+      'Kho': item.Warehouse?.warehouse_name || 'N/A',
+      'Số lượng tồn': Number(item.quantity)
+    }));
+    exportToExcel(exportData, `TonKhoPhuTung_${dayjs().format('YYYYMMDD')}`);
+  };
+
   const columns = [
     { 
         title: 'Mã PT (SKU)', 
@@ -82,12 +97,7 @@ const PartInventoryPage = () => {
         dataIndex: ['Warehouse', 'warehouse_name'], 
         key: 'warehouse' 
     },
-    { 
-        title: 'Vị trí', 
-        dataIndex: 'location', 
-        key: 'location',
-        render: (text) => text || <Text type="secondary" italic>Chờ cập nhật</Text>
-    },
+
     { 
         title: 'Số lượng tồn (Lẻ)', 
         dataIndex: 'quantity', 
@@ -128,7 +138,7 @@ const PartInventoryPage = () => {
             >
                 Nhập kho (Hóa đơn HVN)
             </Button>
-            <Button icon={<Download size={16} />} ghost type="primary">Xuất báo cáo</Button>
+            <Button icon={<Download size={16} />} ghost type="primary" onClick={handleExport}>Xuất báo cáo</Button>
             <Button icon={<RotateCcw size={16} />} onClick={fetchData}>Làm mới</Button>
         </Space>
       </div>

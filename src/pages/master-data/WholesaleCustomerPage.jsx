@@ -10,7 +10,8 @@ import {
   Typography, 
   Popconfirm, 
   message, 
-  Select 
+  Select,
+  Tag
 } from 'antd';
 import { Users, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
 import api from '../../utils/api';
@@ -35,10 +36,10 @@ const WholesaleCustomerPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/wholesale-customers');
+      const response = await api.get('/wholesale-customers?type=VEHICLE');
       setData(response.data);
     } catch (error) {
-      message.error('Lỗi tải danh mục khách buôn: ' + error.message);
+      message.error('Lỗi tải danh mục khách buôn xe máy: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,8 @@ const WholesaleCustomerPage = () => {
       'Mã khách': c.customer_code,
       'Họ tên': c.name,
       'Địa chỉ': c.address,
-      'Kiểu thanh toán': c.payment_type
+      'Kiểu thanh toán': c.payment_type,
+      'Phân loại': c.customer_type === 'VEHICLE' ? 'Xe máy' : (c.customer_type === 'PART' ? 'Phụ tùng' : 'Cả hai')
     }));
 
     exportToExcel(exportData, `DanhSachKhachBuon_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -104,13 +106,16 @@ const WholesaleCustomerPage = () => {
   const columns = [
     { title: 'Mã khách', dataIndex: 'customer_code', key: 'customer_code' },
     { title: 'Họ tên', dataIndex: 'name', key: 'name' },
+    { title: 'Số điện thoại', dataIndex: 'phone', key: 'phone' },
     { title: 'Địa chỉ', dataIndex: 'address', key: 'address' },
     { 
-      title: 'Kiểu thanh toán', 
-      dataIndex: 'payment_type', 
-      key: 'payment_type',
+      title: 'Phân loại', 
+      dataIndex: 'customer_type', 
+      key: 'customer_type',
       render: (val) => (
-        <span style={{ color: val === 'Trả gộp' ? '#3b82f6' : '#10b981' }}>{val}</span>
+        <Tag color={val === 'VEHICLE' ? 'blue' : (val === 'PART' ? 'purple' : 'gold')}>
+          {val === 'VEHICLE' ? 'Xe máy' : (val === 'PART' ? 'Phụ tùng' : 'Cả hai')}
+        </Tag>
       )
     },
     {
@@ -168,7 +173,8 @@ const WholesaleCustomerPage = () => {
         onCancel={() => setImportVisible(false)}
         onSuccess={fetchData}
         type="customers"
-        title="Nhập danh sách khách hàng buôn"
+        extraData={{ customer_type: 'VEHICLE' }}
+        title="Nhập danh sách khách hàng buôn xe máy"
       />
 
       {canManageMaster && (
@@ -177,7 +183,7 @@ const WholesaleCustomerPage = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ payment_type: 'Trả gộp' }}
+            initialValues={{ payment_type: 'Trả gộp', customer_type: 'VEHICLE' }}
           >
             <Row gutter={16}>
               <Col xs={24} md={6}>
@@ -185,7 +191,7 @@ const WholesaleCustomerPage = () => {
                   <Input placeholder="KB001" disabled={!!editingId} />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={10}>
+              <Col xs={24} md={6}>
                 <Form.Item label="Họ tên" name="name" rules={[{ required: true }]}>
                   <Input 
                     placeholder="Ví dụ: Đại lý A" 
@@ -193,7 +199,12 @@ const WholesaleCustomerPage = () => {
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={4}>
+                <Form.Item label="Số điện thoại" name="phone">
+                  <Input placeholder="09xxx" />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
                 <Form.Item label="Kiểu thanh toán" name="payment_type" rules={[{ required: true }]}>
                   <Select>
                     <Option value="Trả gộp">Trả gộp</Option>
@@ -201,9 +212,21 @@ const WholesaleCustomerPage = () => {
                   </Select>
                 </Form.Item>
               </Col>
+              <Col xs={24} md={4}>
+                <Form.Item label="Đối tượng sỉ" name="customer_type" rules={[{ required: true }]}>
+                  <Select>
+                    <Option value="VEHICLE">Xe máy</Option>
+                    <Option value="PART">Phụ tùng</Option>
+                    <Option value="BOTH">Cả hai</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
               <Col xs={24}>
                 <Form.Item label="Địa chỉ" name="address">
-                  <Input placeholder="Nhập địa chỉ" />
+                  <Input 
+                    placeholder="Nhập địa chỉ" 
+                    onBlur={(e) => form.setFieldsValue({ address: capitalizeName(e.target.value) })}
+                  />
                 </Form.Item>
               </Col>
             </Row>

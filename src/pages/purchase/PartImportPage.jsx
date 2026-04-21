@@ -15,14 +15,19 @@ import {
   DatePicker,
   Card,
   Divider,
-  AutoComplete
+  AutoComplete,
+  Tag,
+  Modal,
+  Tabs
 } from 'antd';
-import { PlusCircle, Search, Trash2, Save, RotateCcw, Box, User, Receipt, Calculator, ChevronRight, FileStack } from 'lucide-react';
+import { PlusCircle, Search, Trash2, Save, RotateCcw, Box, User, Receipt, Calculator, ChevronRight, FileStack, Printer, Plus, History, Eye } from 'lucide-react';
+import PrintPartPurchase from '../../components/PrintPartPurchase';
+import { printReceipt } from '../../utils/printHelper';
 import api from '../../utils/api';
 import dayjs from 'dayjs';
 import ImportExcelModal from '../../components/ImportExcelModal';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text, Title } = Typography;
 
 const PartImportPage = () => {
   const [form] = Form.useForm();
@@ -45,6 +50,11 @@ const PartImportPage = () => {
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('1');
+  const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Search Results for Parts
   const [partOptions, setPartOptions] = useState([]);
@@ -67,25 +77,46 @@ const PartImportPage = () => {
     }
   };
 
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+        const res = await api.get('/reports/parts/purchases', {
+            params: {
+                from_date: dayjs().startOf('month').format('YYYY-MM-DD'),
+                to_date: dayjs().format('YYYY-MM-DD')
+            }
+        });
+        setHistory(res.data);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        setHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchHistory();
   }, []);
 
-  const handlePartSearch = (value) => {
-    const v = value.toLowerCase();
+  const handlePartSearch = (value = "") => {
+    const v = value ? value.toLowerCase() : "";
     const filtered = allParts.filter(
-      (p) => p.code.toLowerCase().includes(v) || p.name.toLowerCase().includes(v),
+      (p) => (p.code && p.code.toLowerCase().includes(v)) || (p.name && p.name.toLowerCase().includes(v)),
     );
     setPartOptions(
-      filtered.slice(0, 15).map((p) => ({
+      filtered.slice(0, 30).map((p) => ({
         value: p.code,
         label: (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-            <div>
+            <div style={{ flex: 1 }}>
               <Text strong style={{ display: 'block' }}>{p.code}</Text>
               <Text type="secondary" style={{ fontSize: '12px' }}>{p.name}</Text>
             </div>
-            <Tag color="blue">{p.unit}</Tag>
+            <div style={{ textAlign: 'right' }}>
+                <Tag color="blue">{p.unit}</Tag>
+                <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>Giá lẻ: {Number(p.selling_price).toLocaleString()} đ</div>
+            </div>
           </div>
         ),
         part: p,
@@ -93,7 +124,7 @@ const PartImportPage = () => {
     );
   };
 
-  const addRow = () => {
+  const addNewItem = () => {
     setItems([
       ...items,
       {
@@ -119,9 +150,9 @@ const PartImportPage = () => {
           code: part.code,
           name: part.name,
           unit: part.unit,
-          unit_price: part.purchase_price || 0,
+          unit_price: part.purchase_price || 0, 
           conversion_rate: part.default_conversion_rate || 1,
-          total_price: (part.purchase_price || 0) * item.quantity,
+          total_price: (part.purchase_price || 0) * (item.quantity || 1),
         };
       }
       return item;
@@ -129,31 +160,10 @@ const PartImportPage = () => {
     setItems(newItems);
   };
 
-  const removeItem = (key) => {
-    if (items.length === 1) {
-      setItems([
-        {
-          key: Date.now(),
-          part_id: null,
-          code: "",
-          name: "",
-          unit: "",
-          quantity: 1,
-          unit_price: 0,
-          conversion_rate: 1,
-          total_price: 0,
-        },
-      ]);
-      return;
-    }
-    setItems(items.filter((i) => i.key !== key));
-  };
-
   const updateItem = (key, field, value) => {
     const newItems = items.map(item => {
       if (item.key === key) {
         const updated = { ...item, [field]: value };
-        // Update total
         updated.total_price = Number(updated.quantity) * Number(updated.unit_price);
         return updated;
       }
@@ -163,36 +173,12 @@ const PartImportPage = () => {
   };
 
   const calculateTotal = () => {
-    const subtotal = items.reduce(
-      (sum, item) => sum + Number(item.total_price || 0),
-      0,
-    );
-    const vatPercent = form.getFieldValue("vat_percent") || 0;
-    return subtotal * (1 + vatPercent / 100);
-  };
-
-  const resetAll = () => {
-    setItems([
-      {
-        key: Date.now(),
-        part_id: null,
-        code: "",
-        name: "",
-        unit: "",
-        quantity: 1,
-        unit_price: 0,
-        conversion_rate: 1,
-        total_price: 0,
-      },
-    ]);
-    form.resetFields();
+    return items.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
   };
 
   const onFinish = async (values) => {
     const validItems = items.filter((i) => i.part_id);
-    if (validItems.length === 0) {
-      return message.error("Vui lòng chọn ít nhất một phụ tùng!");
-    }
+    if (validItems.length === 0) return message.error("Vui lòng chọn ít nhất một phụ tùng!");
 
     setSubmitLoading(true);
     try {
@@ -211,302 +197,200 @@ const PartImportPage = () => {
 
       await api.post("/part-purchase", payload);
       message.success("Nhập hàng thành công!");
-      resetAll();
+      setItems([{ key: Date.now(), part_id: null, code: "", name: "", unit: "", quantity: 1, unit_price: 0, conversion_rate: 1, total_price: 0 }]);
+      form.resetFields();
+      fetchHistory();
     } catch (error) {
-      message.error(
-        "Lỗi khi lưu hóa đơn: " +
-          (error.response?.data?.message || error.message),
-      );
+      message.error("Lỗi khi lưu: " + (error.response?.data?.message || error.message));
     } finally {
       setSubmitLoading(false);
     }
   };
 
   const columns = [
-    {
-      title: "Mã Phụ Tùng",
-      dataIndex: "code",
-      key: "code",
-      width: 200,
-      render: (text, record) => (
-        <AutoComplete
-          style={{ width: "100%" }}
-          onSearch={handlePartSearch}
-          options={partOptions}
-          value={text}
-          onSelect={(val, option) => handleSelectPart(record.key, option.part)}
-          onChange={(val) => updateItem(record.key, "code", val)}
-          placeholder="Mã PT..."
-        >
-          <Input size="large" />
+    { title: "Mã PT", dataIndex: "code", width: 150, render: (text, record) => (
+        <AutoComplete options={partOptions} onSearch={handlePartSearch} value={text} onSelect={(val, option) => handleSelectPart(record.key, option.part)} onChange={(val) => updateItem(record.key, "code", val)}>
+          <Input />
         </AutoComplete>
-      ),
-    },
+    )},
+    { title: "Tên PT", dataIndex: "name", render: (text, record) => <Input value={text} onChange={(e) => updateItem(record.key, "name", e.target.value)} /> },
+    { title: "SL", dataIndex: "quantity", width: 80, render: (v, r) => <InputNumber min={1} value={v} onChange={(v) => updateItem(r.key, "quantity", v)} /> },
+    { title: "Đơn giá", dataIndex: "unit_price", width: 120, render: (v, r) => <InputNumber min={0} value={v} onChange={(v) => updateItem(r.key, "unit_price", v)} /> },
+    { title: "Thành tiền", dataIndex: "total_price", render: (v) => <Text strong>{Number(v).toLocaleString()} đ</Text> },
+    { title: "", width: 50, render: (_, r) => <Button type="text" danger icon={<Trash2 size={16} />} onClick={() => setItems(items.filter(i => i.key !== r.key))} /> }
+  ];
+
+  const historyColumns = [
+    { title: 'Ngày nhập', dataIndex: 'purchase_date', key: 'date', render: v => dayjs(v).format('DD/MM/YYYY') },
+    { title: 'Nhà cung cấp', dataIndex: ['Supplier', 'name'], key: 'supplier' },
+    { title: 'Kho nhập', dataIndex: ['Warehouse', 'warehouse_name'], key: 'warehouse' },
+    { title: 'Tổng tiền', dataIndex: 'total_amount', align: 'right', render: v => <Text strong>{Number(v).toLocaleString()} đ</Text> },
     {
-      title: "Tên Phụ Tùng",
-      dataIndex: "name",
-      key: "name",
-      width: 250,
-      render: (text, record) => (
-        <Input
-          size="large"
-          value={text}
-          placeholder="Tên phụ tùng..."
-          onChange={(e) => updateItem(record.key, "name", e.target.value)}
-        />
-      ),
-    },
-    {
-      title: "Đơn vị nhập",
-      dataIndex: "unit",
-      key: "unit",
-      width: 120,
-      render: (text, record) => (
-        <Input
-          size="large"
-          value={text}
-          onChange={(e) => updateItem(record.key, "unit", e.target.value)}
-        />
-      ),
-    },
-    {
-      title: "Số lượng",
-      dataIndex: "quantity",
-      key: "quantity",
-      width: 100,
-      render: (value, record) => (
-        <InputNumber
-          size="large"
-          min={1}
-          value={value}
-          onChange={(v) => updateItem(record.key, "quantity", v)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-    {
-      title: "Quy đổi",
-      dataIndex: "conversion_rate",
-      key: "conversion_rate",
-      width: 150,
-      render: (value, record) => (
-        <Space direction="vertical" size={0} style={{ width: "100%" }}>
-          <InputNumber
-            size="large"
-            min={1}
-            value={value}
-            onChange={(v) => updateItem(record.key, "conversion_rate", v)}
-            style={{ width: "100%" }}
-          />
-          <Text type="secondary" style={{ fontSize: "11px" }}>
-            = {Number(record.quantity * (value || 1)).toLocaleString()}{" "}
-            {record.unit} lẻ
-          </Text>
-        </Space>
-      ),
-    },
-    {
-      title: "Đơn giá (đ)",
-      dataIndex: "unit_price",
-      key: "unit_price",
-      width: 150,
-      render: (value, record) => (
-        <InputNumber
-          size="large"
-          min={0}
-          value={value}
-          className="modern-input-number"
-          formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
-          parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
-          onChange={(v) => updateItem(record.key, "unit_price", v)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-    { 
-        title: 'Thành tiền', 
-        dataIndex: 'total_price', 
-        key: 'total_price',
-        render: (v) => <Text strong>{Number(v || 0).toLocaleString()} đ</Text>
-    },
-    {
-      title: "",
-      key: "action",
-      width: 50,
-      render: (_, record) => (
-        <Button
-          type="text"
-          danger
-          icon={<Trash2 size={16} />}
-          onClick={() => removeItem(record.key)}
-        />
-      ),
-    },
+        title: 'Tác vụ',
+        key: 'action',
+        render: (_, r) => (
+            <Space>
+                <Button size="small" icon={<Eye size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setIsDetailModalOpen(true); }} />
+                <Button size="small" type="primary" ghost icon={<Printer size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setTimeout(() => printReceipt('print-part-purchase-receipt'), 300); }} />
+            </Space>
+        )
+    }
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Row gutter={24}>
-        {/* LEFT PANEL: INVOICE INFO */}
-        <Col xs={24} lg={7}>
-          <div className="glass-card" style={{ padding: 24, position: 'sticky', top: 24 }}>
-            <Title level={4} style={{ marginBottom: 20, display: 'flex', alignItems: 'center' }}>
-                <Receipt size={20} style={{ marginRight: 8 }} /> THÔNG TIN HÓA ĐƠN
-            </Title>
-            
-            <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ purchase_date: dayjs(), vat_percent: 0 }}>
-                <Form.Item label="Ngày nhập" name="purchase_date" rules={[{ required: true }]}>
-                    <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" size="large" />
-                </Form.Item>
+    <div className="page-container" style={{ padding: 24 }}>
+      <div style={{ display: 'none' }}>
+        <PrintPartPurchase 
+          purchase={selectedPurchaseDetail} 
+          items={selectedPurchaseDetail?.PartPurchaseItems} 
+          warehouse={selectedPurchaseDetail?.Warehouse} 
+        />
+      </div>
 
-                <Form.Item label="Nhà cung cấp" name="supplier_id" rules={[{ required: true }]}>
-                    <Select placeholder="Chọn nhà cung cấp" size="large">
-                        {suppliers.map(s => <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>)}
-                    </Select>
-                </Form.Item>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={2} className="gradient-text" style={{ margin: 0 }}>QUẢN LÝ NHẬP KHO PHỤ TÙNG</Title>
+        <Button 
+          icon={<FileStack size={18} />} 
+          onClick={() => setIsImportModalOpen(true)}
+          style={{ 
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontWeight: 600,
+            color: 'var(--primary-color)',
+            borderColor: 'var(--primary-color)'
+          }}
+        >
+          Nhập từ Excel (Hóa đơn HVN)
+        </Button>
+      </div>
 
-                <Form.Item label="Nhập về kho" name="warehouse_id" rules={[{ required: true }]}>
-                    <Select placeholder="Chọn kho nhận" size="large">
-                        {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
-                    </Select>
-                </Form.Item>
+      <Tabs 
+        activeKey={activeTab} 
+        onChange={setActiveTab} 
+        type="card"
+        items={[
+            {
+                key: '1',
+                label: <Space><Plus size={18} /> LẬP PHIẾU NHẬP MỚI</Space>,
+                children: (
+                    <Row gutter={[24, 24]}>
+                        <Col xs={24} lg={7}>
+                        <Card className="glass-card" title={<Space><FileStack size={20} /> Thông tin chung</Space>}>
+                            <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ purchase_date: dayjs() }}>
+                            <Form.Item label="Ngày nhập kho" name="purchase_date" rules={[{ required: true }]}>
+                                <DatePicker style={{ width: "100%" }} size="large" format="DD/MM/YYYY" />
+                            </Form.Item>
 
-                <Form.Item label="Số hóa đơn gốc" name="invoice_no">
-                  <Input placeholder="Mã HĐ từ NCC..." size="large" />
-                </Form.Item>
+                            <Form.Item label="Nhà cung cấp" name="supplier_id" rules={[{ required: true }]}>
+                                <Select size="large" placeholder="Chọn nhà cung cấp..." showSearch optionFilterProp="children">
+                                    {suppliers.map((s) => (
+                                        <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
 
-                <div style={{ padding: "8px 0" }}>
-                  <Button
-                    icon={<RotateCcw size={16} />}
-                    onClick={resetAll}
-                    style={{ marginRight: 8 }}
-                  >
-                    Làm mới
-                  </Button>
-                </div>
+                            <Form.Item label="Kho nhập hàng" name="warehouse_id" rules={[{ required: true }]}>
+                                <Select size="large" placeholder="Chọn kho nhập...">
+                                    {warehouses.map((w) => (
+                                        <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
 
-                <Divider style={{ margin: "16px 0" }} />
+                            <Divider />
 
-                <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: 16, borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
-                        <Text>Tổng tiền hàng:</Text>
-                        <Text strong style={{ fontSize: 16 }}>{items.reduce((sum, i) => sum + i.total_price, 0).toLocaleString()} đ</Text>
+                            <div style={{ padding: 15, background: "rgba(0,0,0,0.02)", borderRadius: 12 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                                    <Text type="secondary">Tổng mặt hàng:</Text>
+                                    <Text strong>{items.length}</Text>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                    <Title level={4} style={{ margin: 0 }}>TỔNG TIỀN:</Title>
+                                    <Title level={4} style={{ margin: 0, color: "var(--primary-color)" }}>
+                                        {calculateTotal().toLocaleString()} đ
+                                    </Title>
+                                </div>
+                            </div>
+
+                            <Button type="primary" block size="large" icon={<Save size={20} />} style={{ marginTop: 24, height: 50, fontWeight: "bold" }} loading={submitLoading} onClick={() => form.submit()}>
+                                XÁC NHẬN NHẬP KHO
+                            </Button>
+
+                            <Button block ghost icon={<FileStack size={18} />} style={{ marginTop: 12 }} onClick={() => setIsImportModalOpen(true)}>
+                                NHẬP TỪ EXCEL (FILE HVN)
+                            </Button>
+                            </Form>
+                        </Card>
+                        </Col>
+
+                        <Col xs={24} lg={17}>
+                        <Card className="glass-card" title={<Space><PlusCircle size={20} /> Chi tiết phụ tùng nhập</Space>} extra={<Button type="dashed" icon={<Plus size={16} />} onClick={addNewItem}>Thêm dòng</Button>}>
+                            <Table dataSource={items} columns={columns} pagination={false} scroll={{ x: "max-content", y: 550 }} className="modern-table" />
+                        </Card>
+                        </Col>
                     </Row>
-                    <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
-                        <Text>VAT (%):</Text>
-                        <Form.Item name="vat_percent" style={{ margin: 0 }}>
-                            <InputNumber min={0} max={100} size="small" style={{ width: 60 }} onChange={() => form.submit()} />
-                        </Form.Item>
-                    </Row>
-                    <Divider style={{ margin: '12px 0' }} />
-                    <Row justify="space-between" align="middle">
-                        <Text strong>TỔNG CỘNG:</Text>
-                        <Title level={4} style={{ margin: 0, color: 'var(--primary-color)' }}>
-                            {calculateTotal().toLocaleString()} đ
-                        </Title>
-                    </Row>
-                </div>
+                )
+            },
+            {
+                key: '2',
+                label: <Space><History size={18} /> LỊCH SỬ NHẬP KHO</Space>,
+                children: (
+                    <Card className="glass-card" styles={{ body: { padding: 0 } }}>
+                         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between' }}>
+                            <Text type="secondary">Các phiếu nhập kho trong tháng</Text>
+                            <Button size="small" icon={<RotateCcw size={14} />} onClick={fetchHistory} loading={historyLoading}>Làm mới</Button>
+                         </div>
+                         <Table 
+                            dataSource={history} 
+                            columns={historyColumns} 
+                            loading={historyLoading} 
+                            pagination={{ pageSize: 12 }}
+                            className="modern-table"
+                         />
+                    </Card>
+                )
+            }
+        ]}
+      />
 
-                <Form.Item label="Tiền đã thanh toán" name="paid_amount" style={{ marginTop: 16 }}>
-                    <InputNumber 
-                        style={{ width: '100%' }}
-                        size="large"
-                        formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
-                        parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
-                    />
-                </Form.Item>
-
-                <Form.Item label="Ghi chú" name="notes">
-                    <Input.TextArea rows={2} />
-                </Form.Item>
-
-                <Button 
-                    type="primary" 
-                    size="large" 
-                    block 
-                    icon={<Save size={18} />} 
-                    onClick={() => form.submit()}
-                    loading={submitLoading}
-                    style={{ height: 48, borderRadius: 12, marginTop: 12 }}
-                >
-                    LƯU HÓA ĐƠN
-                </Button>
-            </Form>
-          </div>
-        </Col>
-
-        {/* RIGHT PANEL: ITEMS GRID */}
-        <Col xs={24} lg={17}>
-          <div className="glass-card" style={{ padding: 24, minHeight: 'calc(100vh - 48px)' }}>
-            <div
-              style={{
-                marginBottom: 16,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Title level={4} style={{ margin: 0 }}>
-                CHI TIẾT LINH KIỆN NHẬP
-              </Title>
-              <Space>
-                <Button
-                    type="primary"
-                    icon={<PlusCircle size={18} />}
-                    onClick={addRow}
-                >
-                    Thêm linh kiện
-                </Button>
-                <Button
-                    icon={<FileStack size={18} />}
-                    onClick={() => setIsImportModalOpen(true)}
-                >
-                    Nhập từ Excel (HVN)
-                </Button>
-              </Space>
-            </div>
-
+      <Modal
+        title={`CHI TIẾT PHIẾU NHẬP #${selectedPurchaseDetail?.id}`}
+        open={isDetailModalOpen}
+        onCancel={() => setIsDetailModalOpen(false)}
+        width={900}
+        footer={[
+            <Button key="close" onClick={() => setIsDetailModalOpen(false)}>Đóng</Button>,
+            <Button key="print" type="primary" icon={<Printer size={16} />} onClick={() => { setTimeout(() => printReceipt('print-part-purchase-receipt'), 300); }}>In phiếu nhập</Button>
+        ]}
+      >
+        {selectedPurchaseDetail && (
             <Table 
-                dataSource={items} 
-                columns={columns} 
+                dataSource={selectedPurchaseDetail.PartPurchaseItems}
                 pagination={false}
-                className="modern-table"
-                locale={{ emptyText: 'Chưa có linh kiện nào được chọn. Hãy tìm kiếm ở trên để thêm.' }}
-                summary={() => (
-                    <Table.Summary fixed>
-                      <Table.Summary.Row>
-                        <Table.Summary.Cell index={0} colSpan={6} textAlign="right">
-                          <Text strong>Tổng cộng:</Text>
-                        </Table.Summary.Cell>
-                        <Table.Summary.Cell index={1}>
-                          <Text strong type="danger" style={{ fontSize: 16 }}>
-                            {items.reduce((sum, i) => sum + i.total_price, 0).toLocaleString()} đ
-                          </Text>
-                        </Table.Summary.Cell>
-                      </Table.Summary.Row>
-                    </Table.Summary>
-                )}
+                columns={[
+                    { title: 'STT', render: (_, __, i) => i + 1, width: 60 },
+                    { title: 'Mã PT', dataIndex: ['Part', 'code'] },
+                    { title: 'Tên PT', dataIndex: ['Part', 'name'] },
+                    { title: 'SL', dataIndex: 'quantity', align: 'right' },
+                    { title: 'ĐVT', dataIndex: 'unit' },
+                    { title: 'Đơn giá', dataIndex: 'unit_price', align: 'right', render: v => Number(v).toLocaleString() },
+                    { title: 'Thành tiền', dataIndex: 'total_price', align: 'right', render: v => <Text strong>{Number(v).toLocaleString()} đ</Text> }
+                ]}
             />
-            
-            <div style={{ marginTop: 24, textAlign: 'center', opacity: 0.5 }}>
-                <Paragraph>
-                    <Calculator size={14} style={{ marginRight: 4 }} /> 
-                    Số lượng tồn kho sẽ được quy đổi tự động: 1 [Đơn vị nhập] = [Quy đổi] [Đơn vị cơ bản]
-                </Paragraph>
-            </div>
-          </div>
-        </Col>
-      </Row>
+        )}
+      </Modal>
 
-      <ImportExcelModal 
+      <ImportExcelModal
         visible={isImportModalOpen}
         onCancel={() => setIsImportModalOpen(false)}
         onSuccess={() => {
-            fetchData();
-            setIsImportModalOpen(false);
+          fetchData();
+          fetchHistory();
         }}
         type="part_purchases"
-        title="Nhập kho linh kiện từ Excel (Hóa đơn HVN)"
+        title="Nhập linh kiện từ File Excel (HVN)"
       />
     </div>
   );

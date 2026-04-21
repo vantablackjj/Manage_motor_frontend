@@ -10,7 +10,8 @@ import {
   Typography, 
   Popconfirm, 
   message,
-  InputNumber
+  InputNumber,
+  Tag
 } from 'antd';
 import { PlusCircle, Search, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
 import api from '../../utils/api';

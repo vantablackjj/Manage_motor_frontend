@@ -21,7 +21,9 @@ import {
   Calendar,
   Layers,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Wrench,
+  Settings
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../../utils/api';
@@ -166,17 +168,62 @@ const AdminDashboardPage = () => {
                     </Card>
                 </Col>
 
-                 {/* 4. Tồn kho */}
+                  {/* 4. Tồn kho Xe */}
+                  <Col xs={24} sm={12} lg={6}>
+                     <Card className="glass-card dashboard-card">
+                         <Statistic
+                             title={<Space><Package size={16} /> <Text type="secondary">XE ĐANG CÓ SẴN (TỒN)</Text></Space>}
+                             value={stats?.inventorySize || 0}
+                             valueStyle={{ color: '#f59e0b' }}
+                             suffix="xe"
+                         />
+                          <div style={{ marginTop: 8 }}>
+                             <Tag color="orange">Cần đẩy mạnh bán hàng</Tag>
+                         </div>
+                     </Card>
+                 </Col>
+
+                 {/* 5. Phụ tùng - Doanh thu */}
+                 <Col xs={24} sm={12} lg={6}>
+                     <Card className="glass-card dashboard-card">
+                         <Statistic
+                             title={<Space><Settings size={16} /> <Text type="secondary">DOANH THU PHỤ TÙNG</Text></Space>}
+                             value={stats?.parts?.sales?.revenue || 0}
+                             formatter={(v) => <span style={{ fontWeight: 'bold' }}>{formatCurrency(v)}</span>}
+                         />
+                          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+                             <Text type="secondary" style={{ fontSize: 12 }}>Số hóa đơn:</Text>
+                             <Text strong style={{ fontSize: 12 }}>{stats?.parts?.sales?.count || 0}</Text>
+                         </div>
+                     </Card>
+                 </Col>
+
+                 {/* 6. Dịch vụ sửa chữa */}
+                 <Col xs={24} sm={12} lg={6}>
+                     <Card className="glass-card dashboard-card">
+                         <Statistic
+                             title={<Space><Wrench size={16} /> <Text type="secondary">DOANH THU DỊCH VỤ</Text></Space>}
+                             value={stats?.maintenance?.revenue || 0}
+                             formatter={(v) => <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>{formatCurrency(v)}</span>}
+                         />
+                          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+                             <Text type="secondary" style={{ fontSize: 12 }}>Số lượt SC:</Text>
+                             <Text strong style={{ fontSize: 12 }}>{stats?.maintenance?.count || 0}</Text>
+                         </div>
+                     </Card>
+                 </Col>
+
+                 {/* 7. Tồn kho phụ tùng */}
                  <Col xs={24} sm={12} lg={6}>
                     <Card className="glass-card dashboard-card">
                         <Statistic
-                            title={<Space><Package size={16} /> <Text type="secondary">XE ĐANG CÓ SẴN (TỒN)</Text></Space>}
-                            value={stats?.inventorySize || 0}
-                            valueStyle={{ color: '#f59e0b' }}
-                            suffix="xe"
+                            title={<Space><Layers size={16} /> <Text type="secondary">MÃ PHỤ TÙNG CÒN TỒN</Text></Space>}
+                            value={stats?.parts?.inventoryCount || 0}
+                            valueStyle={{ color: '#8b5cf6' }}
+                            suffix="mã"
                         />
                          <div style={{ marginTop: 8 }}>
-                            <Tag color="orange">Cần đẩy mạnh bán hàng</Tag>
+                            <Text type="secondary" style={{ fontSize: 12 }}>Đã trừ mã hết hàng</Text>
                         </div>
                     </Card>
                 </Col>
@@ -194,10 +241,11 @@ const AdminDashboardPage = () => {
                                 </div>
                                 <Divider style={{ margin: '12px 0' }} />
                                 <div style={{ padding: '10px 0' }}>
-                                    <Text type="secondary">Hoạt động nhập hàng</Text>
-                                    <div style={{ fontSize: 24, fontWeight: 'bold', margin: '8px 0' }}>{stats?.purchase?.count || 0} <small style={{ fontWeight: 'normal', fontSize: 14, opacity: 0.5 }}>đơn</small></div>
-                                    <div style={{ fontSize: 13 }}>Vốn đã nhập: <Text strong style={{ color: '#ef4444' }}>{formatCurrency(stats?.purchase?.spent)}</Text></div>
-                                </div>
+                                     <Text type="secondary">Hoạt động nhập hàng</Text>
+                                     <div style={{ fontSize: 24, fontWeight: 'bold', margin: '8px 0' }}>{Number(stats?.purchase?.count || 0) + Number(stats?.parts?.purchase?.count || 0)} <small style={{ fontWeight: 'normal', fontSize: 14, opacity: 0.5 }}>đơn</small></div>
+                                     <div style={{ fontSize: 13 }}>Nhập xe: <Text strong>{formatCurrency(stats?.purchase?.spent)}</Text></div>
+                                     <div style={{ fontSize: 13 }}>Nhập PT: <Text strong>{formatCurrency(stats?.parts?.purchase?.spent)}</Text></div>
+                                 </div>
                             </Col>
                             <Col xs={24} md={12} className="dashboard-detail-col">
                                 <div style={{ padding: '10px 0' }}>

@@ -149,6 +149,15 @@ const PurchasePage = () => {
     const index = newData.findIndex((item) => item.key === key);
     if (index > -1) {
       newData[index][field] = value;
+      
+      // Tự động nhảy giá gợi ý khi chọn loại xe
+      if (field === 'type_id') {
+        const type = vehicleTypes.find(t => t.id === value);
+        if (type && type.suggested_price) {
+          newData[index]['price_vnd'] = Number(type.suggested_price);
+        }
+      }
+      
       setBatchItems(newData);
     }
   };

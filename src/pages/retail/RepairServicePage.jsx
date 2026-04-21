@@ -45,6 +45,7 @@ const RepairServicePage = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [allParts, setAllParts] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
   const [liftTables, setLiftTables] = useState([]);
   const [partOptions, setPartOptions] = useState([]);
   const [vehicleOptions, setVehicleOptions] = useState([]);
@@ -56,16 +57,18 @@ const RepairServicePage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [whRes, mechanicsRes, partsRes, liftRes] = await Promise.all([
+      const [whRes, mechanicsRes, partsRes, liftRes, typesRes] = await Promise.all([
         api.get('/warehouses'),
         api.get('/mechanics'),
         api.get('/parts'),
-        api.get('/lift-tables')
+        api.get('/lift-tables'),
+        api.get('/vehicle-types')
       ]);
       setWarehouses(whRes.data);
       setMechanics(mechanicsRes.data.filter(m => m.is_active));
       setAllParts(partsRes.data);
       setLiftTables(liftRes.data);
+      setVehicleTypes(typesRes.data);
 
       if (isEditing) {
           fetchOrderDetails();
@@ -353,7 +356,7 @@ const RepairServicePage = () => {
                 min={0} 
                 value={v} 
                 formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
-                parser={(val) => val.replace(/\$\s?|(\.*)/g, "")}
+                parser={(val) => val.replace(/\./g, "")}
                 onChange={(val) => updateItem(record.key, 'unit_price', val)} 
                 style={{ width: '100%' }}
             />
@@ -427,7 +430,14 @@ const RepairServicePage = () => {
                         </Col>
                         <Col span={24}>
                             <Form.Item label="Loại xe / Model" name="model_name">
-                                <Input placeholder="AIRBLADE 2023..." />
+                                <Select 
+                                    showSearch 
+                                    placeholder="Chọn loại xe hoặc gõ tìm..."
+                                    optionFilterProp="children"
+                                    allowClear
+                                >
+                                    {vehicleTypes.map(t => <Select.Option key={t.id} value={t.name}>{t.name}</Select.Option>)}
+                                </Select>
                             </Form.Item>
                         </Col>
                     </Row>

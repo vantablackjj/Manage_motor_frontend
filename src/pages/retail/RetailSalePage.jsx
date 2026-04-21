@@ -80,6 +80,8 @@ const RetailSalePage = () => {
   // printSale state removed - now using window.open approach
   const [searchText, setSearchText] = useState("");
   const [showOnlyDebt, setShowOnlyDebt] = useState(false);
+  const [availableGifts, setAvailableGifts] = useState([]);
+  const [giftInventory, setGiftInventory] = useState([]);
 
   useEffect(() => {
     fetchInitialData();
@@ -87,18 +89,23 @@ const RetailSalePage = () => {
 
   const fetchInitialData = async (warehouseId = selectedWarehouseId) => {
     try {
-      const [salesRes, stockRes, whRes, empRes] = await Promise.all([
-        api.get("/retail-sales"),
-        api.get(
-          `/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
-        ),
-        isAdmin ? api.get("/warehouses") : Promise.resolve({ data: [] }),
-        api.get("/auth/users"),
-      ]);
+      const [salesRes, stockRes, whRes, empRes, giftRes, giftInvRes] =
+        await Promise.all([
+          api.get("/retail-sales"),
+          api.get(
+            `/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
+          ),
+          isAdmin ? api.get("/warehouses") : Promise.resolve({ data: [] }),
+          api.get("/auth/users"),
+          api.get("/gifts"),
+          api.get(`/gifts/inventory${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`),
+        ]);
       setSalesHistory(salesRes.data);
       setAvailableStock(stockRes.data);
       if (isAdmin) setWarehouses(whRes.data);
       setEmployees(empRes.data);
+      setAvailableGifts(giftRes.data);
+      setGiftInventory(giftInvRes.data);
     } catch (error) {
       message.error("Lỗi tải dữ liệu: " + error.message);
     }
@@ -115,9 +122,14 @@ const RetailSalePage = () => {
     const vehicle = availableStock.find((v) => v.id === id);
     if (vehicle) {
       setSelectedVehicle(vehicle);
+      const suggested = vehicle.VehicleType?.suggested_price || 0;
       form.setFieldsValue({
         engine_no: vehicle.engine_no,
         chassis_no: vehicle.chassis_no,
+        sale_price: Number(suggested),
+        paid_amount: Number(suggested),
+        cash_amount: Number(suggested),
+        transfer_amount: 0
       });
 
       setShowPriceWarning(false);
@@ -806,6 +818,11 @@ const RetailSalePage = () => {
                       size="large"
                       placeholder="Tỉnh, Huyện, Xã..."
                       prefix={<MapPin size={16} />}
+                      onBlur={(e) =>
+                        form.setFieldsValue({
+                          address: capitalizeName(e.target.value),
+                        })
+                      }
                     />
                   </Form.Item>
                 </Col>
@@ -843,7 +860,7 @@ const RetailSalePage = () => {
                       formatter={(v) =>
                         `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                       }
-                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                      parser={(v) => v.replace(/\./g, "")}
                     />
                   </Form.Item>
                 </Col>
@@ -867,7 +884,7 @@ const RetailSalePage = () => {
                       formatter={(v) =>
                         `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                       }
-                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                      parser={(v) => v.replace(/\./g, "")}
                     />
                   </Form.Item>
                 </Col>
@@ -880,7 +897,7 @@ const RetailSalePage = () => {
                       formatter={(v) =>
                         `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                       }
-                      parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                      parser={(v) => v.replace(/\./g, "")}
                     />
                   </Form.Item>
                 </Col>
@@ -922,7 +939,7 @@ const RetailSalePage = () => {
                             formatter={(v) =>
                               `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                             }
-                            parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                            parser={(v) => v.replace(/\./g, "")}
                           />
                         </Form.Item>
                       );
@@ -1035,7 +1052,7 @@ const RetailSalePage = () => {
                               formatter={(v) =>
                                 `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                               }
-                              parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                              parser={(v) => v.replace(/\./g, "")}
                               placeholder="Số tiền vay..."
                             />
                           </Form.Item>
@@ -1108,37 +1125,32 @@ const RetailSalePage = () => {
               >
                 <Checkbox.Group style={{ width: "100%" }}>
                   <Row gutter={[8, 8]}>
-                    <Col span={8}>
-                      <Checkbox value="Mũ bảo hiểm">Mũ bảo hiểm</Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Checkbox value="Áo mưa">Áo mưa</Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Checkbox value="Phiếu thay dầu">Phiếu thay dầu</Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Checkbox value="Thẻ bảo dưỡng xe cũ">
-                        Thẻ BD xe cũ
-                      </Checkbox>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        noStyle
-                        shouldUpdate={(prev, curr) =>
-                          prev.sale_type !== curr.sale_type
-                        }
-                      >
-                        {({ getFieldValue }) => (
-                          <Checkbox
-                            value="Bảo hiểm đi đường"
-                            disabled={getFieldValue("sale_type") !== "Đăng ký"}
-                          >
-                            Bảo hiểm đi đường
+                    {availableGifts.map((gift) => {
+                      const inv = giftInventory.find((i) => i.gift_id === gift.id);
+                      const stock = inv ? Number(inv.quantity) : 0;
+                      return (
+                        <Col span={8} key={gift.id}>
+                          <Checkbox value={gift.name} disabled={stock <= 0}>
+                            {gift.name}{" "}
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: stock > 0 ? "#10b981" : "#ef4444",
+                              }}
+                            >
+                              ({stock})
+                            </span>
                           </Checkbox>
-                        )}
-                      </Form.Item>
-                    </Col>
+                        </Col>
+                      );
+                    })}
+                    {availableGifts.length === 0 && (
+                      <Col span={24}>
+                        <Text type="secondary" italic>
+                          Chưa có danh mục quà tặng được thiết lập
+                        </Text>
+                      </Col>
+                    )}
                   </Row>
                 </Checkbox.Group>
               </Form.Item>
@@ -1311,7 +1323,7 @@ const RetailSalePage = () => {
                     formatter={(v) =>
                       `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                     }
-                    parser={(v) => v.replace(/\$\s?|(\.*)/g, "")}
+                    parser={(v) => v.replace(/\./g, "")}
                   />
                 </Form.Item>
               </Col>

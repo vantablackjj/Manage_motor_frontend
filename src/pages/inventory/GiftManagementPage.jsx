@@ -206,6 +206,12 @@ const GiftManagementPage = () => {
             }
         },
         {
+            title: 'Giá nhập',
+            dataIndex: 'price',
+            key: 'price',
+            render: (v) => <b>{v ? Number(v).toLocaleString() : 0}</b>
+        },
+        {
             title: 'Quà tặng',
             dataIndex: ['Gift', 'name'],
             key: 'gift_name',
@@ -239,6 +245,7 @@ const GiftManagementPage = () => {
 
     const giftMasterColumns = [
         { title: 'Tên quà tặng', dataIndex: 'name', key: 'name' },
+        { title: 'Giá tiêu chuẩn', dataIndex: 'price', render: (v) => <Text strong>{Number(v || 0).toLocaleString()}</Text> },
         { title: 'Đơn vị tính', dataIndex: 'unit', key: 'unit' },
         { title: 'Mô tả', dataIndex: 'description', key: 'description' },
         {
@@ -369,6 +376,13 @@ const GiftManagementPage = () => {
                     <Form.Item name="unit" label="Đơn vị tính" rules={[{ required: true, message: 'Vui lòng nhập đơn vị' }]} initialValue="Cái">
                         <Input placeholder="VD: Cái, Bộ, Chiếc..." />
                     </Form.Item>
+                    <Form.Item name="price" label="Giá nhập tiêu chuẩn" initialValue={0}>
+                        <InputNumber 
+                            style={{ width: '100%' }} 
+                            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                            parser={v => v.replace(/\$\s?|(\.*)/g, '')}
+                        />
+                    </Form.Item>
                     <Form.Item name="description" label="Mô tả">
                         <Input.TextArea placeholder="Thông tin thêm..." />
                     </Form.Item>
@@ -403,7 +417,14 @@ const GiftManagementPage = () => {
                     </Row>
                     <Row gutter={16}>
                         <Col span={12}>
-                            <Form.Item name="quantity" label="Số lượng nhập" rules={[{ required: true, min: 1 }]}>
+                            <Form.Item 
+                                name="quantity" 
+                                label="Số lượng nhập" 
+                                rules={[
+                                    { required: true, message: 'Vui lòng nhập số lượng' },
+                                    { type: 'number', min: 1, message: 'Số lượng phải lớn hơn 0' }
+                                ]}
+                            >
                                 <InputNumber style={{ width: '100%' }} placeholder="3000" />
                             </Form.Item>
                         </Col>
@@ -415,6 +436,13 @@ const GiftManagementPage = () => {
                     </Row>
                     <Form.Item name="notes" label="Ghi chú">
                         <Input.TextArea placeholder="Nhập theo lô hàng..." />
+                    </Form.Item>
+                    <Form.Item name="price" label="Giá thực tế (ghi nhận)" tooltip="Nếu để trống sẽ lấy giá mặc định trong danh mục">
+                        <InputNumber 
+                            style={{ width: '100%' }} 
+                            formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                            parser={v => v.replace(/\$\s?|(\.*)/g, '')}
+                        />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -456,7 +484,14 @@ const GiftManagementPage = () => {
                             </Form.Item>
                         </Col>
                         <Col span={12}>
-                            <Form.Item name="quantity" label="Số lượng xuất" rules={[{ required: true, min: 1 }]}>
+                            <Form.Item 
+                                name="quantity" 
+                                label="Số lượng xuất" 
+                                rules={[
+                                    { required: true, message: 'Vui lòng nhập số lượng' },
+                                    { type: 'number', min: 1, message: 'Số lượng phải lớn hơn 0' }
+                                ]}
+                            >
                                 <InputNumber style={{ width: '100%' }} placeholder="50" />
                             </Form.Item>
                         </Col>

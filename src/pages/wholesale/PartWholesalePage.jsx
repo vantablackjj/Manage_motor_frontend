@@ -18,13 +18,12 @@ import {
   Tag,
   Modal,
   Tabs,
-  Badge,
   Alert,
   Popconfirm
 } from 'antd';
 import { 
-  ShoppingCart, User, Smartphone, Save, Trash2, RotateCcw, Printer, 
-  Plus, History, Eye, Download, LayoutList, Banknote, Car, FileStack
+  ShoppingBag, User, Save, Trash2, RotateCcw, Printer, 
+  Plus, History, Eye, Download, LayoutList, Banknote, Building2, FileStack
 } from 'lucide-react';
 import ImportExcelModal from '../../components/ImportExcelModal';
 import PrintPartSale from '../../components/PrintPartSale';
@@ -36,7 +35,7 @@ import { capitalizeName } from '../../utils/stringHelper';
 
 const { Text, Title } = Typography;
 
-const PartRetailPage = () => {
+const PartWholesalePage = () => {
   const [form] = Form.useForm();
   const [paymentForm] = Form.useForm();
 
@@ -51,6 +50,7 @@ const PartRetailPage = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [allParts, setAllParts] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [partOptions, setPartOptions] = useState([]);
   const [history, setHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('1');
@@ -59,23 +59,24 @@ const PartRetailPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [lastSavedSale, setLastSavedSale] = useState(null);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
-
-  // Default to user's assigned warehouse
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(user.warehouse_id || null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  const fetchInitialData = async (warehouseId = selectedWarehouseId) => {
+  const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [whRes, partsRes, empRes] = await Promise.all([
+      const [whRes, partsRes, empRes, custRes] = await Promise.all([
         api.get('/warehouses'),
         api.get('/parts'),
-        api.get('/auth/users')
+        api.get('/auth/users'),
+        api.get('/wholesale-customers')
       ]);
       setWarehouses(whRes.data);
       setAllParts(partsRes.data);
       setEmployees(empRes.data);
+      // Only PART or BOTH customer types for parts wholesale
+      setCustomers(custRes.data.filter(c => c.customer_type === 'PART' || c.customer_type === 'BOTH'));
     } catch (error) {
       message.error('Lỗi tải dữ liệu: ' + error.message);
     } finally {
@@ -86,15 +87,8 @@ const PartRetailPage = () => {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const params = { 
-        sale_type: 'Retail',
-        from_date: dayjs().startOf('month').format('YYYY-MM-DD'),
-        to_date: dayjs().format('YYYY-MM-DD')
-      };
-      // Non-admins only see their warehouse's history
-      if (!isAdmin && user.warehouse_id) {
-        params.warehouse_id = user.warehouse_id;
-      }
+      const params = { sale_type: 'Wholesale' };
+      if (!isAdmin && user.warehouse_id) params.warehouse_id = user.warehouse_id;
       const res = await api.get('/reports/parts/sales', { params });
       setHistory(res.data);
     } catch (e) {
@@ -110,13 +104,7 @@ const PartRetailPage = () => {
     form.setFieldsValue({ seller_id: user.id, sale_date: dayjs() });
   }, []);
 
-  const handleWarehouseChange = (val) => {
-    setSelectedWarehouseId(val);
-    handlePartSearch('');
-  };
-
   const selectedWarehouseWatch = Form.useWatch('warehouse_id', form);
-  // Sync the watched field into the selectedWarehouseId state for stock display
   useEffect(() => {
     if (selectedWarehouseWatch) setSelectedWarehouseId(selectedWarehouseWatch);
   }, [selectedWarehouseWatch]);
@@ -130,7 +118,6 @@ const PartRetailPage = () => {
     setPartOptions(filtered.slice(0, 30).map(p => {
       let stockText = '0';
       let stockColor = '#ef4444';
-
       if (p.PartInventories && p.PartInventories.length > 0) {
         if (selectedWarehouseId) {
           const whStock = p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId);
@@ -143,7 +130,6 @@ const PartRetailPage = () => {
           stockColor = totalQty > 0 ? '#10b981' : '#ef4444';
         }
       }
-
       return {
         value: p.code,
         label: (
@@ -154,7 +140,7 @@ const PartRetailPage = () => {
             </div>
             <div style={{ textAlign: 'right', minWidth: 100 }}>
               <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
-              <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{Number(p.selling_price).toLocaleString()} đ</Tag>
+              <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Sỉ: {Number(p.wholesale_price || p.selling_price).toLocaleString()} đ</Tag>
             </div>
           </div>
         ),
@@ -167,28 +153,19 @@ const PartRetailPage = () => {
     handlePartSearch('');
   }, [allParts, selectedWarehouseId]);
 
-  // ── Count stock in selected warehouse for the badge ──
-  const totalStockInWarehouse = allParts.reduce((sum, p) => {
-    if (!selectedWarehouseId || !p.PartInventories) return sum;
-    const inv = p.PartInventories.find(i => i.warehouse_id === selectedWarehouseId);
-    return sum + Number(inv?.quantity || 0);
-  }, 0);
-
   const addItem = (part) => {
-    // Prevent duplicate
     if (items.find(i => i.part_id === part.id)) {
       return message.warning('Phụ tùng này đã có trong hóa đơn. Hãy sửa số lượng.');
     }
-    const key = Date.now();
     setItems([...items, {
-      key,
+      key: Date.now(),
       part_id: part.id,
       code: part.code,
       name: part.name,
       unit: part.unit,
       quantity: 1,
-      unit_price: Number(part.selling_price || 0),
-      total_price: Number(part.selling_price || 0)
+      unit_price: Number(part.wholesale_price || part.selling_price || 0),
+      total_price: Number(part.wholesale_price || part.selling_price || 0)
     }]);
   };
 
@@ -208,47 +185,44 @@ const PartRetailPage = () => {
   const totalAmount = subtotal * (1 + vatPercent / 100);
 
   const handlePrint = (saleData) => {
-    // If the saleData already has Warehouse (from backend), use it.
-    // Otherwise fallback to manual lookup (history items might not have it yet)
-    let wh = saleData.Warehouse || saleData.warehouse;
-    if (!wh || !wh.address) {
-       wh = warehouses.find(w => w.id === (saleData.warehouse_id || selectedWarehouseId)) || wh;
-    }
+    const wh = warehouses.find(w => w.id === (saleData.warehouse_id || selectedWarehouseId))
+              || { warehouse_name: saleData?.Warehouse?.warehouse_name };
     setLastSavedSale({ ...saleData, Warehouse: wh });
     setTimeout(() => printReceipt('print-part-sale-receipt'), 500);
   };
 
   const onFinish = async (values) => {
-    if (items.length === 0) return message.error('Chưa có linh kiện nào trong hóa đơn!');
+    if (items.length === 0) return message.error('Chưa có linh kiện nào trong đơn hàng!');
     const warehouseId = isAdmin ? values.warehouse_id : (user.warehouse_id || values.warehouse_id);
     if (!warehouseId) return message.error('Vui lòng chọn kho xuất hàng!');
 
     setSubmitLoading(true);
     try {
-      const mDate = values.sale_date ? (dayjs.isDayjs(values.sale_date) ? values.sale_date : dayjs(values.sale_date)) : dayjs();
-
+      const selectedCustomer = customers.find(c => c.id === values.customer_id);
       const payload = {
         ...values,
         warehouse_id: warehouseId,
-        sale_date: mDate.toISOString(),
-        sale_type: 'Retail',
+        customer_name: selectedCustomer?.name,
+        customer_phone: selectedCustomer?.phone,
+        sale_date: values.sale_date.toISOString(),
+        sale_type: 'Wholesale',
         items
       };
       const res = await api.post('/part-sale', payload);
       const savedSale = res.data;
 
       Modal.success({
-        title: 'Lưu hóa đơn thành công!',
-        content: 'Bạn có muốn in hóa đơn ngay không?',
-        okText: 'In hóa đơn',
+        title: 'Lưu đơn hàng buôn thành công!',
+        content: 'Bạn có muốn in phiếu xuất kho ngay không?',
+        okText: 'In phiếu xuất',
         cancelText: 'Đóng',
-        onOk: () => handlePrint({ ...savedSale, ...values, sale_date: mDate, warehouse_id: warehouseId, PartSaleItems: items }),
+        onOk: () => handlePrint({ ...savedSale, ...values, warehouse_id: warehouseId, PartSaleItems: items }),
         closable: true,
         maskClosable: true
       });
 
       setItems([]);
-      form.resetFields(['customer_name', 'customer_phone', 'paid_amount', 'notes', 'vat_percent']);
+      form.resetFields(['customer_id', 'paid_amount', 'notes', 'vat_percent']);
       form.setFieldsValue({ sale_date: dayjs(), seller_id: user.id });
       fetchHistory();
     } catch (error) {
@@ -280,7 +254,7 @@ const PartRetailPage = () => {
   const handleDelete = async (id) => {
     try {
       await api.delete(`/part-sales/${id}`);
-      message.success('Đã hủy hóa đơn!');
+      message.success('Đã hủy đơn hàng!');
       fetchHistory();
     } catch (error) {
       message.error('Lỗi khi hủy: ' + (error.response?.data?.message || error.message));
@@ -291,24 +265,20 @@ const PartRetailPage = () => {
     if (!history.length) return message.warning('Không có dữ liệu để xuất!');
     const exportData = history.map(s => ({
       'Ngày bán': dayjs(s.sale_date).format('DD/MM/YYYY'),
-      'Tên khách': s.customer_name || 'Khách lẻ',
-      'SĐT': s.customer_phone || '',
+      'Đối tác': s.customer_name || '',
       'Kho': s.Warehouse?.warehouse_name || '',
       'Tổng tiền': Number(s.total_amount),
       'Đã trả': Number(s.paid_amount),
       'Còn nợ': Math.max(0, Number(s.total_amount) - Number(s.paid_amount))
     }));
-    exportToExcel(exportData, `BanLePhuTung_${dayjs().format('YYYYMMDD_HHmm')}`);
+    exportToExcel(exportData, `BanBuonPhuTung_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
-  const filteredHistory = Array.isArray(history) ? history.filter(s => {
+  const filteredHistory = history.filter(s => {
     if (!searchText) return true;
     const q = searchText.toLowerCase();
-    return (
-      s.customer_name?.toLowerCase().includes(q) ||
-      s.customer_phone?.includes(q)
-    );
-  }) : [];
+    return s.customer_name?.toLowerCase().includes(q);
+  });
 
   // ────────────────────────── COLUMNS ──────────────────────────
   const itemColumns = [
@@ -320,7 +290,7 @@ const PartRetailPage = () => {
       render: (v, r) => <InputNumber min={1} value={v} onChange={val => updateItem(r.key, 'quantity', val)} size="small" />
     },
     { 
-      title: 'Đơn giá', dataIndex: 'unit_price', width: 150,
+      title: 'Giá sỉ', dataIndex: 'unit_price', width: 150,
       render: (v, r) => (
         <InputNumber 
           min={0} value={v} size="small"
@@ -343,31 +313,30 @@ const PartRetailPage = () => {
 
   const historyColumns = [
     { title: 'Ngày bán', dataIndex: 'sale_date', render: v => dayjs(v).format('DD/MM/YYYY'), width: 110 },
-    { title: 'Khách hàng', dataIndex: 'customer_name', render: (v, r) => v || r.customer_phone || 'Khách lẻ' },
-    { title: 'SĐT', dataIndex: 'customer_phone', width: 120 },
+    { title: 'Đối tác', dataIndex: 'customer_name' },
     { title: 'Kho', dataIndex: ['Warehouse', 'warehouse_name'], width: 130 },
-    { title: 'Tổng tiền', dataIndex: 'total_amount', align: 'right', width: 130, render: v => <Text strong>{Number(v).toLocaleString()} đ</Text> },
+    { title: 'Tổng tiền', dataIndex: 'total_amount', align: 'right', width: 140, render: v => <Text strong>{Number(v).toLocaleString()} đ</Text> },
     { 
-      title: 'Còn nợ', key: 'debt', width: 130, align: 'right',
+      title: 'Thanh toán', key: 'debt', width: 150, align: 'right',
       render: (_, r) => {
         const debt = Number(r.total_amount) - Number(r.paid_amount);
         return debt > 0
-          ? <Text type="danger" strong>{debt.toLocaleString()} đ</Text>
-          : <Tag color="green">Đã đủ</Tag>;
+          ? <Tag color="orange">Còn nợ {debt.toLocaleString()} đ</Tag>
+          : <Tag color="green">Đã thanh toán đủ</Tag>;
       }
     },
     {
-      title: 'Tác vụ', key: 'action', width: 130,
+      title: 'Tác vụ', key: 'action', width: 140,
       render: (_, r) => (
         <Space>
-          <Button size="small" icon={<Eye size={14} />} title="Xem chi tiết" onClick={() => { setSelectedSaleForDetail(r); setIsDetailModalOpen(true); }} />
-          <Button size="small" type="primary" ghost icon={<Printer size={14} />} title="In hóa đơn" onClick={() => handlePrint(r)} />
+          <Button size="small" icon={<Eye size={14} />} onClick={() => { setSelectedSaleForDetail(r); setIsDetailModalOpen(true); }} />
+          <Button size="small" type="primary" ghost icon={<Printer size={14} />} onClick={() => handlePrint(r)} />
           {canManageMoney && (
-            <Button size="small" icon={<Banknote size={14} />} title="Thu thêm tiền" onClick={() => handleOpenPaymentModal(r)} />
+            <Button size="small" icon={<Banknote size={14} />} onClick={() => handleOpenPaymentModal(r)} />
           )}
           {canDelete && (
-            <Popconfirm title="Hủy hóa đơn?" description="Kho sẽ được hoàn lại. Tiếp tục?" onConfirm={() => handleDelete(r.id)} okText="Xác nhận" cancelText="Bỏ qua">
-              <Button size="small" danger icon={<RotateCcw size={14} />} title="Hủy hóa đơn" />
+            <Popconfirm title="Hủy đơn hàng?" description="Kho sẽ được hoàn lại. Tiếp tục?" onConfirm={() => handleDelete(r.id)} okText="Xác nhận" cancelText="Bỏ qua">
+              <Button size="small" danger icon={<RotateCcw size={14} />} />
             </Popconfirm>
           )}
         </Space>
@@ -377,39 +346,32 @@ const PartRetailPage = () => {
 
   return (
     <div className="page-container">
-      {/* Hidden print component */}
       <div style={{ display: 'none' }}>
         <PrintPartSale 
           sale={lastSavedSale || selectedSaleForDetail}
           items={(lastSavedSale || selectedSaleForDetail)?.PartSaleItems}
           warehouse={(lastSavedSale || selectedSaleForDetail)?.Warehouse}
+          title="PHIẾU XUẤT KHO KIÊM BÁN BUÔN"
         />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁN LẺ PHỤ TÙNG</Title>
-        <Space size="middle">
-          <Button 
-            icon={<FileStack size={18} />} 
-            onClick={() => setIsImportModalOpen(true)}
-            style={{ 
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontWeight: 600,
-              color: 'var(--primary-color)',
-              borderColor: 'var(--primary-color)'
-            }}
-          >
-            Nhập từ Excel
-          </Button>
-          <Badge count={totalStockInWarehouse} color="#10b981" title="Tổng số linh kiện trong kho đang chọn" showZero>
-            <Button icon={<Car size={18} />} ghost>
-              Tồn kho đang chọn: {totalStockInWarehouse.toLocaleString()} cái
-            </Button>
-          </Badge>
-        </Space>
+        <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁN BUÔN PHỤ TÙNG</Title>
+        <Button 
+          icon={<FileStack size={18} />} 
+          onClick={() => setIsImportModalOpen(true)}
+          style={{ 
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontWeight: 600,
+            color: 'var(--primary-color)',
+            borderColor: 'var(--primary-color)'
+          }}
+        >
+          Nhập từ Excel
+        </Button>
       </div>
 
       <Tabs 
@@ -419,12 +381,11 @@ const PartRetailPage = () => {
         items={[
           {
             key: '1',
-            label: <Space><Plus size={16} /> LẬP PHIẾU MỚI</Space>,
+            label: <Space><Plus size={16} /> LẬP PHIẾU BÁN BUÔN</Space>,
             children: (
               <Row gutter={[24, 24]}>
-                {/* LEFT: Invoice Info */}
                 <Col xs={24} lg={9}>
-                  <Card className="glass-card" title={<Space><ShoppingCart size={18} /> THÔNG TIN HÓA ĐƠN</Space>}>
+                  <Card className="glass-card" title={<Space><Building2 size={18} /> THÔNG TIN ĐỐI TÁC</Space>}>
                     <Form
                       form={form}
                       layout="vertical"
@@ -447,30 +408,22 @@ const PartRetailPage = () => {
                         </Col>
                       </Row>
 
+                      <Form.Item label="Chọn đối tác buôn" name="customer_id" rules={[{ required: true }]}>
+                        <Select size="large" showSearch placeholder="Tìm theo tên đối tác..." optionFilterProp="children">
+                          {customers.map(c => <Select.Option key={c.id} value={c.id}>{c.customer_code} - {c.name}</Select.Option>)}
+                        </Select>
+                      </Form.Item>
+
                       {isAdmin ? (
                         <Form.Item label="Kho xuất hàng" name="warehouse_id" rules={[{ required: true }]}>
-                          <Select size="large" placeholder="Chọn kho..." onChange={handleWarehouseChange}>
+                          <Select size="large" placeholder="Chọn kho..." onChange={val => setSelectedWarehouseId(val)}>
                             {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
                           </Select>
                         </Form.Item>
                       ) : (
-                        // Staff: auto-set warehouse, hidden field
-                        <Form.Item name="warehouse_id" hidden initialValue={user.warehouse_id}>
-                          <Input />
-                        </Form.Item>
+                        <Form.Item name="warehouse_id" hidden initialValue={user.warehouse_id}><Input /></Form.Item>
                       )}
 
-                      <Form.Item label="Tên khách hàng" name="customer_name" rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}>
-                        <Input 
-                          size="large" 
-                          prefix={<User size={16} />} 
-                          placeholder="Ví dụ: Nguyễn Văn A"
-                          onBlur={e => form.setFieldsValue({ customer_name: capitalizeName(e.target.value) })}
-                        />
-                      </Form.Item>
-                      <Form.Item label="Số điện thoại" name="customer_phone" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}>
-                        <Input size="large" prefix={<Smartphone size={16} />} placeholder="09xxxx..." />
-                      </Form.Item>
                       <Form.Item label="Ghi chú" name="notes">
                         <Input.TextArea rows={2} placeholder="Ghi chú thêm..." />
                       </Form.Item>
@@ -495,16 +448,15 @@ const PartRetailPage = () => {
                         </div>
                       </div>
 
-                      <Form.Item label="Khách đã trả" name="paid_amount" style={{ marginTop: 16 }}>
+                      <Form.Item label="Thanh toán trước" name="paid_amount" style={{ marginTop: 16 }}>
                         <InputNumber 
                           size="large" style={{ width: '100%' }}
                           formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
                           parser={v => v.replace(/\./g, '')}
-                          placeholder="Có thể trả sau..."
+                          placeholder="Có thể thanh toán sau..."
                         />
                       </Form.Item>
 
-                      {/* Debt warning */}
                       {Form.useWatch('paid_amount', form) > 0 && Form.useWatch('paid_amount', form) < totalAmount && (
                         <Alert 
                           message={`Còn nợ: ${(totalAmount - (Form.useWatch('paid_amount', form) || 0)).toLocaleString('vi-VN')} đ`}
@@ -512,26 +464,23 @@ const PartRetailPage = () => {
                         />
                       )}
 
-                      <Button 
-                        type="primary" block size="large" htmlType="submit"
-                        icon={<Save size={20} />} loading={submitLoading}
-                        disabled={items.length === 0}
-                        style={{ height: 50, fontWeight: 'bold' }}
-                      >
-                        LƯU & XUẤT HÓA ĐƠN
-                      </Button>
-                    </Form>
+                        <Button 
+                          type="primary" block size="large" htmlType="submit"
+                          icon={<Save size={20} />} loading={submitLoading}
+                          disabled={items.length === 0}
+                          style={{ height: 50, fontWeight: 'bold' }}
+                        >
+                          LƯU & XUẤT HÓA ĐƠN
+                        </Button>
+                      </Form>
                   </Card>
                 </Col>
 
-                {/* RIGHT: Items list */}
                 <Col xs={24} lg={15}>
                   <Card 
-                    className="glass-card" 
-                    title={<Space><LayoutList size={18} /> DANH SÁCH LINH KIỆN CHỌN BÁN</Space>}
-                    extra={
-                      <Tag color="blue">{items.length} mặt hàng | {subtotal.toLocaleString()} đ</Tag>
-                    }
+                    className="glass-card"
+                    title={<Space><LayoutList size={18} /> DANH SÁCH LINH KIỆN SỈ</Space>}
+                    extra={<Tag color="blue">{items.length} mặt hàng | {subtotal.toLocaleString()} đ</Tag>}
                   >
                     <div style={{ marginBottom: 16 }}>
                       <AutoComplete
@@ -551,7 +500,7 @@ const PartRetailPage = () => {
                       pagination={false} 
                       className="modern-table" 
                       scroll={{ x: 'max-content', y: 450 }}
-                      locale={{ emptyText: 'Tìm kiếm phụ tùng ở thanh trên để thêm vào hóa đơn' }}
+                      locale={{ emptyText: 'Tìm kiếm phụ tùng ở thanh trên để thêm vào đơn hàng' }}
                     />
                   </Card>
                 </Col>
@@ -560,14 +509,13 @@ const PartRetailPage = () => {
           },
           {
             key: '2',
-            label: <Space><History size={16} /> LỊCH SỬ GIAO DỊCH</Space>,
+            label: <Space><History size={16} /> LỊCH SỬ BÁN BUÔN</Space>,
             children: (
               <Card className="glass-card" styles={{ body: { padding: 0 } }}>
                 <div style={{ padding: '16px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <Input.Search
-                    placeholder="Tìm theo tên khách, SĐT..."
-                    allowClear
-                    style={{ maxWidth: 320 }}
+                    placeholder="Tìm theo tên đối tác..."
+                    allowClear style={{ maxWidth: 320 }}
                     value={searchText}
                     onChange={e => setSearchText(e.target.value)}
                   />
@@ -592,27 +540,27 @@ const PartRetailPage = () => {
 
       {/* Detail Modal */}
       <Modal
-        title={`CHI TIẾT HÓA ĐƠN #${selectedSaleForDetail?.id?.slice(-8)?.toUpperCase() || '...'}`}
+        title={`CHI TIẾT ĐƠN HÀNG BUÔN #${selectedSaleForDetail?.id?.slice(-8).toUpperCase()}`}
         open={isDetailModalOpen && !isPaymentModalOpen}
         onCancel={() => setIsDetailModalOpen(false)}
         width={800}
         footer={[
           <Button key="close" onClick={() => setIsDetailModalOpen(false)}>Đóng</Button>,
           canManageMoney && <Button key="pay" icon={<Banknote size={16} />} onClick={() => { setIsDetailModalOpen(false); handleOpenPaymentModal(selectedSaleForDetail); }}>Thu tiền</Button>,
-          <Button key="print" type="primary" icon={<Printer size={16} />} onClick={() => handlePrint(selectedSaleForDetail)}>In hóa đơn</Button>
+          <Button key="print" type="primary" icon={<Printer size={16} />} onClick={() => handlePrint(selectedSaleForDetail)}>In phiếu xuất</Button>
         ]}
       >
         {selectedSaleForDetail && (
           <>
             <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col span={8}><Text type="secondary">Ngày bán:</Text> <Text strong>{dayjs(selectedSaleForDetail.sale_date).format('DD/MM/YYYY')}</Text></Col>
-              <Col span={8}><Text type="secondary">Khách:</Text> <Text strong>{selectedSaleForDetail.customer_name || 'Khách lẻ'}</Text></Col>
-              <Col span={8}><Text type="secondary">SĐT:</Text> <Text>{selectedSaleForDetail.customer_phone || '—'}</Text></Col>
+              <Col span={6}><Text type="secondary">Ngày bán:</Text> <Text strong>{dayjs(selectedSaleForDetail.sale_date).format('DD/MM/YYYY')}</Text></Col>
+              <Col span={8}><Text type="secondary">Đối tác:</Text> <Text strong>{selectedSaleForDetail.customer_name || '—'}</Text></Col>
+              <Col span={5}><Text type="secondary">SĐT:</Text> <Text>{selectedSaleForDetail.customer_phone || '—'}</Text></Col>
+              <Col span={5}><Text type="secondary">Kho:</Text> <Text>{selectedSaleForDetail.Warehouse?.warehouse_name || '—'}</Text></Col>
             </Row>
             <Table 
               dataSource={selectedSaleForDetail.PartSaleItems}
-              pagination={false}
-              size="small"
+              pagination={false} size="small"
               columns={[
                 { title: 'Mã PT', dataIndex: ['Part', 'code'] },
                 { title: 'Tên PT', dataIndex: ['Part', 'name'] },
@@ -639,7 +587,7 @@ const PartRetailPage = () => {
 
       {/* Payment Modal */}
       <Modal
-        title={<Space><Banknote size={18} /> Thu tiền hóa đơn #{selectedSaleForDetail?.id?.slice(-8)?.toUpperCase() || '...'}</Space>}
+        title={<Space><Banknote size={18} /> Thu tiền #{selectedSaleForDetail?.id?.slice(-8).toUpperCase()}</Space>}
         open={isPaymentModalOpen}
         onCancel={() => setIsPaymentModalOpen(false)}
         footer={null}
@@ -648,9 +596,7 @@ const PartRetailPage = () => {
           <>
             <Alert
               message={`Còn nợ: ${Math.max(0, Number(selectedSaleForDetail.total_amount) - Number(selectedSaleForDetail.paid_amount)).toLocaleString()} đ`}
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
+              type="warning" showIcon style={{ marginBottom: 16 }}
             />
             <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
               <Form.Item label="Ngày thu" name="payment_date" rules={[{ required: true }]}>
@@ -683,11 +629,11 @@ const PartRetailPage = () => {
             fetchHistory();
             setIsImportModalOpen(false);
         }}
-        type="part_retail_sales"
-        title="Nhập hóa đơn bán lẻ từ Excel"
+        type="part_wholesale_sales"
+        title="Nhập hóa đơn bán buôn từ Excel"
       />
     </div>
   );
 };
 
-export default PartRetailPage;
+export default PartWholesalePage;

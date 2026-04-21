@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Button, Modal, Form, Input, Space, Typography, message, Tag, Switch } from 'antd';
-import { UserPlus, Edit, Trash2, Search, Smartphone, UserCheck, UserX } from 'lucide-react';
+import { Table, Card, Button, Modal, Form, Input, Space, Typography, message, Tag, Switch, Select } from 'antd';
+import { UserPlus, Edit, Trash2, Search, Smartphone, UserCheck, UserX, Clock, CheckCircle } from 'lucide-react';
 import api from '../../utils/api';
 
 const { Title, Text } = Typography;
@@ -12,6 +12,7 @@ const MechanicPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [form] = Form.useForm();
+  const [warehouses, setWarehouses] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -27,7 +28,17 @@ const MechanicPage = () => {
 
   useEffect(() => {
     fetchData();
+    fetchWarehouses();
   }, []);
+
+  const fetchWarehouses = async () => {
+    try {
+      const res = await api.get('/warehouses');
+      setWarehouses(res.data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleOpenModal = (record = null) => {
     if (record) {
@@ -69,14 +80,34 @@ const MechanicPage = () => {
       key: 'phone',
     },
     {
-      title: 'Trạng thái',
+      title: 'Nhân sự',
       dataIndex: 'is_active',
       key: 'status',
       render: (active) => (
-        <Tag color={active ? 'green' : 'red'} icon={active ? <UserCheck size={12} /> : <UserX size={12} />}>
-          {active ? 'Đang làm việc' : 'Đã nghỉ'}
+        <Tag color={active ? 'blue' : 'gray'} icon={active ? <UserCheck size={12} /> : <UserX size={12} />}>
+          {active ? 'Chính thức' : 'Đã nghỉ việc'}
         </Tag>
       ),
+    },
+    {
+      title: 'Trạng thái công việc',
+      key: 'work_status',
+      render: (_, record) => (
+        record.is_active ? (
+          record.is_busy ? 
+            <Tag color="orange" icon={<Clock size={12} style={{marginRight:4}} />}>Đang bận sửa xe</Tag> : 
+            <Tag color="green" icon={<CheckCircle size={12} style={{marginRight:4}} />}>Đang rảnh (Sẵn sàng)</Tag>
+        ) : '-'
+      )
+    },
+    {
+      title: 'Kho trực thuộc',
+      dataIndex: 'warehouse_id',
+      key: 'warehouse',
+      render: (id) => {
+        const wh = warehouses.find(w => w.id === id);
+        return wh ? <Tag color="blue">{wh.warehouse_name}</Tag> : <Tag>Chưa gán</Tag>;
+      }
     },
     {
       title: 'Thao tác',
@@ -142,6 +173,11 @@ const MechanicPage = () => {
           </Form.Item>
           <Form.Item label="Đang làm việc" name="is_active" valuePropName="checked">
             <Switch />
+          </Form.Item>
+          <Form.Item label="Kho trực thuộc" name="warehouse_id">
+            <Select placeholder="Chọn kho gắn bó" allowClear size="large">
+              {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
+            </Select>
           </Form.Item>
         </Form>
       </Modal>

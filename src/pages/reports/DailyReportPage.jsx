@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import api from '../../utils/api';
+import { Wrench } from 'lucide-react';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -122,7 +123,7 @@ const DailyReportPage = () => {
         <div className="report-content">
           <Row gutter={[24, 24]}>
             {/* Row 1: Key Metrics */}
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12} lg={4}>
               <MetricCard 
                 title="Tổng Doanh Thu" 
                 value={data.totalRevenue} 
@@ -130,7 +131,7 @@ const DailyReportPage = () => {
                 color="#6366f1"
               />
             </Col>
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12} lg={4}>
               <MetricCard 
                 title="Tiền Thực Thu" 
                 value={data.totalIncome} 
@@ -138,7 +139,7 @@ const DailyReportPage = () => {
                 color="#10b981"
               />
             </Col>
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12} lg={4}>
               <MetricCard 
                 title="Tiền Thực Chi" 
                 value={data.totalOutcome} 
@@ -146,7 +147,7 @@ const DailyReportPage = () => {
                 color="#f43f5e"
               />
             </Col>
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12} lg={4}>
               <MetricCard 
                 title="Dòng Tiền Thuần" 
                 value={data.netCashFlow} 
@@ -154,18 +155,30 @@ const DailyReportPage = () => {
                 color={data.netCashFlow >= 0 ? '#10b981' : '#f43f5e'}
               />
             </Col>
+            <Col xs={24} sm={12} lg={4}>
+              <MetricCard 
+                title="Doanh thu Dịch vụ" 
+                value={data.maintenanceRevenue} 
+                icon={Wrench} 
+                color="#f59e0b"
+              />
+            </Col>
 
             {/* Row 2: Breakdown Cards */}
             <Col xs={24} md={12}>
               <Card title={<Space><TrendingUp size={18} /> CHI TIẾT DOANH THU & THU TIỀN</Space>} className="glass-card">
                  <Row gutter={[16, 16]}>
-                    <Col span={12}>
-                        <Statistic title="Doanh thu Bán lẻ" value={data.retailRevenue} suffix="đ" valueStyle={{ fontSize: 18 }} />
-                        <Text type="secondary" size="small">{data.retailCount} xe đã chốt</Text>
+                    <Col span={8}>
+                        <Statistic title="DT Bán lẻ" value={data.retailRevenue} suffix="đ" valueStyle={{ fontSize: 16 }} />
+                        <Text type="secondary" style={{ fontSize: 11 }}>{data.retailCount} xe</Text>
                     </Col>
-                    <Col span={12}>
-                        <Statistic title="Doanh thu Bán buôn" value={data.wholesaleRevenue} suffix="đ" valueStyle={{ fontSize: 18 }} />
-                        <Text type="secondary" size="small">{data.wholesaleCount} xe đã chốt</Text>
+                    <Col span={8}>
+                        <Statistic title="DT Bán sỉ" value={data.wholesaleRevenue} suffix="đ" valueStyle={{ fontSize: 16 }} />
+                        <Text type="secondary" style={{ fontSize: 11 }}>{data.wholesaleCount} xe</Text>
+                    </Col>
+                    <Col span={8}>
+                        <Statistic title="DT Dịch vụ" value={data.maintenanceRevenue} suffix="đ" valueStyle={{ fontSize: 16 }} />
+                        <Text type="secondary" style={{ fontSize: 11 }}>{data.maintenanceCount} phiếu</Text>
                     </Col>
                     <Divider style={{ margin: '12px 0' }} />
                     <Col span={24}>
@@ -201,6 +214,41 @@ const DailyReportPage = () => {
                         <Text type="secondary" style={{ fontSize: 12 }}>
                             (Vốn nhập hàng + Tất cả các chi phí vận hành)
                         </Text>
+                    </Col>
+                 </Row>
+              </Card>
+            </Col>
+
+            <Col xs={24}>
+              <Card title={<Space><Gift size={18} /> CHI PHÍ NỘI BỘ (KHUYẾN MẠI & BẢO HÀNH)</Space>} className="glass-card">
+                 <Row gutter={[16, 16]}>
+                    <Col xs={24} sm={12}>
+                        <div style={{ padding: '20px', background: 'rgba(245, 158, 11, 0.05)', borderRadius: 16, border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                            <Statistic 
+                                title={<Text type="secondary">Tổng chi phí Bảo hành</Text>} 
+                                value={data.warrantyCost} 
+                                suffix="đ" 
+                                valueStyle={{ color: '#f59e0b', fontWeight: 'bold' }} 
+                            />
+                            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Wrench size={14} style={{ color: '#f59e0b' }}/>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Tiền phụ tùng & công gốc bảo hành</Text>
+                            </div>
+                        </div>
+                    </Col>
+                    <Col xs={24} sm={12}>
+                        <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: 16, border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+                            <Statistic 
+                                title={<Text type="secondary">Tổng chi phí Khuyến mại</Text>} 
+                                value={data.promoCost} 
+                                suffix="đ" 
+                                valueStyle={{ color: '#6366f1', fontWeight: 'bold' }} 
+                            />
+                            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Gift size={14} style={{ color: '#6366f1' }}/>
+                                <Text type="secondary" style={{ fontSize: 12 }}>Giá trị quà tặng & phụ tùng khuyến mại</Text>
+                            </div>
+                        </div>
                     </Col>
                  </Row>
               </Card>
