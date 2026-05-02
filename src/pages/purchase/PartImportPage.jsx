@@ -51,25 +51,51 @@ const PartImportPage = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [history, setHistory] = useState([]);
+  const [partSearchText, setPartSearchText] = useState('');
+
+  // Debounce search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (partSearchText) {
+            executePartSearch(partSearchText);
+        } else {
+            setPartOptions([]);
+        }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [partSearchText]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('1');
   const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
+  const canDelete = user.can_delete === true || user.can_delete === 1 || isAdmin;
+
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
+
+  const filteredWarehouses = isPowerUser 
+    ? warehouses 
+    : warehouses.filter(w => allowedWarehouseIds.includes(w.id));
+
+  const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
+
   // Search Results for Parts
+
   const [partOptions, setPartOptions] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [suppRes, whRes, partsRes] = await Promise.all([
+      const [suppRes, whRes] = await Promise.all([
         api.get('/suppliers'),
-        api.get('/warehouses'),
-        api.get('/parts')
+        api.get('/warehouses')
       ]);
       setSuppliers(suppRes.data);
       setWarehouses(whRes.data);
-      setAllParts(partsRes.data);
     } catch (error) {
       message.error('Lỗi tải dữ liệu: ' + error.message);
     } finally {
@@ -99,29 +125,30 @@ const PartImportPage = () => {
     fetchHistory();
   }, []);
 
-  const handlePartSearch = (value = "") => {
-    const v = value ? value.toLowerCase() : "";
-    const filtered = allParts.filter(
-      (p) => (p.code && p.code.toLowerCase().includes(v)) || (p.name && p.name.toLowerCase().includes(v)),
-    );
-    setPartOptions(
-      filtered.slice(0, 30).map((p) => ({
-        value: p.code,
-        label: (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-            <div style={{ flex: 1 }}>
-              <Text strong style={{ display: 'block' }}>{p.code}</Text>
-              <Text type="secondary" style={{ fontSize: '12px' }}>{p.name}</Text>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-                <Tag color="blue">{p.unit}</Tag>
-                <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>Giá lẻ: {Number(p.selling_price).toLocaleString()} đ</div>
-            </div>
-          </div>
-        ),
-        part: p,
-      })),
-    );
+  const executePartSearch = async (value = "") => {
+    try {
+        const res = await api.get(`/parts?search=${encodeURIComponent(value)}`);
+        const parts = res.data.rows;
+        setPartOptions(
+          parts.map((p) => ({
+            value: p.code,
+            label: (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', gap: '16px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text strong style={{ display: 'block' }}>{p.code}</Text>
+                  <Text type="secondary" style={{ fontSize: '12px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Text>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <Tag color="blue" style={{ margin: 0 }}>{p.unit}</Tag>
+                    <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>Giá lẻ: {Number(p.selling_price).toLocaleString()} đ</div>
+                </div>
+              </div>
+            ),
+            part: p,
+          })),
+        );
+    } catch (e) {
+    }
   };
 
   const addNewItem = () => {
@@ -207,9 +234,31 @@ const PartImportPage = () => {
     }
   };
 
+  const handleDelete = async (id) => {
+    try {
+        await api.delete(`/part-purchase/${id}`);
+        message.success("Đã xóa đơn nhập phụ tùng và cập nhật lại tồn kho!");
+        fetchHistory();
+        fetchData(); // Refresh parts list to get latest inventory
+    } catch (error) {
+        message.error("Lỗi khi xóa: " + (error.response?.data?.message || error.message));
+    }
+  };
+
   const columns = [
-    { title: "Mã PT", dataIndex: "code", width: 150, render: (text, record) => (
-        <AutoComplete options={partOptions} onSearch={handlePartSearch} value={text} onSelect={(val, option) => handleSelectPart(record.key, option.part)} onChange={(val) => updateItem(record.key, "code", val)}>
+
+    { title: "Mã PT", dataIndex: "code", width: 200, render: (text, record) => (
+        <AutoComplete 
+          options={partOptions} 
+          onSearch={setPartSearchText} 
+          onFocus={() => executePartSearch(partSearchText)}
+          value={text} 
+          onSelect={(val, option) => handleSelectPart(record.key, option.part)} 
+          onChange={(val) => updateItem(record.key, "code", val)}
+          popupMatchSelectWidth={false}
+          dropdownStyle={{ minWidth: 400 }}
+          placeholder="🔍 Tìm mã/tên..."
+        >
           <Input />
         </AutoComplete>
     )},
@@ -232,10 +281,18 @@ const PartImportPage = () => {
             <Space>
                 <Button size="small" icon={<Eye size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setIsDetailModalOpen(true); }} />
                 <Button size="small" type="primary" ghost icon={<Printer size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setTimeout(() => printReceipt('print-part-purchase-receipt'), 300); }} />
+                {canDelete && (
+                    <Popconfirm title="Xóa phiếu nhập PT này?" description="Hành động này sẽ TRỪ LẠI số lượng trong tồn kho. Bạn chắc chứ?" onConfirm={() => handleDelete(r.id)} okText="Xác nhận xóa" cancelText="Hủy">
+                        <Button size="small" danger icon={<Trash2 size={14} />} />
+                    </Popconfirm>
+                )}
             </Space>
         )
     }
   ];
+
+
+
 
   return (
     <div className="page-container" style={{ padding: 24 }}>
@@ -278,7 +335,7 @@ const PartImportPage = () => {
                     <Row gutter={[24, 24]}>
                         <Col xs={24} lg={7}>
                         <Card className="glass-card" title={<Space><FileStack size={20} /> Thông tin chung</Space>}>
-                            <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ purchase_date: dayjs() }}>
+                            <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ purchase_date: dayjs(), warehouse_id: user.warehouse_id }}>
                             <Form.Item label="Ngày nhập kho" name="purchase_date" rules={[{ required: true }]}>
                                 <DatePicker style={{ width: "100%" }} size="large" format="DD/MM/YYYY" />
                             </Form.Item>
@@ -291,13 +348,19 @@ const PartImportPage = () => {
                                 </Select>
                             </Form.Item>
 
-                            <Form.Item label="Kho nhập hàng" name="warehouse_id" rules={[{ required: true }]}>
+                            { showWarehouseSelector ? (
+                              <Form.Item label="Kho nhập hàng" name="warehouse_id" rules={[{ required: true }]}>
                                 <Select size="large" placeholder="Chọn kho nhập...">
-                                    {warehouses.map((w) => (
-                                        <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>
-                                    ))}
+                                  {filteredWarehouses.map((w) => (
+                                    <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>
+                                  ))}
                                 </Select>
-                            </Form.Item>
+                              </Form.Item>
+                            ) : (
+                              <Form.Item name="warehouse_id" hidden initialValue={user.warehouse_id}>
+                                <Input />
+                              </Form.Item>
+                            )}
 
                             <Divider />
 

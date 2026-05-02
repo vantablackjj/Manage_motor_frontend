@@ -51,22 +51,47 @@ const RepairServicePage = () => {
   const [vehicleOptions, setVehicleOptions] = useState([]);
 
   // Vehicle Context
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [partSearchText, setPartSearchText] = useState('');
   const [vehicleFound, setVehicleFound] = useState(null); // { internal: true/false, data: ... }
   const [maintenanceHistory, setMaintenanceHistory] = useState([]);
+
+  // Debounce search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (partSearchText) {
+            executePartSearch(partSearchText);
+        } else {
+            setPartOptions([]);
+        }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [partSearchText]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [whRes, mechanicsRes, partsRes, liftRes, typesRes] = await Promise.all([
+      const [whRes, mechanicsRes, liftRes, typesRes] = await Promise.all([
         api.get('/warehouses'),
         api.get('/mechanics'),
-        api.get('/parts'),
         api.get('/lift-tables'),
         api.get('/vehicle-types')
       ]);
-      setWarehouses(whRes.data);
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+      
+      if (isPowerUser || user.accessible_warehouses) {
+        const allWh = whRes.data;
+        if (isPowerUser) {
+          setWarehouses(allWh);
+        } else {
+          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])];
+          setWarehouses(allWh.filter(w => allowedIds.includes(w.id)));
+        }
+      } else {
+        setWarehouses(whRes.data.filter(w => w.id === user.warehouse_id));
+      }
       setMechanics(mechanicsRes.data.filter(m => m.is_active));
-      setAllParts(partsRes.data);
       setLiftTables(liftRes.data);
       setVehicleTypes(typesRes.data);
 
@@ -104,7 +129,8 @@ const RepairServicePage = () => {
                   unit: item.unit,
                   quantity: item.quantity,
                   unit_price: item.unit_price,
-                  total_price: item.total_price
+                  total_price: item.total_price,
+                  purchase_price: item.purchase_price || 0
               })));
               setVehicleFound({ internal: order.is_internal_vehicle });
           }
@@ -214,16 +240,18 @@ const RepairServicePage = () => {
     }
   };
 
-  const handlePartSearch = (value) => {
-    const filtered = allParts.filter(p => 
-        p.code.toLowerCase().includes(value.toLowerCase()) || 
-        p.name.toLowerCase().includes(value.toLowerCase())
-    );
-    setPartOptions(filtered.map(p => ({
-        value: p.code,
-        label: `${p.code} - ${p.name}`,
-        part: p
-    })));
+  const executePartSearch = async (value) => {
+    try {
+        const res = await api.get(`/parts?search=${encodeURIComponent(value)}`);
+        const parts = res.data.rows;
+        setPartOptions(parts.map(p => ({
+            value: p.code,
+            label: `${p.code} - ${p.name}`,
+            part: p
+        })));
+    } catch (e) {
+        console.error(e);
+    }
   };
 
   const addPartItem = (part) => {
@@ -236,7 +264,8 @@ const RepairServicePage = () => {
         unit: part.unit,
         quantity: 1,
         unit_price: part.selling_price || 0,
-        total_price: part.selling_price || 0
+        total_price: part.selling_price || 0,
+        purchase_price: part.purchase_price || 0
     }]);
   };
 
@@ -250,7 +279,8 @@ const RepairServicePage = () => {
         unit: 'Công',
         quantity: 1,
         unit_price: 0,
-        total_price: 0
+        total_price: 0,
+        purchase_price: 0
     }]);
   };
 
@@ -358,6 +388,23 @@ const RepairServicePage = () => {
                 formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
                 parser={(val) => val.replace(/\./g, "")}
                 onChange={(val) => updateItem(record.key, 'unit_price', val)} 
+                style={{ width: '100%' }}
+            />
+        )
+    },
+    { 
+        title: <Text strong style={{ color: '#ef4444' }}>Tiền chi</Text>, 
+        dataIndex: 'purchase_price', 
+        key: 'purchase_price',
+        width: 130,
+        render: (v, record) => (
+            <InputNumber 
+                min={0} 
+                value={v} 
+                placeholder="Vốn/Chi ngoài"
+                formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+                parser={(val) => val.replace(/\./g, "")}
+                onChange={(val) => updateItem(record.key, 'purchase_price', val)} 
                 style={{ width: '100%' }}
             />
         )
@@ -502,7 +549,10 @@ const RepairServicePage = () => {
                     </Col>
                     <Col span={12}>
                         <Form.Item label="Xuất kho" name="warehouse_id">
-                            <Select placeholder="Kho phụ tùng">
+                            <Select 
+                                placeholder="Kho phụ tùng" 
+                                disabled={!(user.role === 'ADMIN' || user.role === 'MANAGER' || (user.accessible_warehouses && user.accessible_warehouses.length > 0))}
+                            >
                                 {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
                             </Select>
                         </Form.Item>
@@ -617,12 +667,14 @@ const RepairServicePage = () => {
                 <Space>
                     <Button icon={<PlusCircle size={16} />} onClick={addServiceItem}>Thêm tiền công</Button>
                     <div style={{ width: 350 }}>
-                        <AutoComplete
-                            style={{ width: '100%' }}
-                            onSearch={handlePartSearch}
-                            onSelect={(val, option) => addPartItem(option.part)}
-                            options={partOptions}
-                            placeholder="🔍 Tìm phụ tùng..."
+                        <AutoComplete 
+                            options={partOptions} 
+                            onSearch={setPartSearchText} 
+                            onSelect={(val, option) => addPartItem(option.part)} 
+                            onFocus={() => executePartSearch(partSearchText)}
+                            placeholder="🔍 Tìm theo mã hoặc tên (ví dụ: 'DAU HONDA')..."
+                            popupMatchSelectWidth={false}
+                            dropdownStyle={{ minWidth: 400 }}
                         >
                             <Input size="middle" />
                         </AutoComplete>

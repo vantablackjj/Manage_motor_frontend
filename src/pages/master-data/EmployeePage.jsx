@@ -22,7 +22,7 @@ import { capitalizeName } from '../../utils/stringHelper';
 import { exportToExcel } from '../../utils/excelExport';
 import dayjs from 'dayjs';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 const { Option } = Select;
 
 const EmployeePage = () => {
@@ -64,6 +64,9 @@ const EmployeePage = () => {
       'Quản lý phụ tùng': u.can_manage_spare_parts ? 'Có' : 'Không',
       'Quản lý danh mục': u.can_manage_master_data ? 'Có' : 'Không',
       'Quản lý bán hàng': u.can_manage_sales ? 'Có' : 'Không',
+      'Xóa phiếu': u.can_delete_ticket ? 'Có' : 'Không',
+      'Sửa phiếu': u.can_edit_ticket ? 'Có' : 'Không',
+      'Kho bổ sung': u.accessible_warehouses ? u.accessible_warehouses.split(',').map(id => warehouses.find(w => w.id === id)?.warehouse_name).join(', ') : '---',
     }));
 
     exportToExcel(exportData, `DanhSachNhanVien_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -100,7 +103,10 @@ const EmployeePage = () => {
         can_manage_master_data: record.can_manage_master_data,
         can_manage_sales: record.can_manage_sales,
         can_manage_expenses: record.can_manage_expenses,
+        can_delete_ticket: record.can_delete_ticket,
+        can_edit_ticket: record.can_edit_ticket,
         expense_warehouses: record.expense_warehouses ? record.expense_warehouses.split(',') : [],
+        accessible_warehouses: record.accessible_warehouses ? record.accessible_warehouses.split(',') : [],
       });
     } else {
       setEditingId(null);
@@ -113,7 +119,10 @@ const EmployeePage = () => {
         can_manage_master_data: false,
         can_manage_sales: true, // Mặc định nhân viên mới thường cho bán hàng
         can_manage_expenses: false,
-        expense_warehouses: []
+        can_delete_ticket: false,
+        can_edit_ticket: false,
+        expense_warehouses: [],
+        accessible_warehouses: []
       });
     }
 
@@ -125,7 +134,8 @@ const EmployeePage = () => {
       const fields = await form.validateFields();
       const values = {
         ...fields,
-        expense_warehouses: fields.expense_warehouses ? fields.expense_warehouses.join(',') : ''
+        expense_warehouses: fields.expense_warehouses ? fields.expense_warehouses.join(',') : '',
+        accessible_warehouses: fields.accessible_warehouses ? fields.accessible_warehouses.join(',') : ''
       };
       if (editingId) {
         // Cập nhật
@@ -157,6 +167,7 @@ const EmployeePage = () => {
   const getRoleTag = (role) => {
     const roles = {
       'ADMIN': { color: 'gold', label: 'Quản trị viên' },
+      'MANAGER': { color: 'purple', label: 'Nhân viên tổng bộ' },
       'STAFF': { color: 'blue', label: 'Nhân viên' },
     };
 
@@ -198,7 +209,9 @@ const EmployeePage = () => {
           {record.can_manage_spare_parts && <Tag color="purple" style={{fontSize: '10px'}}>Phụ tùng</Tag>}
           {record.can_manage_sales && <Tag color="green" style={{fontSize: '10px'}}>Bán hàng</Tag>}
           {record.can_manage_expenses && <Tag color="volcano" style={{fontSize: '10px'}}>Chi tiêu</Tag>}
-          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && !record.can_manage_sales && !record.can_manage_expenses && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
+          {record.can_delete_ticket && <Tag color="orange" style={{fontSize: '10px'}}>Xóa phiếu</Tag>}
+          {record.can_edit_ticket && <Tag color="blue" style={{fontSize: '10px'}}>Sửa phiếu</Tag>}
+          {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && !record.can_manage_sales && !record.can_manage_expenses && !record.can_delete_ticket && !record.can_edit_ticket && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
         </Space>
       )
     },
@@ -206,9 +219,18 @@ const EmployeePage = () => {
       title: 'Kho làm việc', 
       dataIndex: 'warehouse_id', 
       key: 'warehouse_id',
-      render: (id) => {
+      render: (id, record) => {
         const w = warehouses.find(wh => wh.id === id);
-        return w ? <Tag icon={<MapPin size={12} style={{marginRight:4}} />}>{w.warehouse_name}</Tag> : '---';
+        const others = record.accessible_warehouses ? record.accessible_warehouses.split(',').filter(x => x !== id) : [];
+        return (
+          <Space direction="vertical" size={2}>
+            {w && <Tag color="blue" icon={<MapPin size={12} style={{marginRight:4}} />}>{w.warehouse_name}</Tag>}
+            {others.map(oid => {
+              const ow = warehouses.find(wh => wh.id === oid);
+              return ow ? <Tag key={oid} style={{fontSize: '10px'}}>+ {ow.warehouse_name}</Tag> : null;
+            })}
+          </Space>
+        );
       }
     },
     {
@@ -236,20 +258,21 @@ const EmployeePage = () => {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+      <div className="page-header" style={{ marginBottom: 32 }}>
         <div>
-          <h2 className="gradient-text" style={{ fontSize: 24, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Title level={2} className="gradient-text" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             <UserPlus size={28} /> QUẢN LÝ NHÂN VIÊN
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Phân quyền và quản lý tài khoản nhân viên.</p>
+          </Title>
+          <Text type="secondary">Phân quyền và quản lý tài khoản nhân viên.</Text>
         </div>
-        <Space>
+        <Space wrap className="mobile-stack">
             <Button 
                 icon={<Download size={18} />} 
                 onClick={handleExport}
                 ghost
                 type="primary"
                 style={{ height: 40, borderRadius: 8 }}
+                block={window.innerWidth < 768}
             >
                 Xuất Excel
             </Button>
@@ -259,8 +282,9 @@ const EmployeePage = () => {
                   icon={<Plus size={18} />} 
                   onClick={() => showModal()}
                   style={{ background: 'var(--primary-color)', height: 40, borderRadius: 8 }}
+                  block={window.innerWidth < 768}
               >
-                  Thêm nhân viên mới
+                  Thêm nhân viên
               </Button>
             )}
         </Space>
@@ -271,7 +295,7 @@ const EmployeePage = () => {
         columns={columns.filter(c => !c.hidden)} 
         rowKey="id" 
         loading={loading}
-        size="small"
+        size={window.innerWidth < 768 ? 'small' : 'middle'}
         scroll={{ x: 'max-content' }}
         pagination={{ pageSize: 15 }}
       />
@@ -284,30 +308,59 @@ const EmployeePage = () => {
         okText="Lưu lại"
         cancelText="Hủy"
         centered
-        width={600}
+        width={window.innerWidth < 768 ? '95%' : 700}
         styles={{ body: { paddingTop: 20 } }}
       >
         <Form
           form={form}
           layout="vertical"
+          onValuesChange={(changedValues) => {
+            if (changedValues.role === 'MANAGER') {
+              form.setFieldsValue({
+                can_manage_debt: false,
+                can_delete: true,
+                can_manage_money: false,
+                can_manage_spare_parts: true,
+                can_manage_master_data: true,
+                can_manage_sales: true,
+                can_manage_expenses: false,
+                can_delete_ticket: true,
+                can_edit_ticket: true,
+              });
+            } else if (changedValues.role === 'ADMIN') {
+              form.setFieldsValue({
+                can_manage_debt: true,
+                can_delete: true,
+                can_manage_money: true,
+                can_manage_spare_parts: true,
+                can_manage_master_data: true,
+                can_manage_sales: true,
+                can_manage_expenses: true,
+                can_delete_ticket: true,
+                can_edit_ticket: true,
+              });
+            }
+          }}
         >
-          <Row gutter={16}>
-            <Col span={8}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={8}>
               <Form.Item label="Họ và tên" name="full_name" rules={[{ required: true, message: 'Nhập họ tên' }]}>
                 <Input 
+                  size="large"
                   placeholder="Nguyễn Văn A" 
                   onBlur={(e) => form.setFieldsValue({ full_name: capitalizeName(e.target.value) })}
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={12} sm={8}>
               <Form.Item label="Số điện thoại" name="phone">
-                <Input placeholder="09xxx..." />
+                <Input size="large" placeholder="09xxx..." />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={12} sm={8}>
               <Form.Item label="Tên đăng nhập" name="username" rules={[{ required: true, message: 'Nhập tên đăng nhập' }]}>
                 <Input 
+                  size="large"
                   placeholder="user_01" 
                   disabled={!!editingId && form.getFieldValue('username') === 'admin'} 
                 />
@@ -315,32 +368,41 @@ const EmployeePage = () => {
             </Col>
           </Row>
 
-          <Row gutter={16}>
-            <Col span={12}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12}>
               <Form.Item 
                 label={editingId ? "Đổi mật khẩu mới" : "Mật khẩu"} 
                 name="password" 
                 rules={[{ required: !editingId, message: 'Nhập mật khẩu' }]}
               >
                 <Input.Password 
+                  size="large"
                   placeholder={editingId ? "Nhập mật khẩu mới (để trống nếu không đổi)" : "Nhập mật khẩu"} 
                   iconRender={(visible) => (visible ? <Eye size={16} /> : <EyeOff size={16} />)}
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item label="Quyền hạn (Phân quyền)" name="role" rules={[{ required: true }]}>
-                <Select>
+                <Select size="large">
                   <Option value="ADMIN">Quản trị viên (Toàn quyền)</Option>
+                  <Option value="MANAGER">Nhân viên tổng bộ (Gần như toàn quyền)</Option>
                   <Option value="STAFF">Nhân viên chi nhánh</Option>
                 </Select>
               </Form.Item>
             </Col>
-
           </Row>
 
-          <Form.Item label="Gắn với Kho làm việc" name="warehouse_id">
-            <Select placeholder="Chọn kho nếu cần (Dùng cho nhân viên)" allowClear>
+          <Form.Item label="Kho làm việc chính" name="warehouse_id">
+            <Select size="large" placeholder="Chọn kho chính cho nhân viên" allowClear>
+              {warehouses.map(w => (
+                <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item label="Kho bổ sung (Được phép truy cập)" name="accessible_warehouses">
+            <Select size="large" mode="multiple" placeholder="Chọn các kho phụ hoặc kho khác được phép truy cập" allowClear>
               {warehouses.map(w => (
                 <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>
               ))}
@@ -349,40 +411,50 @@ const EmployeePage = () => {
 
           <Divider orientation="left" plain style={{ fontSize: '13px', color: '#888' }}>Phân quyền chi tiết</Divider>
           
-          <Row gutter={16}>
-            <Col span={6}>
-              <Form.Item name="can_manage_debt" valuePropName="checked">
+          <Row gutter={[8, 8]}>
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_debt" valuePropName="checked" noStyle>
                 <Checkbox>Công nợ</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item name="can_delete" valuePropName="checked">
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_delete" valuePropName="checked" noStyle>
                 <Checkbox>Hủy/Xóa</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={6}>
-              <Form.Item name="can_manage_money" valuePropName="checked">
-                <Checkbox>Tiền/Trả nợ</Checkbox>
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_money" valuePropName="checked" noStyle>
+                <Checkbox>Tiền mặt</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={4.8}>
-              <Form.Item name="can_manage_spare_parts" valuePropName="checked">
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_spare_parts" valuePropName="checked" noStyle>
                 <Checkbox>Phụ tùng</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={4.8}>
-              <Form.Item name="can_manage_master_data" valuePropName="checked">
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_master_data" valuePropName="checked" noStyle>
                 <Checkbox>Danh mục</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={4.8}>
-              <Form.Item name="can_manage_sales" valuePropName="checked">
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_sales" valuePropName="checked" noStyle>
                 <Checkbox>Bán hàng</Checkbox>
               </Form.Item>
             </Col>
-            <Col span={4.8}>
-              <Form.Item name="can_manage_expenses" valuePropName="checked">
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_manage_expenses" valuePropName="checked" noStyle>
                 <Checkbox>Chi tiêu</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_delete_ticket" valuePropName="checked" noStyle>
+                <Checkbox>Xóa phiếu</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_edit_ticket" valuePropName="checked" noStyle>
+                <Checkbox>Sửa phiếu</Checkbox>
               </Form.Item>
             </Col>
           </Row>

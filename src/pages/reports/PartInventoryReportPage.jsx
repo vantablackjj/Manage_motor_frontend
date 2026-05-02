@@ -42,6 +42,8 @@ const PartInventoryReportPage = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
 
   useEffect(() => {
     fetchWarehouses();
@@ -180,11 +182,11 @@ const PartInventoryReportPage = () => {
         <Row gutter={16}>
           <Col xs={24} md={8}>
             <Select 
-              allowClear 
+              allowClear={true}
               style={{ width: '100%' }} 
-              placeholder="--- Tất cả các kho ---" 
+              placeholder="Chọn kho để xem tồn"
               size="large"
-              defaultValue={isAdmin ? undefined : user.warehouse_id}
+              value={filters.warehouse_id}
               onChange={v => handleFilterChange('warehouse_id', v)}
             >
               {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}

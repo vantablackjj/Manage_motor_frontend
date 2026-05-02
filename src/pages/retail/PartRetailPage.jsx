@@ -42,10 +42,16 @@ const PartRetailPage = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
-  const canManageMoney = isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
-  const canDelete = isAdmin || user.can_delete === true || user.can_delete === 1;
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
+  const canManageMoney = isPowerUser || user.can_manage_money === true || user.can_manage_money === 1;
+  const canDelete = isPowerUser || user.can_delete === true || user.can_delete === 1;
+
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
+  const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
 
   const [items, setItems] = useState([]);
+  const paidAmountWatch = Form.useWatch('paid_amount', form);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
@@ -61,6 +67,19 @@ const PartRetailPage = () => {
   const [lastSavedSale, setLastSavedSale] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [partSearchText, setPartSearchText] = useState('');
+
+  // Debounce search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (partSearchText) {
+            executePartSearch(partSearchText);
+        } else {
+            setPartOptions([]);
+        }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [partSearchText]);
 
   // Default to user's assigned warehouse
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(user.warehouse_id || null);
@@ -68,13 +87,17 @@ const PartRetailPage = () => {
   const fetchInitialData = async (warehouseId = selectedWarehouseId) => {
     setLoading(true);
     try {
-      const [whRes, partsRes, empRes] = await Promise.all([
+      const [whRes, empRes] = await Promise.all([
         api.get('/warehouses'),
-        api.get('/parts'),
         api.get('/auth/users')
       ]);
-      setWarehouses(whRes.data);
-      setAllParts(partsRes.data);
+      const allWh = whRes.data;
+      if (isAdmin) {
+        setWarehouses(allWh);
+      } else {
+        const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
+        setWarehouses(allWh.filter(w => allowedIds.includes(w.id)));
+      }
       setEmployees(empRes.data);
     } catch (error) {
       message.error('Lỗi tải dữ liệu: ' + error.message);
@@ -112,7 +135,7 @@ const PartRetailPage = () => {
 
   const handleWarehouseChange = (val) => {
     setSelectedWarehouseId(val);
-    handlePartSearch('');
+    executePartSearch('');
   };
 
   const selectedWarehouseWatch = Form.useWatch('warehouse_id', form);
@@ -121,51 +144,53 @@ const PartRetailPage = () => {
     if (selectedWarehouseWatch) setSelectedWarehouseId(selectedWarehouseWatch);
   }, [selectedWarehouseWatch]);
 
-  const handlePartSearch = (value = '') => {
-    const v = value ? value.toLowerCase() : '';
-    const filtered = allParts.filter(p => 
-        (p.code && p.code.toLowerCase().includes(v)) || 
-        (p.name && p.name.toLowerCase().includes(v))
-    );
-    setPartOptions(filtered.slice(0, 30).map(p => {
-      let stockText = '0';
-      let stockColor = '#ef4444';
+  const executePartSearch = async (value = '') => {
+    try {
+        const res = await api.get(`/parts?search=${encodeURIComponent(value)}`);
+        const parts = res.data.rows;
+        
+        setPartOptions(parts.map(p => {
+          let stockText = '0';
+          let stockColor = '#ef4444';
 
-      if (p.PartInventories && p.PartInventories.length > 0) {
-        if (selectedWarehouseId) {
-          const whStock = p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId);
-          const qty = Number(whStock?.quantity || 0);
-          stockText = qty.toLocaleString();
-          stockColor = qty > 5 ? '#10b981' : (qty > 0 ? '#f59e0b' : '#ef4444');
-        } else {
-          const totalQty = p.PartInventories.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-          stockText = `Tổng: ${totalQty.toLocaleString()}`;
-          stockColor = totalQty > 0 ? '#10b981' : '#ef4444';
-        }
-      }
+          if (p.PartInventories && p.PartInventories.length > 0) {
+            if (selectedWarehouseId) {
+              const whStock = p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId);
+              const qty = Number(whStock?.quantity || 0);
+              stockText = qty.toLocaleString();
+              stockColor = qty > 5 ? '#10b981' : (qty > 0 ? '#f59e0b' : '#ef4444');
+            } else {
+              const totalQty = p.PartInventories.reduce((sum, inv) => sum + Number(inv.quantity), 0);
+              stockText = `Tổng: ${totalQty.toLocaleString()}`;
+              stockColor = totalQty > 0 ? '#10b981' : '#ef4444';
+            }
+          }
 
-      return {
-        value: p.code,
-        label: (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <Text strong style={{ display: 'block' }}>{p.code}</Text>
-              <Text type="secondary" style={{ fontSize: '11px' }}>{p.name}</Text>
-            </div>
-            <div style={{ textAlign: 'right', minWidth: 100 }}>
-              <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
-              <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{Number(p.selling_price).toLocaleString()} đ</Tag>
-            </div>
-          </div>
-        ),
-        part: p
-      };
-    }));
+          return {
+            value: p.code,
+            label: (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text strong style={{ display: 'block' }}>{p.code}</Text>
+                  <Text type="secondary" style={{ fontSize: '11px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Text>
+                </div>
+                <div style={{ textAlign: 'right', minWidth: 100, flexShrink: 0 }}>
+                  <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
+                  <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{Number(p.selling_price).toLocaleString()} đ</Tag>
+                </div>
+              </div>
+            ),
+            part: p
+          };
+        }));
+    } catch (e) {
+        console.error(e);
+    }
   };
 
   useEffect(() => {
-    handlePartSearch('');
-  }, [allParts, selectedWarehouseId]);
+    // We don't search on mount anymore
+  }, [selectedWarehouseId]);
 
   // ── Count stock in selected warehouse for the badge ──
   const totalStockInWarehouse = allParts.reduce((sum, p) => {
@@ -211,8 +236,10 @@ const PartRetailPage = () => {
     // If the saleData already has Warehouse (from backend), use it.
     // Otherwise fallback to manual lookup (history items might not have it yet)
     let wh = saleData.Warehouse || saleData.warehouse;
-    if (!wh || !wh.address) {
-       wh = warehouses.find(w => w.id === (saleData.warehouse_id || selectedWarehouseId)) || wh;
+    // Aggressively search for full warehouse details in the loaded warehouses list
+    const fullWh = warehouses.find(w => w.id === (saleData.warehouse_id || selectedWarehouseId));
+    if (fullWh) {
+       wh = fullWh;
     }
     setLastSavedSale({ ...saleData, Warehouse: wh });
     setTimeout(() => printReceipt('print-part-sale-receipt'), 500);
@@ -404,11 +431,6 @@ const PartRetailPage = () => {
           >
             Nhập từ Excel
           </Button>
-          <Badge count={totalStockInWarehouse} color="#10b981" title="Tổng số linh kiện trong kho đang chọn" showZero>
-            <Button icon={<Car size={18} />} ghost>
-              Tồn kho đang chọn: {totalStockInWarehouse.toLocaleString()} cái
-            </Button>
-          </Badge>
         </Space>
       </div>
 
@@ -447,7 +469,7 @@ const PartRetailPage = () => {
                         </Col>
                       </Row>
 
-                      {isAdmin ? (
+                      { showWarehouseSelector ? (
                         <Form.Item label="Kho xuất hàng" name="warehouse_id" rules={[{ required: true }]}>
                           <Select size="large" placeholder="Chọn kho..." onChange={handleWarehouseChange}>
                             {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
@@ -505,9 +527,9 @@ const PartRetailPage = () => {
                       </Form.Item>
 
                       {/* Debt warning */}
-                      {Form.useWatch('paid_amount', form) > 0 && Form.useWatch('paid_amount', form) < totalAmount && (
+                      {paidAmountWatch > 0 && paidAmountWatch < totalAmount && (
                         <Alert 
-                          message={`Còn nợ: ${(totalAmount - (Form.useWatch('paid_amount', form) || 0)).toLocaleString('vi-VN')} đ`}
+                          message={`Còn nợ: ${(totalAmount - (paidAmountWatch || 0)).toLocaleString('vi-VN')} đ`}
                           type="warning" showIcon style={{ marginBottom: 16 }}
                         />
                       )}
@@ -536,11 +558,13 @@ const PartRetailPage = () => {
                     <div style={{ marginBottom: 16 }}>
                       <AutoComplete
                         style={{ width: '100%' }}
-                        onSearch={handlePartSearch}
+                        onSearch={setPartSearchText}
                         onSelect={(val, option) => addItem(option.part)}
                         options={partOptions}
-                        onFocus={() => handlePartSearch('')}
-                        placeholder="🔍 Gõ mã hoặc tên phụ tùng để tìm kiếm..."
+                        onFocus={() => executePartSearch(partSearchText)}
+                        placeholder="🔍 Tìm theo mã hoặc tên (ví dụ: 'DAU HONDA')..."
+                        popupMatchSelectWidth={false}
+                        dropdownStyle={{ minWidth: 450 }}
                       >
                         <Input size="large" />
                       </AutoComplete>

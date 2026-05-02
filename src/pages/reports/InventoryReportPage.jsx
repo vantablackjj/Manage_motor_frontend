@@ -12,7 +12,9 @@ import {
   Tag,
   Divider,
   Spin,
-  message
+  message,
+  Tabs,
+  Badge
 } from 'antd';
 import { 
   Package, 
@@ -33,6 +35,7 @@ import { exportToExcel } from '../../utils/excelExport';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+const { TabPane } = Tabs;
 
 const InventoryReportPage = () => {
   const [loading, setLoading] = useState(false);
@@ -44,9 +47,13 @@ const InventoryReportPage = () => {
   });
   
   const [options, setOptions] = useState({ warehouses: [], types: [], colors: [] });
+  const [activeTab, setActiveTab] = useState('summary');
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
 
   useEffect(() => {
     fetchOptions();
@@ -60,8 +67,9 @@ const InventoryReportPage = () => {
         api.get('/vehicle-types'),
         api.get('/colors')
       ]);
+      const filteredWH = wRes.data;
       setOptions({
-        warehouses: wRes.data,
+        warehouses: filteredWH,
         types: tRes.data,
         colors: cRes.data
       });
@@ -110,7 +118,16 @@ const InventoryReportPage = () => {
   };
 
   const handlePrint = () => {
-    if (!reportData.vehicles || reportData.vehicles.length === 0) {
+    let dataToPrint = reportData.vehicles;
+    let reportTitle = "BÁO CÁO TỒN KHO CHI TIẾT";
+    let isWarningReport = activeTab === 'warning';
+
+    if (isWarningReport) {
+        dataToPrint = warningVehicles;
+        reportTitle = "BÁO CÁO CẢNH BÁO TỒN KHO (LÂU NGÀY)";
+    }
+
+    if (!dataToPrint || dataToPrint.length === 0) {
         return message.warning('Không có dữ liệu để in!');
     }
 
@@ -120,7 +137,7 @@ const InventoryReportPage = () => {
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Báo cáo tồn kho</title>
+    <title>${reportTitle}</title>
     <style>
         body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.4; padding: 20px; }
         .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
@@ -136,68 +153,74 @@ const InventoryReportPage = () => {
         th { background-color: #eee; font-weight: bold; text-align: center; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
+        .urgent-text { color: #ef4444; font-weight: bold; }
+        .warning-text { color: #f59e0b; font-weight: bold; }
         .footer { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
         .signature-box { width: 250px; }
         .signature-title { font-weight: bold; margin-bottom: 60px; }
         @media print {
-            @page { margin: 15mm; size: A4 portrait; }
+            @page { margin: 10mm; size: A4 landscape; }
         }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="company-name">HỆ THỐNG CỬA HÀNG XE MÁY THANH HẢI</div>
-        <div class="report-title">BÁO CÁO TỒN KHO CHI TIẾT</div>
+        <div class="report-title">${reportTitle}</div>
         <div class="report-subtitle">Ngày lập: ${dayjs().format('DD/MM/YYYY HH:mm')} | Kho: ${warehouseName}</div>
     </div>
 
     <div class="summary-box">
         <div class="summary-item">
-            <div class="summary-label">TỔNG SỐ LƯỢNG</div>
-            <div class="summary-value">${reportData.summary.total_count} chiếc</div>
+            <div class="summary-label">SỐ LƯỢNG XE TRONG DANH SÁCH</div>
+            <div class="summary-value">${dataToPrint.length} chiếc</div>
         </div>
+        ${!isWarningReport ? `
         <div class="summary-item">
             <div class="summary-label">TỔNG GIÁ TRỊ VỐN</div>
-            <div class="summary-value">${Number(reportData.summary.total_value).toLocaleString()} đ</div>
+            <div class="summary-value">${Number(dataToPrint.reduce((s,v) => s + Number(v.price_vnd || 0), 0)).toLocaleString()} đ</div>
         </div>
+        ` : ''}
         <div class="summary-item">
-            <div class="summary-label">SẴN SÀNG</div>
-            <div class="summary-value">${reportData.summary.available_count} xe</div>
-        </div>
-        <div class="summary-item">
-            <div class="summary-label">ĐANG CHUYỂN</div>
-            <div class="summary-value">${reportData.summary.transferring_count} xe</div>
+            <div class="summary-label">TRẠNG THÁI</div>
+            <div class="summary-value">${isWarningReport ? 'CẢNH BÁO TỒN LÂU' : 'TỒN KHO CHI TIẾT'}</div>
         </div>
     </div>
 
     <table>
         <thead>
             <tr>
-                <th style="width: 40px;">STT</th>
+                <th style="width: 30px;">STT</th>
                 <th>Kho</th>
-                <th>Chủ hàng</th>
                 <th>Loại xe</th>
                 <th>Màu xe</th>
-                <th>Số máy</th>
-                <th>Số khung</th>
+                <th style="width: 80px;">Số máy</th>
+                <th style="width: 100px;">Số khung</th>
+                ${isWarningReport ? '<th>Số ngày tồn</th>' : ''}
                 <th>Giá nhập</th>
                 <th>Ngày nhập</th>
             </tr>
         </thead>
         <tbody>
-            ${reportData.vehicles.map((v, index) => `
+            ${dataToPrint.map((v, index) => {
+                const date = v.Purchase?.purchase_date || v.createdAt;
+                const days = isWarningReport ? v.inventoryDays : 0;
+                const dayClass = days >= 120 ? 'urgent-text' : (days >= 40 ? 'warning-text' : '');
+                
+                return `
                 <tr>
                     <td class="text-center">${index + 1}</td>
                     <td>${v.Warehouse?.warehouse_name || 'N/A'}</td>
-                    <td>${v.Purchase?.Supplier?.name || 'N/A'}</td>
                     <td>${v.VehicleType?.name || 'N/A'}</td>
                     <td>${v.VehicleColor?.color_name || 'N/A'}</td>
-                    <td>${v.engine_no}</td>
-                    <td>${v.chassis_no}</td>
+                    <td><b>${v.engine_no}</b></td>
+                    <td><b>${v.chassis_no}</b></td>
+                    ${isWarningReport ? `<td class="text-center ${dayClass}">${days} ngày</td>` : ''}
                     <td class="text-right">${Number(v.price_vnd).toLocaleString()}</td>
-                    <td class="text-center">${dayjs(v.Purchase?.purchase_date || v.createdAt).format('DD/MM/YYYY')}</td>
+                    <td class="text-center">${dayjs(date).format('DD/MM/YYYY')}</td>
                 </tr>
-            `).join('')}
+                `;
+            }).join('')}
         </tbody>
     </table>
 
@@ -291,6 +314,88 @@ const InventoryReportPage = () => {
     }
   ];
 
+  const typeColumns = [
+    { 
+        title: 'Loại Xe', 
+        dataIndex: 'name', 
+        key: 'name', 
+        render: v => <Text strong>{v}</Text>,
+        sorter: (a, b) => a.name.localeCompare(b.name)
+    },
+    { 
+        title: 'Số lượng tồn', 
+        dataIndex: 'count', 
+        key: 'count', 
+        align: 'center',
+        sorter: (a, b) => a.count - b.count,
+        render: v => <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>{v} xe</Tag>
+    },
+    { 
+        title: 'Tổng giá trị vốn (đ)', 
+        dataIndex: 'value', 
+        key: 'value', 
+        align: 'right',
+        sorter: (a, b) => a.value - b.value,
+        render: v => <Text strong>{Number(v).toLocaleString()} đ</Text>
+    },
+    { 
+        title: 'Giá vốn bình quân', 
+        key: 'avg', 
+        align: 'right',
+        render: (_, r) => <Text type="secondary">{(r.value / r.count).toLocaleString()} đ</Text>
+    }
+  ];
+
+  const warningVehicles = reportData.vehicles
+    .map(v => {
+        const date = v.Purchase?.purchase_date || v.createdAt;
+        const dayjsDate = dayjs(date);
+        const diff = dayjsDate.isValid() && dayjsDate.year() >= 2010 
+            ? dayjs().startOf('day').diff(dayjsDate.startOf('day'), 'day') 
+            : 0;
+        return { ...v, inventoryDays: diff };
+    })
+    .filter(v => v.inventoryDays >= 40 && v.status === 'In Stock')
+    .sort((a, b) => b.inventoryDays - a.inventoryDays);
+
+  const warningColumns = [
+    ...columns.filter(c => c.key !== 'status' && c.key !== 'age'),
+    {
+        title: 'Số ngày tồn',
+        dataIndex: 'inventoryDays',
+        key: 'inventoryDays',
+        sorter: (a, b) => a.inventoryDays - b.inventoryDays,
+        render: (days) => (
+            <Space direction="vertical" size={0}>
+                <Text strong style={{ color: days >= 120 ? '#ef4444' : '#f59e0b', fontSize: 16 }}>
+                    {days} ngày
+                </Text>
+                <Tag color={days >= 120 ? 'error' : 'warning'}>
+                    {days >= 120 ? 'XỬ LÝ NGAY' : 'CẢNH BÁO'}
+                </Tag>
+            </Space>
+        )
+    },
+    {
+        title: 'Ngày nhập',
+        key: 'entryDate',
+        render: (_, v) => {
+            const date = v.Purchase?.purchase_date || v.createdAt;
+            return dayjs(date).format('DD/MM/YYYY');
+        }
+    }
+  ];
+
+  const summarizedData = Object.values(
+    reportData.vehicles.reduce((acc, v) => {
+        const typeName = v.VehicleType?.name || 'N/A';
+        if (!acc[typeName]) acc[typeName] = { key: typeName, name: typeName, count: 0, value: 0 };
+        acc[typeName].count++;
+        acc[typeName].value += Number(v.price_vnd || 0);
+        return acc;
+    }, {})
+  ).sort((a, b) => b.count - a.count);
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -367,17 +472,17 @@ const InventoryReportPage = () => {
           </Col>
           <Col xs={24} md={7}>
             <Select 
-              allowClear 
+              allowClear={true} 
               style={{ width: '100%' }} 
-              placeholder="--- Tất cả các kho ---" 
+              placeholder="Chọn kho để xem tồn" 
               size="large"
-              defaultValue={isAdmin ? undefined : user.warehouse_id}
+              value={filters.warehouse_id}
               onChange={v => handleFilterChange('warehouse_id', v)}
             >
               {options.warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
             </Select>
           </Col>
-          <Col xs={24} md={isAdmin ? 8 : 11}>
+          <Col xs={24} md={isPowerUser ? 8 : 11}>
             <Select 
               allowClear 
               showSearch 
@@ -389,7 +494,7 @@ const InventoryReportPage = () => {
                 {options.types.map(t => <Option key={t.id} value={t.id}>{t.name}</Option>)}
             </Select>
           </Col>
-          <Col xs={24} md={isAdmin ? 8 : 12}>
+          <Col xs={24} md={isPowerUser ? 8 : 12}>
             <Select 
               allowClear 
               showSearch 
@@ -405,16 +510,110 @@ const InventoryReportPage = () => {
       </Card>
 
       {/* LIST TABLE */}
-      <Card className="glass-card">
-        <Table 
-          dataSource={reportData.vehicles} 
-          columns={columns} 
-          rowKey="id" 
-          loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
-          size="middle"
-          scroll={{ x: 'max-content' }}
-        />
+      <Card className="glass-card" styles={{ body: { padding: '0px' } }}>
+        <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab} 
+            className="inventory-tabs"
+            style={{ padding: '0 16px' }}
+        >
+            <TabPane 
+                tab={
+                    <Space>
+                        <BarChart3 size={16} style={{ marginBottom: -3 }} /> 
+                        Tổng hợp theo loại xe
+                        <Badge count={summarizedData.length} overflowCount={999} style={{ backgroundColor: '#3b82f6' }} />
+                    </Space>
+                } 
+                key="summary"
+            >
+                <div style={{ padding: '16px 0' }}>
+                    <Table 
+                        dataSource={summarizedData} 
+                        columns={typeColumns} 
+                        rowKey="key" 
+                        loading={loading}
+                        pagination={{ pageSize: 15, showSizeChanger: true }}
+                        size="middle"
+                        summary={pageData => {
+                            let totalCount = 0;
+                            let totalValue = 0;
+                            pageData.forEach(({ count, value }) => {
+                                totalCount += count;
+                                totalValue += value;
+                            });
+                            return (
+                                <Table.Summary fixed>
+                                    <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
+                                        <Table.Summary.Cell index={0}>TỔNG CỘNG</Table.Summary.Cell>
+                                        <Table.Summary.Cell index={1} align="center">
+                                            <Text type="danger">{totalCount} xe</Text>
+                                        </Table.Summary.Cell>
+                                        <Table.Summary.Cell index={2} align="right">
+                                            <Text type="danger">{totalValue.toLocaleString()} đ</Text>
+                                        </Table.Summary.Cell>
+                                        <Table.Summary.Cell index={3} />
+                                    </Table.Summary.Row>
+                                </Table.Summary>
+                            );
+                        }}
+                    />
+                </div>
+            </TabPane>
+            <TabPane 
+                tab={
+                    <Space>
+                        <Package size={16} style={{ marginBottom: -3 }} /> 
+                        Chi tiết từng xe
+                        <Badge count={reportData.vehicles.length} overflowCount={9999} showZero color="#10b981" />
+                    </Space>
+                } 
+                key="detailed"
+            >
+                <div style={{ padding: '16px 0' }}>
+                    <Table 
+                        dataSource={reportData.vehicles} 
+                        columns={columns} 
+                        rowKey="id" 
+                        loading={loading}
+                        pagination={{ pageSize: 15, showSizeChanger: true }}
+                        size="middle"
+                        scroll={{ x: 'max-content' }}
+                    />
+                </div>
+            </TabPane>
+            <TabPane 
+                tab={
+                    <Space>
+                        <AlertCircle size={16} style={{ marginBottom: -3 }} color={warningVehicles.length > 0 ? "#ef4444" : "inherit"} /> 
+                        Cảnh báo tồn kho
+                        <Badge count={warningVehicles.length} overflowCount={99} style={{ backgroundColor: '#ef4444' }} />
+                    </Space>
+                } 
+                key="warning"
+            >
+                <div style={{ padding: '16px 0' }}>
+                    <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: 8 }}>
+                        <Space>
+                            <AlertCircle size={20} color="#e53e3e" />
+                            <Text strong style={{ color: '#c53030' }}>
+                                Danh sách xe tồn kho trên 40 ngày. Ưu tiên giải phóng xe tồn trên 120 ngày (đỏ).
+                            </Text>
+                        </Space>
+                    </div>
+                    <Table 
+                        dataSource={warningVehicles} 
+                        columns={warningColumns} 
+                        rowKey="id" 
+                        loading={loading}
+                        pagination={{ pageSize: 15, showSizeChanger: true }}
+                        size="middle"
+                        scroll={{ x: 'max-content' }}
+                        rowClassName={(record) => record.inventoryDays >= 120 ? 'urgent-row' : ''}
+                    />
+                </div>
+            </TabPane>
+        </Tabs>
       </Card>
 
       <style>{`
@@ -431,6 +630,18 @@ const InventoryReportPage = () => {
             .stat-card {
                 margin-bottom: 0 !important;
             }
+        }
+        .inventory-tabs .ant-tabs-nav {
+            margin-bottom: 0 !important;
+        }
+        .inventory-tabs .ant-tabs-tab {
+            padding: 12px 16px !important;
+        }
+        .urgent-row {
+            background-color: #fff5f5;
+        }
+        .urgent-row:hover td {
+            background-color: #fed7d7 !important;
         }
       `}</style>
     </div>

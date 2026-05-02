@@ -32,12 +32,19 @@ const PartInventoryPage = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPurchaseImportOpen, setIsPurchaseImportOpen] = useState(false);
+  
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      const params = {};
+      if (filters.warehouse_id) params.warehouse_id = filters.warehouse_id;
+      if (filters.search && filters.search.trim()) params.search = filters.search.trim();
+
       const [invRes, whRes] = await Promise.all([
-        api.get('/part-inventory', { params: filters }),
+        api.get('/part-inventory', { params }),
         api.get('/warehouses')
       ]);
       setData(invRes.data);
@@ -178,10 +185,11 @@ const PartInventoryPage = () => {
             </Col>
             <Col xs={24} md={8}>
                 <Select 
-                    placeholder="Lọc theo kho" 
+                    placeholder="Chọn kho để xem tồn" 
                     style={{ width: '100%' }} 
                     size="large"
-                    allowClear
+                    allowClear={true}
+                    value={filters.warehouse_id}
                     onChange={(v) => setFilters({...filters, warehouse_id: v})}
                 >
                     {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
@@ -196,10 +204,7 @@ const PartInventoryPage = () => {
       </div>
 
       <Table 
-        dataSource={data.filter(i => 
-            i.Part.code.toLowerCase().includes(filters.search.toLowerCase()) || 
-            i.Part.name.toLowerCase().includes(filters.search.toLowerCase())
-        )} 
+        dataSource={data} 
         columns={columns} 
         rowKey="id" 
         loading={loading}

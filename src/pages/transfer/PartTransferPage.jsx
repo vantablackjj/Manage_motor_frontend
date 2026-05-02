@@ -260,6 +260,9 @@ const PartTransferPage = () => {
     printReceipt('print-part-transfer-receipt');
   };
 
+  const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const filteredFromWarehouses = isPowerUser ? warehouses : warehouses.filter(w => w.id === user.warehouse_id);
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
       <div style={{ display: 'none' }}>
@@ -290,8 +293,8 @@ const PartTransferPage = () => {
                 <Row gutter={24}>
                   <Col span={8}>
                     <Form.Item label="Từ kho xuất" name="from_warehouse_id" rules={[{ required: true }]}>
-                      <Select placeholder="Chọn kho xuất" size="large" disabled={!isAdmin} onChange={handleFromWarehouseChange}>
-                        {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+                      <Select placeholder="Chọn kho xuất" size="large" disabled={!isPowerUser} onChange={handleFromWarehouseChange}>
+                        {filteredFromWarehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                       </Select>
                     </Form.Item>
                   </Col>

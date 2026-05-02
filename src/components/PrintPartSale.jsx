@@ -26,12 +26,15 @@ const PrintPartSale = ({ sale, items, warehouse, title }) => {
         <tbody>
           <tr>
             <td style={{ width: '60%' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <img src="/honda-logo.png" style={{ width: '80px', height: 'auto' }} alt="Honda" />
+              </div>
               <div style={{ fontWeight: 'bold', fontSize: '18px' }}>HỆ THỐNG XE MÁY THANH HẢI</div>
               <div style={{ fontSize: '12px', marginTop: '4px' }}>
                 {warehouse?.warehouse_name ? `Kho: ${warehouse.warehouse_name}` : 'Chi nhánh: ......................'}
               </div>
               <div style={{ fontSize: '12px' }}>
-                Địa chỉ: {warehouse?.address || '............................................................'}
+                Địa chỉ: {[warehouse?.address, warehouse?.location].filter(Boolean).join(', ') || '............................................................'}
               </div>
               <div style={{ fontSize: '12px' }}>
                 Điện thoại: {warehouse?.phone || '......................'} {warehouse?.mobile ? ` - ${warehouse.mobile}` : ''}

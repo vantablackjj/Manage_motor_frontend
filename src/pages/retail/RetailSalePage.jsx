@@ -55,12 +55,14 @@ const RetailSalePage = () => {
   const [form] = Form.useForm();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "ADMIN";
+  const isManager = user.role === "MANAGER";
   const canManageDebt =
     isAdmin || user.can_manage_debt === true || user.can_manage_debt === 1;
   const canDelete =
     isAdmin || user.can_delete === true || user.can_delete === 1;
   const canManageMoney =
     isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
+  const isPowerUser = isAdmin || isManager;
 
   const [salesHistory, setSalesHistory] = useState([]);
   const [availableStock, setAvailableStock] = useState([]);
@@ -83,6 +85,24 @@ const RetailSalePage = () => {
   const [availableGifts, setAvailableGifts] = useState([]);
   const [giftInventory, setGiftInventory] = useState([]);
 
+  // Disbursement Modal States
+  const [disburseModalVisible, setDisburseModalVisible] = useState(false);
+  const [disburseSale, setDisburseSale] = useState(null);
+  const [disburseDate, setDisburseDate] = useState(dayjs());
+
+  const allowedWarehouseIds = [
+    user.warehouse_id,
+    ...(user.accessible_warehouses
+      ? user.accessible_warehouses.split(",")
+      : []),
+  ].filter(Boolean);
+
+  const filteredWarehouses = isPowerUser
+    ? warehouses
+    : warehouses.filter((w) => allowedWarehouseIds.includes(w.id.toString()));
+
+  const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
+
   useEffect(() => {
     fetchInitialData();
   }, []);
@@ -95,14 +115,20 @@ const RetailSalePage = () => {
           api.get(
             `/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
           ),
-          isAdmin ? api.get("/warehouses") : Promise.resolve({ data: [] }),
+          isAdmin || isManager || user.accessible_warehouses
+            ? api.get("/warehouses")
+            : Promise.resolve({ data: [] }),
           api.get("/auth/users"),
           api.get("/gifts"),
-          api.get(`/gifts/inventory${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`),
+          api.get(
+            `/gifts/inventory${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
+          ),
         ]);
       setSalesHistory(salesRes.data);
       setAvailableStock(stockRes.data);
-      if (isAdmin) setWarehouses(whRes.data);
+      if (whRes.data) {
+        setWarehouses(whRes.data);
+      }
       setEmployees(empRes.data);
       setAvailableGifts(giftRes.data);
       setGiftInventory(giftInvRes.data);
@@ -129,7 +155,7 @@ const RetailSalePage = () => {
         sale_price: Number(suggested),
         paid_amount: Number(suggested),
         cash_amount: Number(suggested),
-        transfer_amount: 0
+        transfer_amount: 0,
       });
 
       setShowPriceWarning(false);
@@ -138,7 +164,10 @@ const RetailSalePage = () => {
 
   const handlePriceChange = (value, currentVehicle = selectedVehicle) => {
     if (currentVehicle && currentVehicle.price_vnd) {
-      if (Number(value) < Number(currentVehicle.price_vnd)) {
+      if (
+        Number(value) < Number(currentVehicle.price_vnd) &&
+        Number(value) !== 0
+      ) {
         setShowPriceWarning(true);
       } else {
         setShowPriceWarning(false);
@@ -213,7 +242,7 @@ const RetailSalePage = () => {
       setPaymentModalVisible(true);
       const price = Number(sale.sale_price || sale.total_price || 0);
       const paid = Number(sale.paid_amount || 0);
-      const loan = Number(sale.loan_amount || 0);
+      const loan = sale.is_disbursed ? Number(sale.loan_amount || 0) : 0;
       paymentForm.setFieldsValue({
         payment_date: dayjs(),
         amount: Math.max(0, price - paid - loan),
@@ -262,7 +291,7 @@ const RetailSalePage = () => {
     const warehouse = sale.Warehouse || sale.warehouse || sale.Store || {};
     const vehicle = sale.Vehicle || sale.vehicle || {};
     const seller = sale.Seller || sale.seller || sale.User || {};
-    const loan = Number(sale.loan_amount || 0);
+    const loan = sale.is_disbursed ? Number(sale.loan_amount || 0) : 0;
     const paid = Number(sale.paid_amount || 0);
     const price = Number(sale.sale_price || 0);
     const debt = price - paid - loan;
@@ -378,8 +407,8 @@ const RetailSalePage = () => {
 <div class="page">
   <div class="header">
     <div class="logo-side">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/1200px-Honda_Logo.svg.png" alt="Honda" onerror="this.style.display='none'"/>
-      <div class="head-text">HEAD ${headName}</div>
+      <img src="${window.location.origin}/honda-logo.png" style="width: 80px; height: auto; display: block; margin: 0 auto 5px;" alt="Honda"/>
+      <div class="head-text" style="font-size: 10pt; font-weight: bold; color: #CC0000;">HEAD ${headName}</div>
     </div>
     <div class="nat-side">
       <div class="nat-title">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
@@ -473,13 +502,38 @@ const RetailSalePage = () => {
 
   const columns = [
     {
-      title: "Ngày bán",
+      title: "NGÀY BÁN",
       dataIndex: "sale_date",
       key: "date",
+      width: 95,
+      fixed: "left",
       render: (d) => dayjs(d).format("DD/MM/YYYY"),
     },
-    { title: "Số Máy", dataIndex: "engine_no", key: "engine_no" },
-    { title: "Tên Khách", dataIndex: "customer_name", key: "customer" },
+    {
+      title: "SỐ MÁY",
+      dataIndex: "engine_no",
+      key: "engine_no",
+      width: 110,
+      fixed: "left",
+      render: (v) => (
+        <Text strong style={{ fontSize: 11 }}>
+          {v}
+        </Text>
+      ),
+    },
+    {
+      title: "TÊN KHÁCH",
+      dataIndex: "customer_name",
+      key: "customer",
+      width: 130,
+      fixed: "left",
+      ellipsis: true,
+      render: (v) => (
+        <Text strong style={{ fontSize: 11 }}>
+          {v}
+        </Text>
+      ),
+    },
     {
       title: "Ngày sinh",
       dataIndex: "birthday",
@@ -509,11 +563,16 @@ const RetailSalePage = () => {
         <Space size={[0, 4]} wrap>
           {gifts &&
             Array.isArray(gifts) &&
-            gifts.map((g) => (
-              <Tag color="blue" key={g} style={{ fontSize: 10, margin: 0 }}>
-                {g}
-              </Tag>
-            ))}
+            gifts.map((g, idx) => {
+              const name = typeof g === "string" ? g : g.name;
+              const qty = typeof g === "string" ? 1 : g.quantity;
+              return (
+                <Tag color="blue" key={idx} style={{ fontSize: 10, margin: 0 }}>
+                  {name}
+                  {qty > 1 ? ` (x${qty})` : ""}
+                </Tag>
+              );
+            })}
         </Space>
       ),
     },
@@ -523,8 +582,9 @@ const RetailSalePage = () => {
       render: (_, r) => {
         const price = Number(r.sale_price || r.total_price || 0);
         const paid = Number(r.paid_amount || 0);
-        const loan = Number(r.loan_amount || 0);
+        const loan = r.is_disbursed ? Number(r.loan_amount || 0) : 0;
         const debt = price - paid - loan;
+        if (price === 0) return <Tag color="error">TRẢ XE MƯỢN</Tag>;
         return debt > 0 ? (
           <Text type="danger" strong>
             {Number(debt).toLocaleString()}
@@ -535,8 +595,49 @@ const RetailSalePage = () => {
       },
     },
     {
-      title: "Tác vụ",
+      title: "Giải ngân",
+      width: 150,
+      render: (_, r) => {
+        if (r.payment_method !== "Trả góp") return "-";
+        return (
+          <div style={{ fontSize: 10 }}>
+            <Checkbox
+              checked={r.is_disbursed}
+              disabled={!canManageDebt || (r.is_disbursed && !isAdmin)}
+              onChange={async (e) => {
+                if (e.target.checked) {
+                  setDisburseSale(r);
+                  setDisburseDate(dayjs());
+                  setDisburseModalVisible(true);
+                } else {
+                  try {
+                    await api.put(`/retail-sales/${r.id}/disbursement`, {
+                      is_disbursed: false,
+                    });
+                    message.success("Đã hủy xác nhận giải ngân");
+                    fetchInitialData();
+                  } catch (err) {
+                    message.error("Lỗi: " + err.message);
+                  }
+                }
+              }}
+            >
+              {r.is_disbursed ? "Đã giải ngân" : "Chờ giải ngân"}
+            </Checkbox>
+            {r.is_disbursed && r.disbursed_at && (
+              <div style={{ opacity: 0.6, marginLeft: 22 }}>
+                Ngày: {dayjs(r.disbursed_at).format("DD/MM/YYYY")}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: "TÁC VỤ",
       key: "action",
+      width: 110,
+      align: "center",
       render: (_, r) => (
         <Space>
           {canManageMoney && (
@@ -556,7 +657,7 @@ const RetailSalePage = () => {
           />
           {canDelete && (
             <Popconfirm
-              title="Hủy đơn bán này?"
+              title="Hủy đơn BÁN HÀNG này?"
               description="Xe sẽ được khôi phục về trạng thái 'Trong kho'. Tiếp tục?"
               onConfirm={() => handleDelete(r.id)}
               okText="Xác nhận"
@@ -578,32 +679,55 @@ const RetailSalePage = () => {
   const handleExport = () => {
     if (salesHistory.length === 0)
       return message.warning("Không có lịch sử để xuất!");
-    const exportData = salesHistory.map((s) => ({
-      "Ngày bán": dayjs(s.sale_date).format("DD/MM/YYYY"),
-      "Số Máy": s.engine_no,
-      "Số Khung": s.chassis_no,
-      "Tên Khách": s.customer_name,
-      "Ngày sinh": s.birthday ? dayjs(s.birthday).format("DD/MM/YYYY") : "",
-      SĐT: s.phone,
-      CCCD: s.id_card,
-      "Hình thức": s.payment_method,
-      "Ngân hàng": s.bank_name || "",
-      "Số hợp đồng": s.contract_number || "",
-      "Tiền vay": Number(s.loan_amount || 0),
-      "Giá bán": Number(s.sale_price || s.total_price),
-      "Đã trả": Number(s.paid_amount),
-      "NV Bán": s.seller?.full_name || "N/A",
-    }));
+    const exportData = salesHistory.map((s) => {
+      const price = Number(s.sale_price || s.total_price || 0);
+      const paid = Number(s.paid_amount || 0);
+      const loan =
+        s.is_disbursed === true || s.is_disbursed === 1
+          ? Number(s.loan_amount || 0)
+          : 0;
+      const debt = price - paid - loan;
+
+      return {
+        "Ngày bán": dayjs(s.sale_date).format("DD/MM/YYYY"),
+        "Số Máy": s.engine_no,
+        "Số Khung": s.chassis_no,
+        "Tên Khách": s.customer_name,
+        "Ngày sinh": s.birthday ? dayjs(s.birthday).format("DD/MM/YYYY") : "",
+        SĐT: s.phone,
+        CCCD: s.id_card,
+        "Hình thức": s.payment_method,
+        "Ngân hàng": s.bank_name || "",
+        "Số hợp đồng": s.contract_number || "",
+        "Tiền vay": Number(s.loan_amount || 0),
+        "Giải ngân": s.is_disbursed
+          ? "Đã giải ngân"
+          : s.payment_method === "Trả góp"
+            ? "Chờ giải ngân"
+            : "-",
+        "Giá bán": price,
+        "Thực thu (TM+CK+NH)": paid + loan,
+        "Tiền mặt": Number(s.cash_amount || 0),
+        "Chuyển khoản": Number(s.transfer_amount || 0),
+        "Còn nợ": debt,
+        "NV Bán": s.seller?.full_name || "N/A",
+      };
+    });
     exportToExcel(exportData, `LichSuBanLe_${dayjs().format("YYYYMMDD_HHmm")}`);
   };
 
   const filteredHistory = salesHistory.filter((s) => {
     const matchesSearch =
       s.engine_no?.toLowerCase().includes(searchText.toLowerCase()) ||
+      s.chassis_no?.toLowerCase().includes(searchText.toLowerCase()) ||
       s.customer_name?.toLowerCase().includes(searchText.toLowerCase()) ||
       s.phone?.includes(searchText);
 
-    const hasDebt = (s.sale_price || s.total_price) - s.paid_amount > 0;
+    const hasDebt =
+      (s.sale_price || s.total_price) -
+        s.paid_amount -
+        (s.is_disbursed ? s.loan_amount || 0 : 0) >
+      0;
 
     if (showOnlyDebt) {
       return matchesSearch && hasDebt;
@@ -613,16 +737,7 @@ const RetailSalePage = () => {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24,
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
+      <div className="page-header" style={{ marginBottom: 24 }}>
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
           BÁN LẺ XE MÁY
         </Title>
@@ -631,13 +746,17 @@ const RetailSalePage = () => {
           color="#10b981"
           title="Xe đang có trong kho"
         >
-          <Button icon={<Car size={18} />} ghost>
+          <Button
+            icon={<Car size={18} />}
+            ghost
+            block={window.innerWidth < 768}
+          >
             Tồn kho: {availableStock.length} xe
           </Button>
         </Badge>
       </div>
 
-      <Row gutter={[24, 24]}>
+      <Row gutter={[24, 24]} className="mobile-stack-cols">
         <Col xs={24} lg={11}>
           <Card
             title={
@@ -672,10 +791,11 @@ const RetailSalePage = () => {
                 loan_amount: 0,
                 cash_amount: 0,
                 transfer_amount: 0,
+                gifts: [],
               }}
             >
               <Row gutter={[16, 16]}>
-                <Col xs={12} md={isAdmin ? 8 : 12}>
+                <Col xs={24} sm={isAdmin || isManager ? 8 : 12}>
                   <Form.Item
                     label="Ngày bán hàng"
                     name="sale_date"
@@ -688,7 +808,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={isAdmin ? 8 : 12}>
+                <Col xs={24} sm={isAdmin || isManager ? 8 : 12}>
                   <Form.Item
                     label="Người bán"
                     name="seller_id"
@@ -699,7 +819,7 @@ const RetailSalePage = () => {
                       showSearch
                       placeholder="Chọn nhân viên bán..."
                       optionFilterProp="children"
-                      disabled={!isAdmin}
+                      disabled={!isAdmin && !isManager}
                     >
                       {employees.map((e) => (
                         <Option key={e.id} value={e.id}>
@@ -709,18 +829,21 @@ const RetailSalePage = () => {
                     </Select>
                   </Form.Item>
                 </Col>
-                {isAdmin && (
-                  <Col xs={24} md={8}>
-                    <Form.Item label="Kho xuất bán" required>
+                {showWarehouseSelector ? (
+                  <Col xs={24} sm={8}>
+                    <Form.Item
+                      label="Kho xuất xe"
+                      name="warehouse_id"
+                      rules={[{ required: true }]}
+                    >
                       <Select
                         size="large"
-                        showSearch
-                        value={selectedWarehouseId}
-                        onChange={handleWarehouseChange}
-                        placeholder="Chọn kho..."
-                        optionFilterProp="children"
+                        onChange={(val) => {
+                          handleWarehouseChange(val);
+                        }}
+                        placeholder="Chọn kho chi nhánh"
                       >
-                        {warehouses.map((w) => (
+                        {filteredWarehouses.map((w) => (
                           <Option key={w.id} value={w.id}>
                             {w.warehouse_name}
                           </Option>
@@ -728,11 +851,19 @@ const RetailSalePage = () => {
                       </Select>
                     </Form.Item>
                   </Col>
+                ) : (
+                  <Form.Item
+                    name="warehouse_id"
+                    hidden
+                    initialValue={user.warehouse_id}
+                  >
+                    <Input />
+                  </Form.Item>
                 )}
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={24} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item
                     label="Số Máy (Tìm xe)"
                     name="engine_no"
@@ -753,7 +884,7 @@ const RetailSalePage = () => {
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item
                     label="Số Khung (Tìm xe)"
                     name="chassis_no"
@@ -777,7 +908,7 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={24} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item
                     label="Tên khách mua"
                     name="customer_name"
@@ -795,7 +926,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={6}>
+                <Col xs={12} sm={6}>
                   <Form.Item label="Số điện thoại" name="phone">
                     <Input
                       size="large"
@@ -804,7 +935,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={6}>
+                <Col xs={12} sm={6}>
                   <Form.Item label="Số CCCD" name="id_card">
                     <Input size="large" placeholder="CCCD..." />
                   </Form.Item>
@@ -812,7 +943,7 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={12} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item label="Địa chỉ" name="address">
                     <Input
                       size="large"
@@ -826,17 +957,17 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={6}>
+                <Col xs={12} sm={6}>
                   <Form.Item label="Ngày sinh" name="birthday">
                     <DatePicker
                       style={{ width: "100%" }}
                       format="DD/MM/YYYY"
                       size="large"
-                      placeholder="Hán/Ngày/Năm"
+                      placeholder="Ngày/Tháng/Năm"
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={6}>
+                <Col xs={12} sm={6}>
                   <Form.Item label="Giới tính" name="gender">
                     <Select size="large">
                       <Option value="Nam">Nam</Option>
@@ -847,11 +978,37 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={24} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item
                     label="Giá bán"
                     name="sale_price"
                     rules={[{ required: true }]}
+                    extra={
+                      <Form.Item
+                        name="is_return"
+                        valuePropName="checked"
+                        noStyle
+                      >
+                        <Checkbox
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              form.setFieldsValue({
+                                sale_price: 0,
+                                paid_amount: 0,
+                                cash_amount: 0,
+                                transfer_amount: 0,
+                                notes:
+                                  "[TRẢ XE MƯỢN] " +
+                                  (form.getFieldValue("notes") || ""),
+                              });
+                              setShowPriceWarning(false);
+                            }
+                          }}
+                        >
+                          Trả xe mượn / Đối lưu (Giá 0đ)
+                        </Checkbox>
+                      </Form.Item>
+                    }
                   >
                     <InputNumber
                       size="large"
@@ -864,7 +1021,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={12}>
+                <Col xs={24} sm={12}>
                   <Form.Item label="Hồ sơ / Đăng ký" name="sale_type">
                     <Select size="large">
                       <Option value="Đăng ký">Làm đăng ký</Option>
@@ -875,7 +1032,7 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={12} md={8}>
+                <Col xs={12} sm={8}>
                   <Form.Item label="Tiền mặt" name="cash_amount">
                     <InputNumber
                       size="large"
@@ -888,7 +1045,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} md={8}>
+                <Col xs={12} sm={8}>
                   <Form.Item label="Chuyển khoản" name="transfer_amount">
                     <InputNumber
                       size="large"
@@ -901,7 +1058,7 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={24} md={8}>
+                <Col xs={24} sm={8}>
                   <Form.Item
                     noStyle
                     shouldUpdate={(prev, curr) =>
@@ -984,7 +1141,6 @@ const RetailSalePage = () => {
                 </Col>
               </Row>
 
-              {/* WATCHER TRONG JSX ĐỂ HIỂN THỊ Ô NGÂN HÀNG */}
               <Form.Item
                 noStyle
                 shouldUpdate={(prevValues, currentValues) =>
@@ -1015,7 +1171,7 @@ const RetailSalePage = () => {
                         THÔNG TIN TRẢ GÓP
                       </Title>
                       <Row gutter={[16, 16]}>
-                        <Col xs={24} md={8}>
+                        <Col xs={24} sm={8}>
                           <Form.Item
                             label="Ngân hàng"
                             name="bank_name"
@@ -1029,12 +1185,12 @@ const RetailSalePage = () => {
                             />
                           </Form.Item>
                         </Col>
-                        <Col xs={12} md={8}>
+                        <Col xs={12} sm={8}>
                           <Form.Item label="Số hợp đồng" name="contract_number">
                             <Input size="large" placeholder="Mã HĐ..." />
                           </Form.Item>
                         </Col>
-                        <Col xs={12} md={8}>
+                        <Col xs={12} sm={8}>
                           <Form.Item label="Số tiền vay" name="loan_amount">
                             <InputNumber
                               size="large"
@@ -1082,7 +1238,7 @@ const RetailSalePage = () => {
                   key="1"
                 >
                   <Row gutter={[16, 16]}>
-                    <Col xs={24} md={8}>
+                    <Col xs={24} sm={8}>
                       <Form.Item label="Người bảo lãnh" name="guarantor_name">
                         <Input
                           size="large"
@@ -1096,12 +1252,12 @@ const RetailSalePage = () => {
                         />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={8}>
+                    <Col xs={12} sm={8}>
                       <Form.Item label="SĐT bảo lãnh" name="guarantor_phone">
                         <Input size="large" placeholder="SĐT..." />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={8}>
+                    <Col xs={12} sm={8}>
                       <Form.Item
                         name="guarantee"
                         valuePropName="checked"
@@ -1113,6 +1269,7 @@ const RetailSalePage = () => {
                   </Row>
                 </Panel>
               </Collapse>
+
               <Form.Item
                 label={
                   <Space>
@@ -1120,39 +1277,166 @@ const RetailSalePage = () => {
                     Quà tặng kèm theo
                   </Space>
                 }
-                name="gifts"
                 style={{ marginTop: 16 }}
               >
-                <Checkbox.Group style={{ width: "100%" }}>
-                  <Row gutter={[8, 8]}>
-                    {availableGifts.map((gift) => {
-                      const inv = giftInventory.find((i) => i.gift_id === gift.id);
-                      const stock = inv ? Number(inv.quantity) : 0;
+                {/* Hidden field to register gifts in the form */}
+                <Form.Item name="gifts" hidden><Input /></Form.Item>
+
+                <div className="gift-selector-container">
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prev, curr) => prev.gifts !== curr.gifts}
+                  >
+                    {() => {
+                      const rawGifts = form.getFieldValue("gifts");
+                      const selectedGifts = Array.isArray(rawGifts)
+                        ? rawGifts
+                        : [];
+
+                      const handleToggleGift = (giftName, checked) => {
+                        const currentGifts = form.getFieldValue("gifts") || [];
+                        if (checked) {
+                          form.setFieldsValue({
+                            gifts: [
+                              ...currentGifts,
+                              { name: giftName, quantity: 1 },
+                            ],
+                          });
+                        } else {
+                          form.setFieldsValue({
+                            gifts: currentGifts.filter(
+                              (g) =>
+                                (typeof g === "string" ? g : g.name) !==
+                                giftName,
+                            ),
+                          });
+                        }
+                      };
+
+                      const handleChangeQty = (giftName, qty) => {
+                        const currentGifts = form.getFieldValue("gifts") || [];
+                        form.setFieldsValue({
+                          gifts: currentGifts.map((g) => {
+                            const name = typeof g === "string" ? g : g.name;
+                            if (name === giftName)
+                              return { name, quantity: qty };
+                            return g;
+                          }),
+                        });
+                      };
+
                       return (
-                        <Col span={8} key={gift.id}>
-                          <Checkbox value={gift.name} disabled={stock <= 0}>
-                            {gift.name}{" "}
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: stock > 0 ? "#10b981" : "#ef4444",
-                              }}
-                            >
-                              ({stock})
-                            </span>
-                          </Checkbox>
-                        </Col>
+                        <Row gutter={[12, 12]}>
+                          {availableGifts.map((gift) => {
+                            const inv = giftInventory.find(
+                              (i) => i.gift_id === gift.id,
+                            );
+                            const stock = inv ? Number(inv.quantity) : 0;
+                            const isSelected = selectedGifts.some(
+                              (g) =>
+                                (typeof g === "string" ? g : g.name) ===
+                                gift.name,
+                            );
+                            const currentItem = selectedGifts.find(
+                              (g) =>
+                                (typeof g === "string" ? g : g.name) ===
+                                gift.name,
+                            );
+                            const currentQty =
+                              typeof currentItem === "object"
+                                ? currentItem.quantity
+                                : 1;
+
+                            return (
+                              <Col xs={12} sm={8} key={gift.id}>
+                                <div
+                                  style={{
+                                    padding: "8px 12px",
+                                    borderRadius: 8,
+                                    background: isSelected
+                                      ? "rgba(16, 185, 129, 0.1)"
+                                      : "rgba(255,255,255,0.02)",
+                                    border: isSelected
+                                      ? "1px solid #10b981"
+                                      : "1px solid rgba(255,255,255,0.1)",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 8,
+                                    transition: "all 0.3s",
+                                  }}
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    disabled={stock <= 0 && !isSelected}
+                                    onChange={(e) =>
+                                      handleToggleGift(
+                                        gift.name,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    style={{ fontSize: 13 }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontWeight: isSelected
+                                          ? "bold"
+                                          : "normal",
+                                      }}
+                                    >
+                                      {gift.name}
+                                    </span>{" "}
+                                    <span
+                                      style={{
+                                        fontSize: 11,
+                                        color:
+                                          stock > 0 ? "#10b981" : "#ef4444",
+                                      }}
+                                    >
+                                      ({stock})
+                                    </span>
+                                  </Checkbox>
+                                  {isSelected && (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                      }}
+                                    >
+                                      <Text
+                                        type="secondary"
+                                        style={{ fontSize: 11 }}
+                                      >
+                                        Số lượng:
+                                      </Text>
+                                      <InputNumber
+                                        size="small"
+                                        min={1}
+                                        max={stock}
+                                        value={currentQty}
+                                        onChange={(val) =>
+                                          handleChangeQty(gift.name, val)
+                                        }
+                                        style={{ width: 60 }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </Col>
+                            );
+                          })}
+                          {availableGifts.length === 0 && (
+                            <Col span={24}>
+                              <Text type="secondary" italic>
+                                Chưa có danh mục quà tặng được thiết lập
+                              </Text>
+                            </Col>
+                          )}
+                        </Row>
                       );
-                    })}
-                    {availableGifts.length === 0 && (
-                      <Col span={24}>
-                        <Text type="secondary" italic>
-                          Chưa có danh mục quà tặng được thiết lập
-                        </Text>
-                      </Col>
-                    )}
-                  </Row>
-                </Checkbox.Group>
+                    }}
+                  </Form.Item>
+                </div>
               </Form.Item>
 
               <Form.Item
@@ -1184,11 +1468,11 @@ const RetailSalePage = () => {
             extra={
               <Space wrap>
                 <Input.Search
-                  placeholder="Tìm theo số máy/tên khách..."
+                  placeholder="Tìm số máy/khung/khách..."
                   allowClear
                   onSearch={(v) => setSearchText(v)}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: 220 }}
+                  style={{ width: window.innerWidth < 768 ? "100%" : 220 }}
                 />
                 <Checkbox
                   checked={showOnlyDebt}
@@ -1204,7 +1488,7 @@ const RetailSalePage = () => {
                   size="small"
                   ghost
                 >
-                  Xuất Excel
+                  Xuất
                 </Button>
                 <Button
                   icon={<FileSpreadsheet size={16} />}
@@ -1213,7 +1497,7 @@ const RetailSalePage = () => {
                   size="small"
                   onClick={() => setImportVisible(true)}
                 >
-                  Nhập Excel
+                  Nhập
                 </Button>
               </Space>
             }
@@ -1224,8 +1508,9 @@ const RetailSalePage = () => {
               columns={columns}
               rowKey="id"
               pagination={{ pageSize: 12 }}
-              size="small"
+              size={window.innerWidth < 768 ? "small" : "middle"}
               scroll={{ x: "max-content" }}
+              className="modern-table small-screen-optimized"
             />
           </Card>
 
@@ -1243,18 +1528,14 @@ const RetailSalePage = () => {
         title={
           <Space>
             <Banknote size={20} />
-            Lịch sử & Thu tiền: {selectedSale?.customer_name}{" "}
-            {selectedSale?.birthday && (
-              <span style={{ fontSize: 13, fontWeight: "normal" }}>
-                ({dayjs(selectedSale.birthday).format("DD/MM/YYYY")})
-              </span>
-            )}
+            Thu tiền: {selectedSale?.customer_name}
           </Space>
         }
         open={paymentModalVisible}
         onCancel={() => setPaymentModalVisible(false)}
         footer={null}
-        width={700}
+        width={window.innerWidth < 768 ? "95%" : 700}
+        centered
       >
         <div style={{ marginBottom: 20 }}>
           <div
@@ -1291,7 +1572,10 @@ const RetailSalePage = () => {
               <Title level={4} style={{ margin: 0, color: "#ef4444" }}>
                 {Number(
                   (selectedSale?.sale_price || selectedSale?.total_price || 0) -
-                    (selectedSale?.paid_amount || 0),
+                    (selectedSale?.paid_amount || 0) -
+                    (selectedSale?.is_disbursed
+                      ? Number(selectedSale?.loan_amount || 0)
+                      : 0),
                 ).toLocaleString()}{" "}
                 đ
               </Title>
@@ -1303,16 +1587,20 @@ const RetailSalePage = () => {
           </Title>
           <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
             <Row gutter={16}>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Form.Item
                   name="payment_date"
                   label="Ngày thu"
                   rules={[{ required: true }]}
                 >
-                  <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                  <DatePicker
+                    style={{ width: "100%" }}
+                    format="DD/MM/YYYY"
+                    size="large"
+                  />
                 </Form.Item>
               </Col>
-              <Col span={8}>
+              <Col xs={12} sm={8}>
                 <Form.Item
                   name="amount"
                   label="Số tiền thu"
@@ -1320,6 +1608,7 @@ const RetailSalePage = () => {
                 >
                   <InputNumber
                     style={{ width: "100%" }}
+                    size="large"
                     formatter={(v) =>
                       `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                     }
@@ -1327,30 +1616,28 @@ const RetailSalePage = () => {
                   />
                 </Form.Item>
               </Col>
-              <Col span={8}>
+              <Col xs={12} sm={8}>
                 <Form.Item
                   name="payment_method"
                   label="Hình thức"
                   initialValue="Tiền mặt"
                 >
-                  <Select>
+                  <Select size="large">
                     <Option value="Tiền mặt">Tiền mặt</Option>
                     <Option value="Chuyển khoản">Chuyển khoản</Option>
                   </Select>
                 </Form.Item>
               </Col>
             </Row>
-            <Form.Item
-              name="notes"
-              label="Ghi chú (Ví dụ: Trả nợ đăng ký, Trả góp đợt 1...)"
-            >
-              <Input placeholder="Nhập ghi chú..." />
+            <Form.Item name="notes" label="Ghi chú">
+              <Input placeholder="Nhập ghi chú..." size="large" />
             </Form.Item>
             <Button
               type="primary"
               htmlType="submit"
               icon={<Save size={16} />}
               block
+              size="large"
               loading={loading}
             >
               XÁC NHẬN THU TIỀN
@@ -1366,6 +1653,7 @@ const RetailSalePage = () => {
           rowKey="id"
           pagination={false}
           size="small"
+          scroll={{ x: "max-content" }}
           columns={[
             {
               title: "Ngày",
@@ -1396,7 +1684,70 @@ const RetailSalePage = () => {
         />
       </Modal>
 
+      {/* DISBURSEMENT DATE MODAL */}
+      <Modal
+        title="Xác nhận ngày giải ngân"
+        open={disburseModalVisible}
+        onCancel={() => setDisburseModalVisible(false)}
+        onOk={async () => {
+          try {
+            setLoading(true);
+            await api.put(`/retail-sales/${disburseSale.id}/disbursement`, {
+              is_disbursed: true,
+              disbursed_at: disburseDate.format("YYYY-MM-DD"),
+            });
+            message.success("Đã xác nhận giải ngân thành công!");
+            setDisburseModalVisible(false);
+            fetchInitialData();
+          } catch (err) {
+            message.error("Lỗi: " + err.message);
+          } finally {
+            setLoading(false);
+          }
+        }}
+        okText="Xác nhận"
+        cancelText="Bỏ qua"
+        centered
+      >
+        <div style={{ padding: "10px 0" }}>
+          <Text strong style={{ display: "block", marginBottom: 8 }}>
+            Vui lòng chọn ngày ngân hàng giải ngân:
+          </Text>
+          <DatePicker
+            value={disburseDate}
+            onChange={(d) => setDisburseDate(d)}
+            format="DD/MM/YYYY"
+            style={{ width: "100%" }}
+            size="large"
+            allowClear={false}
+          />
+        </div>
+      </Modal>
+
       {/* PrintInvoice component removed - printing is now handled via window.open */}
+      <style>{`
+        .modern-table .ant-table-thead > tr > th {
+          background: #f8fafc;
+          font-weight: 700;
+          font-size: 11px;
+          padding: 8px 4px !important;
+          text-transform: uppercase;
+        }
+        .modern-table .ant-table-tbody > tr > td {
+          padding: 8px 4px !important;
+          font-size: 12px;
+        }
+        .ant-table-cell-fix-left, .ant-table-cell-fix-right {
+          background: #fff !important;
+          z-index: 2;
+        }
+        .ant-table-cell-fix-left-last::after {
+          box-shadow: inset 10px 0 8px -8px rgba(0, 0, 0, 0.15) !important;
+        }
+        .ant-table-cell-fix-right-first::after {
+          box-shadow: inset -10px 0 8px -8px rgba(0, 0, 0, 0.15) !important;
+        }
+      `}</style>
     </div>
   );
 };

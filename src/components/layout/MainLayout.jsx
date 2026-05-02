@@ -28,7 +28,8 @@ import {
   LayoutDashboard,
   Wrench,
   Archive,
-  Gift as GiftIcon
+  Gift as GiftIcon,
+  Database
 } from 'lucide-react';
 
 
@@ -53,6 +54,7 @@ const MainLayout = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
 
   const location = useLocation();
 
@@ -240,9 +242,9 @@ const MainLayout = ({ children }) => {
   };
 
 
-  const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
-  const canManageSales = isAdmin || user.can_manage_sales === true || user.can_manage_sales === 1;
-  const canManageSpareParts = isAdmin || user.can_manage_spare_parts === true || user.can_manage_spare_parts === 1;
+  const canManageMaster = isAdmin || isManager || user.can_manage_master_data === true || user.can_manage_master_data === 1;
+  const canManageSales = isAdmin || isManager || user.can_manage_sales === true || user.can_manage_sales === 1;
+  const canManageSpareParts = isAdmin || isManager || user.can_manage_spare_parts === true || user.can_manage_spare_parts === 1;
   const canManageExpenses = isAdmin || user.can_manage_expenses === true || user.can_manage_expenses === 1;
 
   const menuItems = [
@@ -295,7 +297,6 @@ const MainLayout = ({ children }) => {
           label: 'Danh mục xe máy',
           children: [
             { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
-            { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
             { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng (NCC)</Link> },
             { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Danh mục khách buôn xe</Link> },
           ]
@@ -334,6 +335,8 @@ const MainLayout = ({ children }) => {
           label: 'Dịch vụ sửa chữa',
           children: [
             { key: '/maintenance-hub', label: <Link to="/maintenance-hub">Trung tâm Bảo trì (Hub)</Link> },
+            { key: '/maintenance-rules', icon: <ClipboardList size={16} />, label: <Link to="/maintenance-rules">Thiết lập gợi ý bảo trì</Link> },
+            { key: '/report/maintenance', label: <Link to="/report/maintenance">Nhật ký xe vào xưởng</Link> },
           ]
         },
         {
@@ -365,12 +368,14 @@ const MainLayout = ({ children }) => {
     {
       key: 'system-management',
       icon: <Settings size={18} />,
-      label: isAdmin ? 'QUẢN TRỊ HỆ THỐNG' : 'HỆ THỐNG & KHO',
+      label: (isAdmin || isManager) ? 'QUẢN TRỊ HỆ THỐNG' : 'HỆ THỐNG & KHO',
       children: [
         canManageExpenses && { key: '/expenses', icon: <Wallet size={16} />, label: <Link to="/expenses">Quản lý chi tiêu</Link> },
         isAdmin && { key: '/employees', icon: <Users size={16} />, label: <Link to="/employees">Quản lý nhân viên</Link> },
+        { key: '/vehicle-types', icon: <Layers size={16} />, label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
         { key: '/mechanics', icon: <UserPlus size={16} />, label: <Link to="/mechanics">Danh sách thợ sửa</Link> },
         { key: '/warehouses', icon: <ClipboardList size={16} />, label: <Link to="/warehouses">Quản lý kho hàng</Link> },
+        isAdmin && { key: '/system/backups', icon: <Database size={16} />, label: <Link to="/system/backups">Sao lưu & Phục hồi</Link> },
       ].filter(Boolean)
     },
   ].filter(Boolean);

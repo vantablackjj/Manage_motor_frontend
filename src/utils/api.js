@@ -5,6 +5,12 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
 });
 
+// Instance riêng cho các tác vụ lâu như backup (timeout 10 phút, không tự redirect)
+const apiBackup = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  timeout: 10 * 60 * 1000, // 10 phút
+});
+
 // Thêm bộ lọc (Interceptor) để đính kèm Token vào từng yêu cầu
 api.interceptors.request.use(
   (config) => {
@@ -20,10 +26,22 @@ api.interceptors.request.use(
   }
 );
 
+apiBackup.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Bộ lọc phản hồi (Để xử lý trường hợp Token hết hạn)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Chỉ redirect về login nếu lỗi 401 thực sự (không phải do timeout/network)
     if (error.response && error.response.status === 401) {
       // Nếu bị từ chối do Token lỗi/hết hạn, đẩy người dùng về trang Đăng nhập
       localStorage.removeItem('token');
@@ -34,4 +52,5 @@ api.interceptors.response.use(
   }
 );
 
+export { apiBackup };
 export default api;

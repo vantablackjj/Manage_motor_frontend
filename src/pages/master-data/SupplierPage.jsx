@@ -10,17 +10,19 @@ import {
   Typography, 
   Popconfirm, 
   message, 
-  Select 
+  Select,
+  Tag
 } from 'antd';
-import { UserPlus, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download } from 'lucide-react';
+import { Users, Trash2, Edit, Save, RotateCcw, FileSpreadsheet, Download, Truck } from 'lucide-react';
 import api from '../../utils/api';
 import { capitalizeName } from '../../utils/stringHelper';
 import ImportExcelModal from '../../components/ImportExcelModal';
 import { exportToExcel } from '../../utils/excelExport';
 import dayjs from 'dayjs';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 const { Option } = Select;
+const { TextArea } = Input;
 
 const SupplierPage = () => {
   const [form] = Form.useForm();
@@ -28,6 +30,7 @@ const SupplierPage = () => {
   const [loading, setLoading] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
   const canManageMaster = isAdmin || user.can_manage_master_data === true || user.can_manage_master_data === 1;
@@ -38,7 +41,7 @@ const SupplierPage = () => {
       const response = await api.get('/suppliers');
       setData(response.data);
     } catch (error) {
-      message.error('Lỗi tải danh mục chủ hàng: ' + error.message);
+      message.error('Lỗi tải danh mục nhà cung cấp: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -54,24 +57,24 @@ const SupplierPage = () => {
     }
 
     const exportData = data.map(s => ({
-      'Họ tên': s.name,
+      'Tên nhà cung cấp': s.name,
       'Địa chỉ': s.address,
-      'Ghi chú': s.notes,
-      'Kiểu thanh toán': s.payment_type
+      'Kiểu thanh toán': s.payment_type,
+      'Ghi chú': s.notes || ''
     }));
 
-    exportToExcel(exportData, `DanhSachChuHang_${dayjs().format('YYYYMMDD_HHmm')}`);
+    exportToExcel(exportData, `DanhSachNhaCungCap_${dayjs().format('YYYYMMDD_HHmm')}`);
   };
 
   const onFinish = async (values) => {
     try {
       if (editingId) {
         await api.put(`/suppliers/${editingId}`, values);
-        message.success('Cập nhật thông tin chủ hàng thành công!');
+        message.success('Cập nhật thông tin nhà cung cấp thành công!');
         setEditingId(null);
       } else {
         await api.post('/suppliers', values);
-        message.success('Thêm chủ hàng mới thành công!');
+        message.success('Thêm nhà cung cấp mới thành công!');
       }
       form.resetFields();
       fetchData();
@@ -94,7 +97,7 @@ const SupplierPage = () => {
   const handleDelete = async (id) => {
     try {
       await api.delete(`/suppliers/${id}`);
-      message.success('Đã xóa chủ hàng');
+      message.success('Đã xóa nhà cung cấp');
       fetchData();
     } catch (error) {
       message.error('Lỗi khi xóa: ' + error.message);
@@ -102,23 +105,25 @@ const SupplierPage = () => {
   };
 
   const columns = [
-    { title: 'Họ tên', dataIndex: 'name', key: 'name' },
+    { title: 'Tên nhà cung cấp', dataIndex: 'name', key: 'name' },
     { title: 'Địa chỉ', dataIndex: 'address', key: 'address' },
-    { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     { 
       title: 'Kiểu thanh toán', 
       dataIndex: 'payment_type', 
       key: 'payment_type',
       render: (val) => (
-        <span style={{ color: val === 'Trả gộp' ? '#3b82f6' : '#10b981' }}>{val}</span>
+        <Tag color={val === 'Trả gộp' ? 'blue' : 'purple'}>
+          {val}
+        </Tag>
       )
     },
+    { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     {
       title: 'Thao tác',
       key: 'action',
       width: '120px',
       hidden: !canManageMaster,
-      render: (_, record) => (
+      render: (_, record) => (isAdmin || canManageMaster) ? (
         <Space>
           <Button 
             type="text" 
@@ -130,23 +135,24 @@ const SupplierPage = () => {
             <Button type="text" danger icon={<Trash2 size={16} />} />
           </Popconfirm>
         </Space>
-      ),
+      ) : null,
     },
   ];
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div className="page-header" style={{ marginBottom: 32 }}>
         <div>
-          <h2 className="gradient-text" style={{ fontSize: 24, margin: 0 }}>NHẬP CHỦ HÀNG</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Quản lý danh sách các đối tác cung cấp xe máy.</p>
+          <Title level={2} className="gradient-text" style={{ margin: 0 }}>NHẬP CHỦ HÀNG (NCC)</Title>
+          <Text type="secondary">Quản lý dữ liệu đối tác cung cấp xe máy & hàng hóa.</Text>
         </div>
-        <Space>
+        <Space wrap className="mobile-stack">
           <Button 
             icon={<Download size={16} />} 
             ghost 
             type="primary" 
             onClick={handleExport}
+            block={window.innerWidth < 768}
           >
             Xuất Excel
           </Button>
@@ -156,6 +162,7 @@ const SupplierPage = () => {
               ghost 
               type="primary" 
               onClick={() => setImportVisible(true)}
+              block={window.innerWidth < 768}
             >
               Nhập từ Excel
             </Button>
@@ -168,7 +175,7 @@ const SupplierPage = () => {
         onCancel={() => setImportVisible(false)}
         onSuccess={fetchData}
         type="suppliers"
-        title="Nhập danh sách chủ hàng"
+        title="Nhập danh sách nhà cung cấp"
       />
 
       {canManageMaster && (
@@ -179,48 +186,56 @@ const SupplierPage = () => {
             onFinish={onFinish}
             initialValues={{ payment_type: 'Trả gộp' }}
           >
-            <Row gutter={16}>
-              <Col xs={24} md={12}>
-                <Form.Item label="Họ tên chủ hàng" name="name" rules={[{ required: true }]}>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={10}>
+                <Form.Item label="Tên nhà cung cấp" name="name" rules={[{ required: true }]}>
                   <Input 
-                    placeholder="Nhập tên" 
+                    placeholder="Ví dụ: Công ty Honda Việt Nam" 
+                    size="large"
                     onBlur={(e) => form.setFieldsValue({ name: capitalizeName(e.target.value) })}
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={8}>
+                <Form.Item label="Địa chỉ" name="address">
+                  <Input 
+                    placeholder="Vĩnh Phúc, Hà Nội..." 
+                    size="large"
+                    onBlur={(e) => form.setFieldsValue({ address: capitalizeName(e.target.value) })}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={6}>
                 <Form.Item label="Kiểu thanh toán" name="payment_type" rules={[{ required: true }]}>
-                  <Select>
+                  <Select size="large">
                     <Option value="Trả gộp">Trả gộp</Option>
                     <Option value="Trả theo lô">Trả theo lô</Option>
                   </Select>
                 </Form.Item>
               </Col>
               <Col xs={24}>
-                <Form.Item label="Địa chỉ" name="address">
-                  <Input 
-                    placeholder="Nhập địa chỉ của chủ hàng" 
-                    onBlur={(e) => form.setFieldsValue({ address: capitalizeName(e.target.value) })}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
                 <Form.Item label="Ghi chú" name="notes">
-                  <Input placeholder="Thông tin liên lạc hoặc ghi chú thêm" />
+                  <TextArea rows={2} placeholder="Thông tin liên hệ, ghi chú nợ..." />
                 </Form.Item>
               </Col>
             </Row>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Button icon={<RotateCcw size={16} />} ghost onClick={editingId ? handleCancelEdit : () => form.resetFields()}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+              <Button 
+                icon={<RotateCcw size={16} />} 
+                ghost 
+                onClick={editingId ? handleCancelEdit : () => form.resetFields()}
+                block={window.innerWidth < 768}
+              >
                 {editingId ? 'Hủy bỏ sửa' : 'Làm mới'}
               </Button>
               <Button 
-                  icon={<Save size={16} />} 
-                  type="primary" 
-                  onClick={() => form.submit()} 
-                  style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
+                icon={<Save size={16} />} 
+                type="primary" 
+                onClick={() => form.submit()} 
+                style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
+                block={window.innerWidth < 768}
               >
-                  {editingId ? 'Cập nhật chủ hàng' : 'Lưu chủ hàng'}
+                {editingId ? 'Cập nhật NCC' : 'Lưu nhà cung cấp'}
               </Button>
             </div>
           </Form>
@@ -234,6 +249,8 @@ const SupplierPage = () => {
         className="modern-table"
         loading={loading}
         pagination={{ pageSize: 10 }}
+        size={window.innerWidth < 768 ? 'small' : 'middle'}
+        scroll={{ x: 'max-content' }}
       />
     </div>
   );

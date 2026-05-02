@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Form, 
-  Input, 
-  Button, 
-  DatePicker, 
-  Select, 
-  InputNumber, 
-  Row, 
-  Col, 
-  Table, 
-  Space, 
-  Typography, 
+import React, { useState, useEffect } from "react";
+import {
+  Form,
+  Input,
+  Button,
+  DatePicker,
+  Select,
+  InputNumber,
+  Row,
+  Col,
+  Table,
+  Space,
+  Typography,
   Divider,
   Tabs,
   Modal,
@@ -18,14 +18,28 @@ import {
   message,
   Card,
   Tag,
-  Alert
-} from 'antd';
-import { ShoppingCart, Save, RotateCcw, Plus, Trash2, DollarSign, History, CheckCircle2, AlertTriangle, Search, FileSpreadsheet, Download, Printer } from 'lucide-react';
-import dayjs from 'dayjs';
-import api from '../../utils/api';
-import ImportExcelModal from '../../components/ImportExcelModal';
-import { exportToExcel } from '../../utils/excelExport';
-import numberToWords from '../../utils/numberToWords';
+  Alert,
+} from "antd";
+import {
+  ShoppingCart,
+  Save,
+  RotateCcw,
+  Plus,
+  Trash2,
+  DollarSign,
+  History,
+  CheckCircle2,
+  AlertTriangle,
+  Search,
+  FileSpreadsheet,
+  Download,
+  Printer,
+} from "lucide-react";
+import dayjs from "dayjs";
+import api from "../../utils/api";
+import ImportExcelModal from "../../components/ImportExcelModal";
+import { exportToExcel } from "../../utils/excelExport";
+import numberToWords from "../../utils/numberToWords";
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -33,37 +47,63 @@ const { Option } = Select;
 const WholesaleSalePage = () => {
   const [form] = Form.useForm();
   const [paymentForm] = Form.useForm();
-  
+
   const [customers, setCustomers] = useState([]);
   const [availableStock, setAvailableStock] = useState([]);
-  
+
   // State for editable sale batch
   const [batchItems, setBatchItems] = useState([
-    { key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }
+    {
+      key: Date.now().toString(),
+      engine_no: "",
+      chassis_no: "",
+      sale_price: undefined,
+      cost_price: undefined,
+      notes: "",
+    },
   ]);
-  
+
   const [saleHistory, setSaleHistory] = useState([]);
   const [selectedSale, setSelectedSale] = useState(null);
-  const [saleDetails, setSaleDetails] = useState({ vehicles: [], payments: [] });
+  const [saleDetails, setSaleDetails] = useState({
+    vehicles: [],
+    payments: [],
+  });
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('1');
+  const [activeTab, setActiveTab] = useState("1");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
 
   // Search states
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
-  const [detailSearchTerm, setDetailSearchTerm] = useState('');
-  const [searchBy, setSearchBy] = useState('all'); // 'all', 'engine', 'chassis'
-  
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = user.role === 'ADMIN';
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const [detailSearchTerm, setDetailSearchTerm] = useState("");
+  const [searchBy, setSearchBy] = useState("all"); // 'all', 'engine', 'chassis'
+
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isAdmin = user.role === "ADMIN";
+  const isManager = user.role === "MANAGER";
+  const isPowerUser = isAdmin || isManager;
   const [warehouses, setWarehouses] = useState([]);
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState(user.warehouse_id);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(
+    user.warehouse_id,
+  );
+
+  const allowedWarehouseIds = [
+    user.warehouse_id,
+    ...(user.accessible_warehouses
+      ? user.accessible_warehouses.split(",")
+      : []),
+  ].filter(Boolean);
+
+  const filteredWarehouses = isPowerUser
+    ? warehouses
+    : warehouses.filter((w) => allowedWarehouseIds.includes(w.id));
+
+  const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
   const canDelete =
     isAdmin || user.can_delete === true || user.can_delete === 1;
   const canManageMoney =
     isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
-
 
   useEffect(() => {
     fetchInitialData();
@@ -72,13 +112,30 @@ const WholesaleSalePage = () => {
   const fetchInitialData = async (warehouseId = selectedWarehouseId) => {
     try {
       const [cRes, sRes, whRes] = await Promise.all([
-        api.get('/wholesale-customers'),
-        api.get(`/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ''}`),
-        isAdmin ? api.get('/warehouses') : Promise.resolve({ data: [] })
+        api.get("/wholesale-customers?type=VEHICLE"),
+        api.get(
+          `/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
+        ),
+        isAdmin || isManager || user.accessible_warehouses
+          ? api.get("/warehouses")
+          : Promise.resolve({ data: [] }),
       ]);
       setCustomers(cRes.data);
       setAvailableStock(sRes.data);
-      if (isAdmin) setWarehouses(whRes.data);
+      if (isAdmin || isManager || user.accessible_warehouses) {
+        const allWh = whRes.data;
+        if (isAdmin || isManager) {
+          setWarehouses(allWh);
+        } else {
+          const allowedIds = [
+            user.warehouse_id,
+            ...(user.accessible_warehouses
+              ? user.accessible_warehouses.split(",")
+              : []),
+          ];
+          setWarehouses(allWh.filter((w) => allowedIds.includes(w.id)));
+        }
+      }
     } catch (error) {
       console.error(error);
     }
@@ -86,19 +143,29 @@ const WholesaleSalePage = () => {
 
   const handleWarehouseChange = (val) => {
     setSelectedWarehouseId(val);
-    setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }]);
+    setBatchItems([
+      {
+        key: Date.now().toString(),
+        engine_no: "",
+        chassis_no: "",
+        sale_price: undefined,
+        cost_price: undefined,
+        notes: "",
+      },
+    ]);
     fetchInitialData(val);
   };
-
 
   const handleSearchHistory = async (customerId) => {
     if (!customerId) return;
     setLoading(true);
     try {
-      const response = await api.get(`/wholesale-sales?customer_id=${customerId}`);
+      const response = await api.get(
+        `/wholesale-sales?customer_id=${customerId}`,
+      );
       setSaleHistory(response.data);
     } catch (error) {
-      message.error('Lỗi tải lịch sử bán hàng: ' + error.message);
+      message.error("Lỗi tải lịch sử bán hàng: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -111,7 +178,7 @@ const WholesaleSalePage = () => {
       const response = await api.get(`/wholesale-sales/${sale.id}/details`);
       setSaleDetails(response.data);
     } catch (error) {
-      message.error('Lỗi tải chi tiết: ' + error.message);
+      message.error("Lỗi tải chi tiết: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -119,23 +186,35 @@ const WholesaleSalePage = () => {
 
   // Editable Table Logic for Batch Sale
   const addRow = () => {
-    setBatchItems([...batchItems, { key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }]);
+    setBatchItems([
+      ...batchItems,
+      {
+        key: Date.now().toString(),
+        engine_no: "",
+        chassis_no: "",
+        sale_price: undefined,
+        cost_price: undefined,
+        notes: "",
+      },
+    ]);
   };
 
   const updateItem = (key, field, value) => {
     // Check if this vehicle is already selected in another row
-    if (field === 'engine_no' || field === 'chassis_no') {
-      const isDuplicate = batchItems.some(item => item.key !== key && item.vehicle_id === value);
+    if (field === "engine_no" || field === "chassis_no") {
+      const isDuplicate = batchItems.some(
+        (item) => item.key !== key && item.vehicle_id === value,
+      );
       if (isDuplicate) {
-        return message.warning('Xe này đã được chọn trong lô hàng!');
+        return message.warning("Xe này đã được chọn trong lô hàng!");
       }
     }
 
     const newData = [...batchItems];
-    const index = newData.findIndex(item => item.key === key);
+    const index = newData.findIndex((item) => item.key === key);
     if (index > -1) {
-      if (field === 'engine_no' || field === 'chassis_no') {
-        const vehicle = availableStock.find(v => v.id === value);
+      if (field === "engine_no" || field === "chassis_no") {
+        const vehicle = availableStock.find((v) => v.id === value);
         if (vehicle) {
           newData[index].vehicle_id = vehicle.id;
           newData[index].engine_no = vehicle.id; // Map id to value for bind
@@ -153,40 +232,62 @@ const WholesaleSalePage = () => {
 
   const removeItem = (key) => {
     if (batchItems.length === 1) return;
-    setBatchItems(batchItems.filter(item => item.key !== key));
+    setBatchItems(batchItems.filter((item) => item.key !== key));
   };
 
   const handleSaveBatch = async () => {
     try {
       const formValues = await form.validateFields();
-      const validItems = batchItems.filter(item => item.vehicle_id);
-      if (validItems.length === 0) return message.warning('Vui lòng chọn xe trong kho!');
+      const validItems = batchItems.filter((item) => item.vehicle_id);
+      if (validItems.length === 0)
+        return message.warning("Vui lòng chọn xe trong kho!");
 
-      // KIỂM TRA GIÁ BÁN
-      if (validItems.some(item => !item.sale_price || item.sale_price <= 0)) {
-         return message.error('Vui lòng nhập giá bán cho tất cả các xe trong lô hàng!');
+      // KIỂM TRA GIÁ BÁN (Cho phép 0đ cho trường hợp xe mượn trả lại)
+      if (
+        validItems.some(
+          (item) =>
+            item.sale_price === undefined ||
+            item.sale_price === null ||
+            item.sale_price < 0,
+        )
+      ) {
+        return message.error("Vui lòng nhập giá bán hợp lệ cho tất cả các xe!");
       }
 
       setLoading(true);
-      await api.post('/wholesale-sales', {
+      await api.post("/wholesale-sales", {
         customer_id: formValues.customer_id,
-        sale_date: formValues.sale_date.format('YYYY-MM-DD'),
-        items: validItems.map(item => ({ 
-          vehicle_id: item.vehicle_id, 
+        sale_date: formValues.sale_date.format("YYYY-MM-DD"),
+        items: validItems.map((item) => ({
+          vehicle_id: item.vehicle_id,
           price_vnd: item.sale_price,
-          notes: item.notes // Pass individual notes
+          notes: item.notes, // Pass individual notes
         })),
         notes: formValues.notes,
-        warehouse_id: selectedWarehouseId // Source of Truth
+        warehouse_id: selectedWarehouseId, // Source of Truth
       });
 
-      notification.success({ message: 'Thành công', description: `Đã xuất hóa đơn lô hàng gồm ${validItems.length} xe cho khách buôn.` });
-      setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }]);
-      form.setFieldsValue({ notes: '' });
+      notification.success({
+        message: "Thành công",
+        description: `Đã xuất hóa đơn lô hàng gồm ${validItems.length} xe cho khách buôn.`,
+      });
+      setBatchItems([
+        {
+          key: Date.now().toString(),
+          engine_no: "",
+          chassis_no: "",
+          sale_price: undefined,
+          cost_price: undefined,
+          notes: "",
+        },
+      ]);
+      form.setFieldsValue({ notes: "" });
       handleSearchHistory(formValues.customer_id);
       fetchInitialData(); // Refresh available stock
     } catch (error) {
-      message.error('Lỗi lưu đơn bán: ' + (error.response?.data?.message || error.message));
+      message.error(
+        "Lỗi lưu đơn bán: " + (error.response?.data?.message || error.message),
+      );
     } finally {
       setLoading(false);
     }
@@ -194,19 +295,19 @@ const WholesaleSalePage = () => {
 
   const handlePayment = async (values) => {
     try {
-      await api.post('/wholesale-sales/payment', {
+      await api.post("/wholesale-sales/payment", {
         wholesale_sale_id: selectedSale.id,
         amount_paid_vnd: values.amount,
-        payment_date: values.date.format('YYYY-MM-DD'),
-        notes: values.notes
+        payment_date: values.date.format("YYYY-MM-DD"),
+        notes: values.notes,
       });
-      message.success('Đã ghi nhận tiền trả từ khách buôn!');
+      message.success("Đã ghi nhận tiền trả từ khách buôn!");
       setIsPaymentModalOpen(false);
       paymentForm.resetFields();
       loadSaleDetails(selectedSale);
-      handleSearchHistory(form.getFieldValue('customer_id'));
+      handleSearchHistory(form.getFieldValue("customer_id"));
     } catch (error) {
-       message.error(error.message);
+      message.error(error.message);
     }
   };
 
@@ -243,18 +344,35 @@ const WholesaleSalePage = () => {
       title: "Xác nhận xóa xe khỏi lô",
       content: (
         <div>
-          <p>Xe <b>{vehicle.engine_no}</b> sẽ được xóa khỏi lô và đưa về trạng thái 'Trong kho'.</p>
-          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, marginTop: 12 }}>
-             <p style={{ margin: 0 }}>Số tiền hệ thống sẽ tự động trừ vào tổng nợ lô hàng:</p>
-             <Text strong style={{ fontSize: 16, color: '#10b981' }}>{deductAmount.toLocaleString()} đ</Text>
-             <p style={{ fontSize: 11, opacity: 0.7, marginTop: 8 }}>Nếu muốn thay đổi số tiền trừ (VD: Trừ phí...), hãy nhập lại ô dưới:</p>
-             <InputNumber
-                style={{ width: "100%" }}
-                defaultValue={deductAmount}
-                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
-                onChange={(val) => (deductAmount = val)}
-              />
+          <p>
+            Xe <b>{vehicle.engine_no}</b> sẽ được xóa khỏi lô và đưa về trạng
+            thái 'Trong kho'.
+          </p>
+          <div
+            style={{
+              padding: "12px",
+              background: "rgba(255,255,255,0.05)",
+              borderRadius: 8,
+              marginTop: 12,
+            }}
+          >
+            <p style={{ margin: 0 }}>
+              Số tiền hệ thống sẽ tự động trừ vào tổng nợ lô hàng:
+            </p>
+            <Text strong style={{ fontSize: 16, color: "#10b981" }}>
+              {deductAmount.toLocaleString()} đ
+            </Text>
+            <p style={{ fontSize: 11, opacity: 0.7, marginTop: 8 }}>
+              Nếu muốn thay đổi số tiền trừ (VD: Trừ phí...), hãy nhập lại ô
+              dưới:
+            </p>
+            <InputNumber
+              style={{ width: "100%" }}
+              defaultValue={deductAmount}
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+              onChange={(val) => (deductAmount = val)}
+            />
           </div>
         </div>
       ),
@@ -264,15 +382,20 @@ const WholesaleSalePage = () => {
       onOk: async () => {
         try {
           setLoading(true);
-          await api.delete(`/wholesale-sales/${saleId}/vehicles/${vehicle.id}`, {
-            data: { deduct_amount: deductAmount },
-          });
+          await api.delete(
+            `/wholesale-sales/${saleId}/vehicles/${vehicle.id}`,
+            {
+              data: { deduct_amount: deductAmount },
+            },
+          );
           message.success("Đã xóa xe khỏi lô và cập nhật tiền nợ!");
           loadSaleDetails(selectedSale);
           handleSearchHistory(form.getFieldValue("customer_id"));
           fetchInitialData();
         } catch (error) {
-          message.error("Lỗi: " + (error.response?.data?.message || error.message));
+          message.error(
+            "Lỗi: " + (error.response?.data?.message || error.message),
+          );
         } finally {
           setLoading(false);
         }
@@ -283,7 +406,8 @@ const WholesaleSalePage = () => {
   const handleDeletePayment = async (paymentId) => {
     Modal.confirm({
       title: "Xác nhận xóa khoản thu tiền",
-      content: "Bạn có chắc chắn muốn xóa khoản thu tiền này? Số tiền nợ của khách sẽ tự động tăng trở lại.",
+      content:
+        "Bạn có chắc chắn muốn xóa khoản thu tiền này? Số tiền nợ của khách sẽ tự động tăng trở lại.",
       okText: "Xóa",
       okType: "danger",
       cancelText: "Hủy",
@@ -292,29 +416,36 @@ const WholesaleSalePage = () => {
           setLoading(true);
           await api.delete(`/wholesale-payments/${paymentId}`);
           message.success("Đã xóa khoản thu nợ thành công!");
-          loadSaleDetails(selectedSale); 
+          loadSaleDetails(selectedSale);
           handleSearchHistory(form.getFieldValue("customer_id"));
         } catch (error) {
-          message.error("Lỗi: " + (error.response?.data?.message || error.message));
+          message.error(
+            "Lỗi: " + (error.response?.data?.message || error.message),
+          );
         } finally {
           setLoading(false);
         }
-      }
+      },
     });
   };
 
   const handleExport = () => {
-    if (saleHistory.length === 0) return message.warning('Không có lịch sử để xuất!');
-    const exportData = saleHistory.map(h => ({
-        'Ngày xuất lô': dayjs(h.sale_date).format('DD/MM/YYYY'),
-        'Mã Khách': h.WholesaleCustomer?.customer_code || 'N/A',
-        'Tên Khách': h.WholesaleCustomer?.name || 'N/A',
-        'Tổng tiền lô': Number(h.total_amount_vnd),
-        'Đã thanh toán': Number(h.paid_amount_vnd),
-        'Còn nợ': Number(h.total_amount_vnd || 0) - Number(h.paid_amount_vnd || 0),
-        'Kho xuất': h.Warehouse?.warehouse_name || 'N/A'
+    if (saleHistory.length === 0)
+      return message.warning("Không có lịch sử để xuất!");
+    const exportData = saleHistory.map((h) => ({
+      "Ngày xuất lô": dayjs(h.sale_date).format("DD/MM/YYYY"),
+      "Mã Khách": h.WholesaleCustomer?.customer_code || "N/A",
+      "Tên Khách": h.WholesaleCustomer?.name || "N/A",
+      "Tổng tiền lô": Number(h.total_amount_vnd),
+      "Đã thanh toán": Number(h.paid_amount_vnd),
+      "Còn nợ":
+        Number(h.total_amount_vnd || 0) - Number(h.paid_amount_vnd || 0),
+      "Kho xuất": h.Warehouse?.warehouse_name || "N/A",
     }));
-    exportToExcel(exportData, `LichSuBanBuon_${dayjs().format('YYYYMMDD_HHmm')}`);
+    exportToExcel(
+      exportData,
+      `LichSuBanBuon_${dayjs().format("YYYYMMDD_HHmm")}`,
+    );
   };
 
   const handlePrintLot = (sale, details = saleDetails) => {
@@ -324,6 +455,11 @@ const WholesaleSalePage = () => {
     const customer = sale.WholesaleCustomer || {};
     const date = dayjs(sale.sale_date);
 
+    // Fix redundant "HEAD" text - Bulletproof version
+    const rawWhName = (warehouse.warehouse_name || "HỆ THỐNG").toUpperCase();
+    const cleanWhName = rawWhName.replace(/^(HEAD\s*)+/i, "").trim();
+    const displayWhName = `HEAD ${cleanWhName}`;
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -331,20 +467,21 @@ const WholesaleSalePage = () => {
         <meta charset="utf-8" />
         <title>In Phiếu Xuất Lô</title>
         <style>
-          body { font-family: "Times New Roman", Times, serif; font-size: 14pt; color: black; background: white; padding: 20px; line-height: 1.5; }
-          .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
-          .logo-side { font-weight: bold; font-size: 16pt; }
-          .title { text-align: center; font-size: 24pt; font-weight: bold; margin: 30px 0; }
-          .info-sec { display: flex; flex-wrap: wrap; border-top: 2px solid black; border-bottom: 2px solid black; padding: 15px 0; margin-bottom: 30px; }
-          .info-item { flex: 1; min-width: 300px; font-size: 15pt; }
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: "Times New Roman", Times, serif; font-size: 11pt; color: black; background: white; padding: 0; line-height: 1.3; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+          .logo-side { font-weight: bold; font-size: 13pt; }
+          .title { text-align: center; font-size: 18pt; font-weight: bold; margin: 10px 0; }
+          .info-sec { display: flex; flex-wrap: wrap; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 8px 0; margin-bottom: 15px; }
+          .info-item { flex: 1; min-width: 250px; font-size: 11pt; margin-bottom: 2px; }
           .info-label { font-weight: normal; }
           .info-value { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13pt; }
-          th, td { border: 1px solid black; padding: 10px 8px; text-align: left; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+          th, td { border: 1px solid black; padding: 4px 5px; text-align: left; }
           th { background: #f2f2f2; font-weight: bold; text-align: center; }
-          .footer { margin-top: 60px; display: flex; justify-content: space-between; text-align: center; font-size: 14pt; }
-          .sig-box { width: 230px; }
-          .total-sec { margin-top: 30px; text-align: right; }
+          .footer { margin-top: 30px; display: flex; justify-content: space-between; text-align: center; font-size: 11pt; }
+          .sig-box { width: 200px; }
+          .total-sec { margin-top: 15px; text-align: right; }
           @media print {
             body { padding: 0; }
             button { display: none; }
@@ -354,63 +491,67 @@ const WholesaleSalePage = () => {
       <body>
         <div class="header">
           <div class="logo-side">
-            HEAD ${(warehouse.warehouse_name || 'HỆ THỐNG').toUpperCase()}
-            <div style="font-weight: normal; font-size: 12pt;">${warehouse.address || ''}</div>
+            ${displayWhName}
+            <div style="font-weight: normal; font-size: 10pt;">${warehouse.address || ""}</div>
           </div>
           <div style="text-align: right; font-weight: bold;">
-            Ngày: ${date.format('DD/MM/YYYY')}
+            Ngày: ${date.format("DD/MM/YYYY")}
           </div>
         </div>
         
         <div class="title">PHIẾU XUẤT KHO LÔ HÀNG</div>
         
         <div class="info-sec">
-          <div class="info-item"><span class="info-label">Khách hàng:</span> <span class="info-value">${customer.name || 'N/A'}</span></div>
-          <div class="info-item"><span class="info-label">Mã khách:</span> <span class="info-value">${customer.customer_code || 'N/A'}</span></div>
-          <div class="info-item" style="width: 100%; margin-top: 8px;"><span class="info-label">Ghi chú:</span> <span>${sale.notes || ''}</span></div>
+          <div class="info-item"><span class="info-label">Khách hàng:</span> <span class="info-value">${customer.name || "N/A"}</span></div>
+          <div class="info-item"><span class="info-label">Mã khách:</span> <span class="info-value">${customer.customer_code || "N/A"}</span></div>
+          <div class="info-item" style="width: 100%; margin-top: 4px;"><span class="info-label">Ghi chú:</span> <span>${sale.notes || ""}</span></div>
         </div>
         
         <table>
           <thead>
             <tr>
-              <th style="width: 50px;">STT</th>
-              <th style="width: 110px;">Ngày bán</th>
-              <th>Loại xe</th>
-              <th>Màu xe</th>
-              <th>Số Máy</th>
+              <th style="width: 30px;">STT</th>
+              <th style="width: 80px;">Ngày bán</th>
+              <th style="width: 200px;">Loại xe</th>
+              <th style="width: 70px;">Màu xe</th>
+              <th style="width: 100px;">Số Máy</th>
               <th>Số Khung</th>
-              <th style="text-align: right; width: 130px;">Đơn giá</th>
+              <th style="text-align: right; width: 100px;">Đơn giá</th>
             </tr>
           </thead>
           <tbody>
-            ${items.map((v, i) => `
+            ${items
+              .map(
+                (v, i) => `
               <tr>
                 <td style="text-align: center;">${i + 1}</td>
-                <td style="text-align: center;">${date.format('DD/MM/YYYY')}</td>
-                <td>${v.VehicleType?.name || v.Type?.name || 'N/A'}</td>
-                <td style="text-align: center;">${v.VehicleColor?.color_name || v.Color?.color_name || 'N/A'}</td>
+                <td style="text-align: center;">${date.format("DD/MM/YYYY")}</td>
+                <td>${v.VehicleType?.name || v.Type?.name || "N/A"}</td>
+                <td style="text-align: center;">${v.VehicleColor?.color_name || v.Color?.color_name || "N/A"}</td>
                 <td><b>${v.engine_no}</b></td>
                 <td><b>${v.chassis_no}</b></td>
                 <td style="text-align: right;"><b>${Number(v.wholesale_price_vnd).toLocaleString()}</b></td>
               </tr>
-            `).join('')}
+            `,
+              )
+              .join("")}
           </tbody>
         </table>
         
         <div class="total-sec">
-          <div style="font-size: 18pt;">Tổng cộng: <b style="color: black;">${Number(sale.total_amount_vnd).toLocaleString()}</b></div>
-          <div style="font-style: italic; margin-top: 10px; font-size: 13pt;">(Bằng chữ: ${numberToWords(sale.total_amount_vnd).replace(' đồng', '')})</div>
+          <div style="font-size: 14pt;">Tổng cộng: <b style="color: black;">${Number(sale.total_amount_vnd).toLocaleString()}</b></div>
+          <div style="font-style: italic; margin-top: 5px; font-size: 11pt;">(Bằng chữ: ${numberToWords(sale.total_amount_vnd).replace(" đồng", "")})</div>
         </div>
         
         <div class="footer">
           <div class="sig-box">
-            <b>Người nhận hàng</b><br/><i>(Ký và ghi rõ họ tên)</i>
+            <b>Người nhận hàng</b><br/><i style="font-size: 9pt;">(Ký và ghi rõ họ tên)</i>
           </div>
           <div class="sig-box">
-             <b>Người lập phiếu</b><br/><i>(Ký tên)</i>
+             <b>Người lập phiếu</b><br/><i style="font-size: 9pt;">(Ký tên)</i>
           </div>
           <div class="sig-box">
-            <b>Đại diện bên bán</b><br/><i>(Đóng dấu)</i>
+            <b>Đại diện bên bán</b><br/><i style="font-size: 9pt;">(Đóng dấu)</i>
           </div>
         </div>
         
@@ -422,142 +563,227 @@ const WholesaleSalePage = () => {
       </html>
     `;
 
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open("", "_blank");
     printWindow.document.write(html);
     printWindow.document.close();
   };
 
   const entryColumns = [
     {
-      title: 'Số Máy (Tìm xe)',
-      dataIndex: 'engine_no',
-      width: '30%',
+      title: "Số Máy (Tìm xe)",
+      dataIndex: "engine_no",
+      width: "30%",
       render: (val, record) => (
-        <Select 
-          style={{ width: '100%' }} 
-          showSearch 
+        <Select
+          style={{ width: "100%" }}
+          showSearch
           placeholder="Số máy..."
           value={val || undefined}
-          onChange={(v) => updateItem(record.key, 'engine_no', v)}
+          onChange={(v) => updateItem(record.key, "engine_no", v)}
           optionFilterProp="children"
         >
           {availableStock
-            .filter(v => !batchItems.some(item => item.key !== record.key && item.vehicle_id === v.id))
-            .map(v => <Option key={v.id} value={v.id}>{v.engine_no}</Option>)}
+            .filter(
+              (v) =>
+                !batchItems.some(
+                  (item) => item.key !== record.key && item.vehicle_id === v.id,
+                ),
+            )
+            .map((v) => (
+              <Option key={v.id} value={v.id}>
+                {v.engine_no}
+              </Option>
+            ))}
         </Select>
-      )
+      ),
     },
     {
-      title: 'Số Khung (Tìm xe)',
-      dataIndex: 'chassis_no',
-      width: '30%',
+      title: "Số Khung (Tìm xe)",
+      dataIndex: "chassis_no",
+      width: "30%",
       render: (val, record) => (
-        <Select 
-          style={{ width: '100%' }} 
-          showSearch 
+        <Select
+          style={{ width: "100%" }}
+          showSearch
           placeholder="Số khung..."
           value={val || undefined}
-          onChange={(v) => updateItem(record.key, 'chassis_no', v)}
+          onChange={(v) => updateItem(record.key, "chassis_no", v)}
           optionFilterProp="children"
         >
           {availableStock
-            .filter(v => !batchItems.some(item => item.key !== record.key && item.vehicle_id === v.id))
-            .map(v => <Option key={v.id} value={v.id}>{v.chassis_no}</Option>)}
+            .filter(
+              (v) =>
+                !batchItems.some(
+                  (item) => item.key !== record.key && item.vehicle_id === v.id,
+                ),
+            )
+            .map((v) => (
+              <Option key={v.id} value={v.id}>
+                {v.chassis_no}
+              </Option>
+            ))}
         </Select>
-      )
+      ),
     },
     {
-      title: 'Thông tin xe',
-      key: 'info',
-      render: (_, record) => record.type_name ? (
-        <div style={{ fontSize: 11, lineHeight: 1.2 }}>
-           <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>{record.type_name}</Tag>
-           <br/>
-           <Tag color="purple" style={{ fontSize: 10, margin: '2px 0 0 0' }}>{record.color_name}</Tag>
-        </div>
-      ) : null
+      title: "Thông tin xe",
+      key: "info",
+      render: (_, record) =>
+        record.type_name ? (
+          <div style={{ fontSize: 11, lineHeight: 1.2 }}>
+            <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
+              {record.type_name}
+            </Tag>
+            <br />
+            <Tag color="purple" style={{ fontSize: 10, margin: "2px 0 0 0" }}>
+              {record.color_name}
+            </Tag>
+          </div>
+        ) : null,
     },
     {
-      title: 'Giá Bán (đ)',
-      dataIndex: 'sale_price',
-      width: '18%',
+      title: "Giá Bán (đ)",
+      dataIndex: "sale_price",
+      width: "18%",
       render: (val, record) => (
-        <Space direction="vertical" size={2} style={{ width: '100%' }}>
-           <InputNumber 
-              style={{ width: '100%', borderColor: (record.cost_price && Number(val) < Number(record.cost_price)) ? 'var(--error-color)' : '' }} 
-              value={val} 
-              size="small"
-              placeholder="Giá..."
-              formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={v => v.replace(/\$\s?|(,*)/g, '')}
-              onChange={(v) => updateItem(record.key, 'sale_price', v)} 
-           />
-           {Number(record.cost_price) > 0 && Number(val) > 0 && Number(val) < Number(record.cost_price) && (
-             <Text type="danger" style={{ fontSize: 9 }}>⚠️ Lỗ so với giá nhập!</Text>
-           )}
+        <Space direction="vertical" size={2} style={{ width: "100%" }}>
+          <InputNumber
+            style={{
+              width: "100%",
+              borderColor:
+                record.cost_price && Number(val) < Number(record.cost_price)
+                  ? "var(--error-color)"
+                  : "",
+            }}
+            value={val}
+            size="small"
+            placeholder="Giá..."
+            formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+            parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+            onChange={(v) => updateItem(record.key, "sale_price", v)}
+          />
+          {Number(record.cost_price) > 0 &&
+            Number(val) > 0 &&
+            Number(val) < Number(record.cost_price) && (
+              <Text type="danger" style={{ fontSize: 9 }}>
+                ⚠️ Lỗ so với giá nhập!
+              </Text>
+            )}
         </Space>
-      )
+      ),
     },
     {
-      title: 'Ghi chú xe',
-      dataIndex: 'notes',
-      width: '15%',
+      title: "Ghi chú xe",
+      dataIndex: "notes",
+      width: "15%",
       render: (val, record) => (
-        <Input 
-          size="small" 
-          placeholder="Ghi chú chi tiết..." 
-          value={val} 
-          onChange={(e) => updateItem(record.key, 'notes', e.target.value)} 
+        <Input
+          size="small"
+          placeholder="Ghi chú chi tiết..."
+          value={val}
+          onChange={(e) => updateItem(record.key, "notes", e.target.value)}
         />
-      )
+      ),
     },
     {
-      title: '',
-      key: 'action',
+      title: "",
+      key: "action",
       width: 40,
-      render: (_, record) => <Button type="text" danger icon={<Trash2 size={16} />} onClick={() => removeItem(record.key)} />
-    }
+      render: (_, record) => (
+        <Button
+          type="text"
+          danger
+          icon={<Trash2 size={16} />}
+          onClick={() => removeItem(record.key)}
+        />
+      ),
+    },
   ];
-
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <Title level={2} className="gradient-text">XUẤT BÁN BUÔN & THU NỢ</Title>
+        <Title level={2} className="gradient-text">
+          XUẤT BÁN BUÔN & THU NỢ
+        </Title>
         <Space wrap>
-            <Button 
-                icon={<Download size={18} />} 
-                type="primary" 
-                ghost
-                onClick={handleExport}
-            >
-                Xuất Excel
-            </Button>
+          <Button
+            icon={<Download size={18} />}
+            type="primary"
+            ghost
+            onClick={handleExport}
+          >
+            Xuất Excel
+          </Button>
         </Space>
       </div>
 
       <Card className="glass-card" style={{ marginBottom: 24 }}>
-        <Form form={form} layout="vertical" initialValues={{ sale_date: dayjs() }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{ sale_date: dayjs() }}
+        >
           <Row gutter={24} align="bottom">
-            <Col xs={24} md={isAdmin ? 7 : 10}>
-              <Form.Item label="Chọn Khách Hàng Buôn" name="customer_id" rules={[{ required: true }]}>
-                <Select size="large" showSearch placeholder="Tìm theo tên hoặc mã khách" optionFilterProp="children" onChange={(val) => { handleSearchHistory(val); setActiveTab('2'); }}>
-                  {customers.map(c => <Option key={c.id} value={c.id}>{c.customer_code} - {c.name}</Option>)}
+            <Col xs={24} md={isAdmin || isManager ? 7 : 10}>
+              <Form.Item
+                label="Chọn Khách Hàng Buôn"
+                name="customer_id"
+                rules={[{ required: true }]}
+              >
+                <Select
+                  size="large"
+                  showSearch
+                  placeholder="Tìm theo tên hoặc mã khách"
+                  optionFilterProp="children"
+                  onChange={(val) => {
+                    handleSearchHistory(val);
+                    setActiveTab("2");
+                  }}
+                >
+                  {customers.map((c) => (
+                    <Option key={c.id} value={c.id}>
+                      {c.customer_code} - {c.name}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
-            {isAdmin && (
-               <Col xs={24} md={6}>
-                  <Form.Item label="Từ Kho Xuất Bán" required>
-                    <Select size="large" showSearch placeholder="Chọn kho..." optionFilterProp="children" value={selectedWarehouseId} onChange={handleWarehouseChange}>
-                        {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
-                    </Select>
-                  </Form.Item>
-               </Col>
+            {showWarehouseSelector ? (
+              <Col xs={24} md={6}>
+                <Form.Item label="Từ Kho Xuất Bán" required>
+                  <Select
+                    size="large"
+                    showSearch
+                    placeholder="Chọn kho..."
+                    optionFilterProp="children"
+                    value={selectedWarehouseId}
+                    onChange={handleWarehouseChange}
+                  >
+                    {filteredWarehouses.map((w) => (
+                      <Option key={w.id} value={w.id}>
+                        {w.warehouse_name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            ) : (
+              <Form.Item
+                name="warehouse_id"
+                hidden
+                initialValue={user.warehouse_id}
+              >
+                <Input />
+              </Form.Item>
             )}
-            <Col xs={24} md={ isAdmin ? 4 : 6 }>
+            <Col xs={24} md={isAdmin || isManager ? 4 : 6}>
               <Form.Item label="Ngày xuất lô hàng" name="sale_date">
-                <DatePicker size="large" style={{ width: '100%' }} format="DD/MM/YYYY" />
+                <DatePicker
+                  size="large"
+                  style={{ width: "100%" }}
+                  format="DD/MM/YYYY"
+                />
               </Form.Item>
             </Col>
             <Col xs={24} md={7}>
@@ -566,100 +792,247 @@ const WholesaleSalePage = () => {
               </Form.Item>
             </Col>
           </Row>
-
         </Form>
       </Card>
 
-      <Tabs activeKey={activeTab} onChange={setActiveTab} type="card" className="custom-tabs" items={[
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        type="card"
+        className="custom-tabs"
+        items={[
           {
-            key: '1',
-            label: <Space><Plus size={18} /> LẬP LÔ BÁN MỚI</Space>,
+            key: "1",
+            label: (
+              <Space>
+                <Plus size={18} /> LẬP LÔ BÁN MỚI
+              </Space>
+            ),
             children: (
-              <Card className="glass-card" styles={{ body: { padding: '8px' } }}>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                   <Text type="secondary" style={{ fontSize: 12 }}>Tìm xe, nhập giá bán lẻ vào bảng (Chốt lô bán buôn)</Text>
-                   <Button icon={<Plus size={16} />} onClick={addRow} type="primary">Dòng mới</Button>
+              <Card
+                className="glass-card"
+                styles={{ body: { padding: "8px" } }}
+              >
+                <div
+                  style={{
+                    marginBottom: 16,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 12,
+                  }}
+                >
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Tìm xe, nhập giá bán lẻ vào bảng (Chốt lô bán buôn)
+                  </Text>
+                  <Button
+                    icon={<Plus size={16} />}
+                    onClick={addRow}
+                    type="primary"
+                  >
+                    Dòng mới
+                  </Button>
                 </div>
-                <Table dataSource={batchItems} columns={entryColumns} pagination={false} size="small" scroll={{ x: 1000 }} />
-                 <div style={{ marginTop: 32, textAlign: 'right' }}>
-                    <Space size={16}>
-                       <Button size="large" icon={<RotateCcw size={18} />} danger ghost onClick={() => setBatchItems([{ key: Date.now().toString(), engine_no: '', chassis_no: '', sale_price: undefined, cost_price: undefined, notes: '' }])}>Làm mới bảng</Button>
-                       <Button 
-                        size="large" 
-                        icon={<FileSpreadsheet size={18} />} 
-                        type="primary" 
-                        ghost
-                        onClick={() => setImportVisible(true)}
-                      >
-                        NHẬP TỪ EXCEL
-                      </Button>
-                       <Button 
-                         size="large" 
-                         type="primary" 
-                         loading={loading} 
-                         icon={<CheckCircle2 size={18} />} 
-                         onClick={handleSaveBatch} 
-                         style={{ background: '#10b981', minWidth: 200 }}
-                       >
-                         CHỐT ĐƠN & XUẤT KHO
-                       </Button>
-                    </Space>
-                 </div>
+                <Table
+                  dataSource={batchItems}
+                  columns={entryColumns}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: 1000 }}
+                  summary={(pageData) => {
+                    let total = 0;
+                    let count = pageData.length;
+                    let selectedCount = pageData.filter(i => i.vehicle_id).length;
 
-                 <ImportExcelModal 
-                    visible={importVisible}
-                    onCancel={() => setImportVisible(false)}
-                    onSuccess={() => {
-                        fetchInitialData();
-                        if (form.getFieldValue('customer_id')) handleSearchHistory(form.getFieldValue('customer_id'));
-                    }}
-                    type="wholesale_sales"
-                    title="Nhập danh sách bán buôn từ Excel"
-                  />
+                    pageData.forEach(({ sale_price }) => {
+                      total += Number(sale_price) || 0;
+                    });
+                    return (
+                      <Table.Summary fixed>
+                        <Table.Summary.Row style={{ background: "#f8fafc" }}>
+                          <Table.Summary.Cell
+                            index={0}
+                            colSpan={3}
+                            align="right"
+                          >
+                            <Space size={24} style={{ marginRight: 16 }}>
+                              <Text strong style={{ fontSize: 15 }}>
+                                SỐ LƯỢNG:{" "}
+                                <span style={{ color: "#3b82f6", fontSize: 18 }}>
+                                  {selectedCount}
+                                </span>{" "}
+                                / {count} xe
+                              </Text>
+                              <Text strong style={{ fontSize: 15 }}>
+                                TỔNG TIỀN LÔ HÀNG:
+                              </Text>
+                            </Space>
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={3}>
+                            <Text
+                              strong
+                              style={{ color: "#10b981", fontSize: 18 }}
+                            >
+                              {total.toLocaleString()} đ
+                            </Text>
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={4} colSpan={2}>
+                            {total > 0 && (
+                              <Text
+                                type="secondary"
+                                style={{
+                                  fontSize: 12,
+                                  fontStyle: "italic",
+                                  marginLeft: 8,
+                                }}
+                              >
+                                ({numberToWords(total)})
+                              </Text>
+                            )}
+                          </Table.Summary.Cell>
+                        </Table.Summary.Row>
+                      </Table.Summary>
+                    );
+                  }}
+                />
+                <div style={{ marginTop: 32, textAlign: "right" }}>
+                  <Space size={16}>
+                    <Button
+                      size="large"
+                      icon={<RotateCcw size={18} />}
+                      danger
+                      ghost
+                      onClick={() =>
+                        setBatchItems([
+                          {
+                            key: Date.now().toString(),
+                            engine_no: "",
+                            chassis_no: "",
+                            sale_price: undefined,
+                            cost_price: undefined,
+                            notes: "",
+                          },
+                        ])
+                      }
+                    >
+                      Làm mới bảng
+                    </Button>
+                    <Button
+                      size="large"
+                      icon={<FileSpreadsheet size={18} />}
+                      type="primary"
+                      ghost
+                      onClick={() => setImportVisible(true)}
+                    >
+                      NHẬP TỪ EXCEL
+                    </Button>
+                    <Button
+                      size="large"
+                      type="primary"
+                      loading={loading}
+                      icon={<CheckCircle2 size={18} />}
+                      onClick={handleSaveBatch}
+                      style={{ background: "#10b981", minWidth: 200 }}
+                    >
+                      CHỐT ĐƠN & XUẤT KHO
+                    </Button>
+                  </Space>
+                </div>
+
+                <ImportExcelModal
+                  visible={importVisible}
+                  onCancel={() => setImportVisible(false)}
+                  onSuccess={() => {
+                    fetchInitialData();
+                    if (form.getFieldValue("customer_id"))
+                      handleSearchHistory(form.getFieldValue("customer_id"));
+                  }}
+                  type="wholesale_sales"
+                  title="Nhập danh sách bán buôn từ Excel"
+                />
               </Card>
-            )
+            ),
           },
           {
-            key: '2',
-            label: <Space><History size={18} /> LỊCH SỬ LÔ & THU NỢ</Space>,
+            key: "2",
+            label: (
+              <Space>
+                <History size={18} /> LỊCH SỬ LÔ & THU NỢ
+              </Space>
+            ),
             children: (
               <Row gutter={24}>
                 <Col xs={24} lg={12}>
-                  <Card 
-                    title="Lịch sử Lô hàng" 
+                  <Card
+                    title="Lịch sử Lô hàng"
                     className="glass-card"
                     styles={{ body: { padding: 0 } }}
                   >
-                    <div style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                       <Input 
-                         placeholder="Tìm ngày hoặc ghi chú lô..." 
-                         prefix={<Search size={16} />}
-                         value={historySearchTerm}
-                         onChange={e => setHistorySearchTerm(e.target.value)}
-                         allowClear
-                       />
+                    <div
+                      style={{
+                        padding: "8px 16px",
+                        background: "rgba(255,255,255,0.02)",
+                        borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <Input
+                        placeholder="Tìm ngày hoặc ghi chú lô..."
+                        prefix={<Search size={16} />}
+                        value={historySearchTerm}
+                        onChange={(e) => setHistorySearchTerm(e.target.value)}
+                        allowClear
+                      />
                     </div>
-                    <Table 
-                      dataSource={saleHistory.filter(h => {
+                    <Table
+                      dataSource={saleHistory.filter((h) => {
                         const term = historySearchTerm.toLowerCase();
-                        return dayjs(h.sale_date).format('DD/MM/YYYY').includes(term) || 
-                               (h.notes && h.notes.toLowerCase().includes(term));
-                      })} 
-                      size="small" 
+                        return (
+                          dayjs(h.sale_date)
+                            .format("DD/MM/YYYY")
+                            .includes(term) ||
+                          (h.notes && h.notes.toLowerCase().includes(term))
+                        );
+                      })}
+                      size="small"
                       rowKey="id"
-                      scroll={{ x: 'max-content' }}
+                      scroll={{ x: "max-content" }}
                       columns={[
-                        { title: 'Ngày Bán', dataIndex: 'sale_date', render: d => dayjs(d).format('DD/MM/YYYY') },
-                        { title: 'Tổng Tiền', render: (_, r) => <b>{Number(r.total_amount_vnd).toLocaleString()}</b> },
-                        { title: 'Còn Nợ', render: (_, r) => <Tag color="volcano">{(Number(r.total_amount_vnd) - Number(r.paid_amount_vnd)).toLocaleString()}</Tag> },
-                        { 
-                          title: '', 
+                        {
+                          title: "Ngày Bán",
+                          dataIndex: "sale_date",
+                          render: (d) => dayjs(d).format("DD/MM/YYYY"),
+                        },
+                        {
+                          title: "Tổng Tiền",
+                          render: (_, r) => (
+                            <b>{Number(r.total_amount_vnd).toLocaleString()}</b>
+                          ),
+                        },
+                        {
+                          title: "Còn Nợ",
+                          render: (_, r) => (
+                            <Tag color="volcano">
+                              {(
+                                Number(r.total_amount_vnd) -
+                                Number(r.paid_amount_vnd)
+                              ).toLocaleString()}
+                            </Tag>
+                          ),
+                        },
+                        {
+                          title: "",
                           render: (_, r) => (
                             <Space>
-                              <Button size="small" onClick={() => loadSaleDetails(r)}>Chi tiết</Button>
-                              <Button 
-                                size="small" 
-                                icon={<Printer size={14} />} 
+                              <Button
+                                size="small"
+                                onClick={() => loadSaleDetails(r)}
+                              >
+                                Chi tiết
+                              </Button>
+                              <Button
+                                size="small"
+                                icon={<Printer size={14} />}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Find the details if they match, otherwise the print template will rely on basic lot info
@@ -667,189 +1040,333 @@ const WholesaleSalePage = () => {
                                 }}
                               />
                               {canDelete && (
-                                <Button 
-                                  size="small" 
-                                  danger 
-                                  icon={<Trash2 size={14} />} 
-                                  onClick={() => handleDeleteSale(r)} 
+                                <Button
+                                  size="small"
+                                  danger
+                                  icon={<Trash2 size={14} />}
+                                  onClick={() => handleDeleteSale(r)}
                                 />
                               )}
                             </Space>
-                          ) 
-                        }
+                          ),
+                        },
                       ]}
                     />
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card 
-                    title={selectedSale ? `Hóa đơn: ${dayjs(selectedSale?.sale_date).format('DD/MM/YYYY')}` : 'Chi tiết đơn'} 
+                  <Card
+                    title={
+                      selectedSale
+                        ? `Hóa đơn: ${dayjs(selectedSale?.sale_date).format("DD/MM/YYYY")}`
+                        : "Chi tiết đơn"
+                    }
                     className="glass-card"
-                    extra={selectedSale && (
-                      <Button 
-                        icon={<Printer size={16} />} 
-                        type="primary" 
-                        ghost 
-                        size="small"
-                        onClick={() => handlePrintLot(selectedSale)}
-                      >
-                        In phiếu lô
-                      </Button>
-                    )}
+                    extra={
+                      selectedSale && (
+                        <Button
+                          icon={<Printer size={16} />}
+                          type="primary"
+                          ghost
+                          size="small"
+                          onClick={() => handlePrintLot(selectedSale)}
+                        >
+                          In phiếu lô
+                        </Button>
+                      )
+                    }
                   >
                     {selectedSale ? (
                       <div className="lot-details">
-                         <div style={{ marginBottom: 20 }}>
-                            <Button 
-                                block 
-                                type="primary" 
-                                style={{ background: canManageMoney ? '#10b981' : '#6b7280', height: 45, fontSize: 16 }} 
-                                icon={<DollarSign size={20} />} 
-                                onClick={() => setIsPaymentModalOpen(true)}
-                                disabled={!canManageMoney}
-                             >
-                                {canManageMoney ? "THU TIỀN TỪ KHÁCH BUÔN" : "XEM LỊCH SỬ THU TIỀN"}
-                             </Button>
-                         </div>
-                          <div style={{ marginBottom: 12 }}>
-                             <Row gutter={8}>
-                               <Col flex="auto">
-                                 <Input 
-                                   placeholder="Tìm nhanh Xe (Số máy, Số khung, Ghi chú...)" 
-                                   prefix={<Search size={16} />}
-                                   value={detailSearchTerm}
-                                   onChange={e => setDetailSearchTerm(e.target.value)}
-                                   allowClear
-                                   size="small"
-                                 />
-                               </Col>
-                               <Col>
-                                 <Select 
-                                   size="small" 
-                                   value={searchBy} 
-                                   onChange={setSearchBy}
-                                   style={{ width: 100 }}
-                                 >
-                                   <Option value="all">Tất cả</Option>
-                                   <Option value="engine">Số Máy</Option>
-                                   <Option value="chassis">Số Khung</Option>
-                                 </Select>
-                               </Col>
-                             </Row>
-                          </div>
-                          <Text strong>- Xe trong lô:</Text>
-                          <Table 
-                             dataSource={saleDetails.vehicles.filter(v => {
-                               const term = detailSearchTerm.toLowerCase();
-                               if (!term) return true;
-                               
-                               const matchesEngine = v.engine_no.toLowerCase().includes(term);
-                               const matchesChassis = v.chassis_no.toLowerCase().includes(term);
-                               const matchesNotes = (v.notes || '').toLowerCase().includes(term);
-                               const matchesType = (v.VehicleType?.name || '').toLowerCase().includes(term);
+                        <div style={{ marginBottom: 20 }}>
+                          <Button
+                            block
+                            type="primary"
+                            style={{
+                              background: canManageMoney
+                                ? "#10b981"
+                                : "#6b7280",
+                              height: 45,
+                              fontSize: 16,
+                            }}
+                            icon={<DollarSign size={20} />}
+                            onClick={() => setIsPaymentModalOpen(true)}
+                            disabled={!canManageMoney}
+                          >
+                            {canManageMoney
+                              ? "THU TIỀN TỪ KHÁCH BUÔN"
+                              : "XEM LỊCH SỬ THU TIỀN"}
+                          </Button>
+                        </div>
+                        <div style={{ marginBottom: 12 }}>
+                          <Row gutter={8}>
+                            <Col flex="auto">
+                              <Input
+                                placeholder="Tìm nhanh Xe (Số máy, Số khung, Ghi chú...)"
+                                prefix={<Search size={16} />}
+                                value={detailSearchTerm}
+                                onChange={(e) =>
+                                  setDetailSearchTerm(e.target.value)
+                                }
+                                allowClear
+                                size="small"
+                              />
+                            </Col>
+                            <Col>
+                              <Select
+                                size="small"
+                                value={searchBy}
+                                onChange={setSearchBy}
+                                style={{ width: 100 }}
+                              >
+                                <Option value="all">Tất cả</Option>
+                                <Option value="engine">Số Máy</Option>
+                                <Option value="chassis">Số Khung</Option>
+                              </Select>
+                            </Col>
+                          </Row>
+                        </div>
+                        <Text strong>- Xe trong lô:</Text>
+                        <Table
+                          dataSource={saleDetails.vehicles.filter((v) => {
+                            const term = detailSearchTerm.toLowerCase();
+                            if (!term) return true;
 
-                               if (searchBy === 'engine') return matchesEngine;
-                               if (searchBy === 'chassis') return matchesChassis;
-                               return matchesEngine || matchesChassis || matchesNotes || matchesType;
-                             })} 
-                             size="small" 
-                             pagination={{ pageSize: 5 }}
-                             rowKey="id"
-                             scroll={{ x: 'max-content' }}
-                             columns={[
-                               { title: 'Số Máy', dataIndex: 'engine_no', width: 120 }, 
-                               { title: 'Số Khung', dataIndex: 'chassis_no', width: 120 }, 
-                               { 
-                                 title: 'Loại xe', 
-                                 key: 'type', 
-                                 width: 150,
-                                 render: (_, r) => <Text strong style={{ fontSize: 12, color: 'var(--primary-color)' }}>{r.VehicleType?.name || 'N/A'}</Text>
-                               },
-                               { 
-                                 title: 'Giá bán (đ)', 
-                                 dataIndex: 'wholesale_price_vnd', 
-                                 width: 130,
-                                 render: v => <b style={{ color: 'var(--primary-color)' }}>{Number(v || 0).toLocaleString()}</b>
-                               },
-                               { title: 'Ghi chú xe', dataIndex: 'notes', ellipsis: true },
-                               {
-                                 title: '',
-                                 width: 40,
-                                 render: (_, r) => (
-                                   canDelete && (
-                                     <Button 
-                                       type="text" 
-                                       danger 
-                                       size="small"
-                                       icon={<Trash2 size={14} />} 
-                                       onClick={() => handleDeleteVehicle(selectedSale.id, r)}
-                                     />
-                                   )
-                                 )
-                               }
-                             ]}
-                          />
-                         <Divider />
-                         <Text strong>- Lịch sử thu tiền:</Text>
-                         <Table 
-                            dataSource={saleDetails.payments} 
-                            size="small" 
-                            pagination={false}
-                            rowKey="id"
-                            columns={[
-                              { title: 'Ngày thu', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') }, 
-                              { title: 'Số tiền thu', render: (_, r) => <Text strong color="#10b981">{Number(r.amount_paid_vnd).toLocaleString()} đ</Text> },
-                              {
-                                title: '',
-                                width: 50,
-                                render: (_, r) => (
-                                  canManageMoney && (
-                                    <Button 
-                                      type="text" 
-                                      danger 
-                                      size="small"
-                                      icon={<Trash2 size={14} />} 
-                                      onClick={() => handleDeletePayment(r.id)}
-                                    />
-                                  )
-                                )
-                              }
-                            ]}
-                         />
+                            const matchesEngine = v.engine_no
+                              .toLowerCase()
+                              .includes(term);
+                            const matchesChassis = v.chassis_no
+                              .toLowerCase()
+                              .includes(term);
+                            const matchesNotes = (v.notes || "")
+                              .toLowerCase()
+                              .includes(term);
+                            const matchesType = (v.VehicleType?.name || "")
+                              .toLowerCase()
+                              .includes(term);
+
+                            if (searchBy === "engine") return matchesEngine;
+                            if (searchBy === "chassis") return matchesChassis;
+                            return (
+                              matchesEngine ||
+                              matchesChassis ||
+                              matchesNotes ||
+                              matchesType
+                            );
+                          })}
+                          size="small"
+                          pagination={{ pageSize: 5 }}
+                          rowKey="id"
+                          scroll={{ x: "max-content" }}
+                          columns={[
+                            {
+                              title: "Số Máy",
+                              dataIndex: "engine_no",
+                              width: 120,
+                            },
+                            {
+                              title: "Số Khung",
+                              dataIndex: "chassis_no",
+                              width: 120,
+                            },
+                            {
+                              title: "Loại xe",
+                              key: "type",
+                              width: 150,
+                              render: (_, r) => (
+                                <Text
+                                  strong
+                                  style={{
+                                    fontSize: 12,
+                                    color: "var(--primary-color)",
+                                  }}
+                                >
+                                  {r.VehicleType?.name || "N/A"}
+                                </Text>
+                              ),
+                            },
+                            {
+                              title: "Giá bán (đ)",
+                              dataIndex: "wholesale_price_vnd",
+                              width: 130,
+                              render: (v) => (
+                                <b style={{ color: "var(--primary-color)" }}>
+                                  {Number(v || 0).toLocaleString()}
+                                </b>
+                              ),
+                            },
+                            {
+                              title: "Ghi chú xe",
+                              dataIndex: "notes",
+                              ellipsis: true,
+                            },
+                            {
+                              title: "",
+                              width: 40,
+                              render: (_, r) =>
+                                canDelete && (
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<Trash2 size={14} />}
+                                    onClick={() =>
+                                      handleDeleteVehicle(selectedSale.id, r)
+                                    }
+                                  />
+                                ),
+                            },
+                          ]}
+                          summary={(pageData) => {
+                            let total = 0;
+                            pageData.forEach(({ wholesale_price_vnd }) => {
+                              total += Number(wholesale_price_vnd) || 0;
+                            });
+                            return (
+                              <Table.Summary fixed>
+                                <Table.Summary.Row
+                                  style={{ background: "#f8fafc" }}
+                                >
+                                  <Table.Summary.Cell
+                                    index={0}
+                                    colSpan={3}
+                                    align="right"
+                                  >
+                                    <Text strong>TỔNG CỘNG:</Text>
+                                  </Table.Summary.Cell>
+                                  <Table.Summary.Cell index={3}>
+                                    <Text
+                                      strong
+                                      style={{
+                                        color: "var(--primary-color)",
+                                        fontSize: 15,
+                                      }}
+                                    >
+                                      {total.toLocaleString()} đ
+                                    </Text>
+                                  </Table.Summary.Cell>
+                                  <Table.Summary.Cell
+                                    index={4}
+                                    colSpan={2}
+                                  ></Table.Summary.Cell>
+                                </Table.Summary.Row>
+                              </Table.Summary>
+                            );
+                          }}
+                        />
+                        <Divider />
+                        <Text strong>- Lịch sử thu tiền:</Text>
+                        <Table
+                          dataSource={saleDetails.payments}
+                          size="small"
+                          pagination={false}
+                          rowKey="id"
+                          columns={[
+                            {
+                              title: "Ngày thu",
+                              dataIndex: "payment_date",
+                              render: (d) => dayjs(d).format("DD/MM/YYYY"),
+                            },
+                            {
+                              title: "Số tiền thu",
+                              render: (_, r) => (
+                                <Text strong color="#10b981">
+                                  {Number(r.amount_paid_vnd).toLocaleString()} đ
+                                </Text>
+                              ),
+                            },
+                            {
+                              title: "",
+                              width: 50,
+                              render: (_, r) =>
+                                canManageMoney && (
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<Trash2 size={14} />}
+                                    onClick={() => handleDeletePayment(r.id)}
+                                  />
+                                ),
+                            },
+                          ]}
+                        />
                       </div>
                     ) : (
-                      <div style={{ textAlign: 'center', padding: '100px 0', opacity: 0.3 }}>
-                         <Search size={64} style={{ marginBottom: 16 }} />
-                         <br /><Text>Chọn danh sách bên trái để đối soát nợ</Text>
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "100px 0",
+                          opacity: 0.3,
+                        }}
+                      >
+                        <Search size={64} style={{ marginBottom: 16 }} />
+                        <br />
+                        <Text>Chọn danh sách bên trái để đối soát nợ</Text>
                       </div>
                     )}
                   </Card>
                 </Col>
               </Row>
-            )
-          }
+            ),
+          },
         ]}
       />
 
-      <Modal 
-        title={<Space><DollarSign size={20} /> THU TIỀN TRẢ GÓP LÔ HÀNG</Space>}
+      <Modal
+        title={
+          <Space>
+            <DollarSign size={20} /> THU TIỀN TRẢ GÓP LÔ HÀNG
+          </Space>
+        }
         open={isPaymentModalOpen}
         onCancel={() => setIsPaymentModalOpen(false)}
         footer={null}
         width={400}
       >
-         <Form form={paymentForm} layout="vertical" onFinish={handlePayment} initialValues={{ date: dayjs() }}>
-            <Form.Item label="Ngày khách trả tiền" name="date" rules={[{ required: true }]}>
-               <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" size="large" />
-            </Form.Item>
-            <Form.Item label="Số tiền VNĐ" name="amount" rules={[{ required: true }]}>
-               <InputNumber style={{ width: '100%' }} size="large" autoFocus formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => v.replace(/\$\s?|(,*)/g, '')}/>
-            </Form.Item>
-            <Form.Item label="Ghi chú" name="notes">
-               <Input.TextArea placeholder="Nhập ghi chú thu tiền..." />
-            </Form.Item>
-            <Button block type="primary" htmlType="submit" size="large" style={{ background: '#10b981' }}>XÁC NHẬN THU NỢ</Button>
-         </Form>
+        <Form
+          form={paymentForm}
+          layout="vertical"
+          onFinish={handlePayment}
+          initialValues={{ date: dayjs() }}
+        >
+          <Form.Item
+            label="Ngày khách trả tiền"
+            name="date"
+            rules={[{ required: true }]}
+          >
+            <DatePicker
+              style={{ width: "100%" }}
+              format="DD/MM/YYYY"
+              size="large"
+            />
+          </Form.Item>
+          <Form.Item
+            label="Số tiền VNĐ"
+            name="amount"
+            rules={[{ required: true }]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              size="large"
+              autoFocus
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+            />
+          </Form.Item>
+          <Form.Item label="Ghi chú" name="notes">
+            <Input.TextArea placeholder="Nhập ghi chú thu tiền..." />
+          </Form.Item>
+          <Button
+            block
+            type="primary"
+            htmlType="submit"
+            size="large"
+            style={{ background: "#10b981" }}
+          >
+            XÁC NHẬN THU NỢ
+          </Button>
+        </Form>
       </Modal>
 
       <style>{` .ant-table { background: #ffffff !important; } .ant-table-cell { background: #ffffff !important; color: #000000 !important; font-weight: 600; } .ant-table-thead > tr > th { background: #f1f5fb !important; color: #0f172a !important; font-weight: 700 !important; } `}</style>

@@ -322,6 +322,10 @@ const GiftManagementPage = () => {
         }
     ];
 
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+    const filteredWarehouses = isPowerUser ? warehouses : warehouses.filter(w => w.id === user.warehouse_id);
+
     return (
         <div style={{ padding: '4px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
@@ -398,7 +402,7 @@ const GiftManagementPage = () => {
                 destroyOnClose
                 centered
             >
-                <Form form={importForm} layout="vertical" onFinish={handleImportSubmit} initialValues={{ transaction_date: dayjs() }}>
+                <Form form={importForm} layout="vertical" onFinish={handleImportSubmit} initialValues={{ transaction_date: dayjs(), warehouse_id: user.warehouse_id }}>
                     <Row gutter={16}>
                         <Col span={12}>
                             <Form.Item name="gift_id" label="Chọn quà tặng" rules={[{ required: true }]}>
@@ -409,8 +413,8 @@ const GiftManagementPage = () => {
                         </Col>
                         <Col span={12}>
                             <Form.Item name="warehouse_id" label="Kho nhập vào" rules={[{ required: true }]}>
-                                <Select placeholder="Chọn kho">
-                                    {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+                                <Select placeholder="Chọn kho" disabled={!isPowerUser}>
+                                    {filteredWarehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                                 </Select>
                             </Form.Item>
                         </Col>
@@ -456,7 +460,7 @@ const GiftManagementPage = () => {
                 destroyOnClose
                 centered
             >
-                <Form form={exportForm} layout="vertical" onFinish={handleExportSubmit} initialValues={{ transaction_date: dayjs(), type: 'EXPORT_RETAIL' }}>
+                <Form form={exportForm} layout="vertical" onFinish={handleExportSubmit} initialValues={{ transaction_date: dayjs(), type: 'EXPORT_RETAIL', warehouse_id: user.warehouse_id }}>
                     <Row gutter={16}>
                         <Col span={12}>
                             <Form.Item name="gift_id" label="Chọn quà tặng" rules={[{ required: true }]}>
@@ -467,8 +471,8 @@ const GiftManagementPage = () => {
                         </Col>
                         <Col span={12}>
                             <Form.Item name="warehouse_id" label="Kho xuất" rules={[{ required: true }]}>
-                                <Select placeholder="Chọn kho">
-                                    {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+                                <Select placeholder="Chọn kho" disabled={!isPowerUser}>
+                                    {filteredWarehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                                 </Select>
                             </Form.Item>
                         </Col>

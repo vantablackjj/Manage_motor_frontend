@@ -220,7 +220,7 @@ const PrintInvoice = ({ sale }) => {
         <div className="header-flex">
           <div className="logo-side">
             <img
-              src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Honda_Logo.svg/1200px-Honda_Logo.svg.png"
+              src="/honda-logo.png"
               alt="Logo"
               className="logo-img"
               onError={(e) => {

@@ -20,7 +20,10 @@ const PrintPartTransfer = ({ transfer, items }) => {
       <table style={{ width: '100%', marginBottom: '20px' }}>
         <tbody>
           <tr>
-            <td style={{ width: '60%' }}>
+            <td style={{ width: '100px', verticalAlign: 'top' }}>
+              <img src="/honda-logo.png" style={{ width: '80px', height: 'auto' }} alt="Honda" />
+            </td>
+            <td style={{ verticalAlign: 'top' }}>
               <div style={{ fontWeight: 'bold', fontSize: '16px' }}>HỆ THỐNG CỬA HÀNG XE MÁY THANH HẢI</div>
               <div style={{ fontSize: '12px' }}>Bộ phận: Quản lý phụ tùng & linh kiện</div>
             </td>

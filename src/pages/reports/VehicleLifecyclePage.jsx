@@ -21,7 +21,9 @@ import {
   Drawer,
   Statistic,
   AutoComplete,
+  InputNumber,
   Modal,
+  Popconfirm,
   Tooltip,
 } from "antd";
 import {
@@ -45,6 +47,9 @@ import {
   Edit2,
   Printer,
   AlertCircle,
+  Banknote,
+  Trash2,
+  Save,
 } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
@@ -71,6 +76,8 @@ const VehicleLifecyclePage = () => {
   const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "ADMIN";
+  const isManager = user.role === "MANAGER";
+  const isPowerUser = isAdmin || isManager;
 
   // Edit State
   const [editVisible, setEditVisible] = useState(false);
@@ -98,10 +105,17 @@ const VehicleLifecyclePage = () => {
   const [detailData, setDetailData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Chi tiết Lô hàng (Modal mới)
   const [batchVisible, setBatchVisible] = useState(false);
   const [selectedBatchData, setSelectedBatchData] = useState([]);
   const [selectedBatchInfo, setSelectedBatchInfo] = useState(null);
+
+  // Payment States (copied from RetailSaleReportPage & WholesaleSalePage)
+  const [retailPaymentModalVisible, setRetailPaymentModalVisible] = useState(false);
+  const [wholesalePaymentModalVisible, setWholesalePaymentModalVisible] = useState(false);
+  const [selectedSaleForPayment, setSelectedSaleForPayment] = useState(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentForm] = Form.useForm();
 
   useEffect(() => {
     fetchUsers();
@@ -151,7 +165,7 @@ const VehicleLifecyclePage = () => {
 
   const fetchWholesaleCustomers = async () => {
     try {
-      const resp = await api.get("/wholesale-customers");
+      const resp = await api.get("/wholesale-customers?type=VEHICLE");
       setWholesaleCustomers(resp.data);
     } catch (e) {
       console.error("Lỗi lấy danh sách khách buôn");
@@ -245,7 +259,6 @@ const VehicleLifecyclePage = () => {
       "Nhà cung cấp": v.supplier_name,
       "Người Nhập": v.importer_name,
       "Loại Xe": v.type_name,
-      "Màu Xe": v.color_name,
       "Số Máy": v.engine_no,
       "Số Khung": v.chassis_no,
       "Kênh Bán": v.sale_channel || "-",
@@ -398,7 +411,7 @@ const VehicleLifecyclePage = () => {
           ? "RETAIL"
           : isWholesaleOnly
             ? "WHOLESALE"
-            : null,
+            : values.sale_channel_filter, // Sử dụng bộ lọc kênh bán mới
       };
 
       let response = await api.get("/reports/vehicle-lookup", { params });
@@ -464,14 +477,22 @@ const getTimelineIcon = (type) => {
   const processGroupedData = () => {
     if (!results || results.length === 0) return [];
 
-    // Nếu không phải chế độ bán buôn hoặc nhập hàng, hiển thị bình thường
-    if (!isWholesaleOnly && !isPurchaseOnly) return results;
+    // Lấy giá trị bộ lọc từ form
+    const vals = form.getFieldsValue();
+    const isSpecificSearch = vals.customer_name || vals.supplier_id || vals.engine_no || vals.chassis_no || vals.created_by;
+
+    // Nếu tra cứu theo người (khách hàng/nhà cung cấp/nhân viên) hoặc theo số máy/khung cụ thể,
+    // hoặc không phải chế độ bán buôn/nhập hàng, thì hiển thị chi tiết lẻ luôn theo yêu cầu
+    if (isSpecificSearch || (!isWholesaleOnly && !isPurchaseOnly)) return results;
 
     const groups = {};
     const others = [];
 
     results.forEach(v => {
-      const key = isWholesaleOnly ? v.wholesale_sale_id : (isPurchaseOnly ? v.purchase_id : null);
+      // Logic gộp mới: Nếu là bán sỉ, gộp theo Ngày + Tên khách hàng
+      const key = isWholesaleOnly 
+        ? (v.customer_name && v.customer_name !== 'N/A' ? `${dayjs(v.sale_date).format('YYYY-MM-DD')}_${v.customer_name}` : v.wholesale_sale_id)
+        : (isPurchaseOnly ? v.purchase_id : null);
       
       if (!key) {
         others.push({ ...v, key: v.id });
@@ -488,7 +509,7 @@ const getTimelineIcon = (type) => {
           supplier_name: v.supplier_name,
           customer_name: v.customer_name,
           sale_channel: v.sale_channel,
-          type_name: `LÔ HÀNG (${v.supplier_name || v.customer_name})`,
+          type_name: `LÔ HÀNG (${(isWholesaleOnly && v.customer_name && v.customer_name !== 'N/A') ? v.customer_name : (v.supplier_name || v.customer_name)})`,
           children: []
         };
       }
@@ -517,10 +538,244 @@ const getTimelineIcon = (type) => {
     return [...groupedList, ...others];
   };
 
+  const handleOpenPaymentModal = async (record) => {
+    try {
+        setPaymentLoading(true);
+        setSelectedSaleForPayment(record);
+        setPaymentHistory([]);
+        
+        if (record.isGroup || record.sale_channel === 'Bán Sỉ (Lô)') {
+            // WHOLESALE
+            const saleId = record.isGroup ? record.id : record.wholesale_sale_id;
+            const res = await api.get(`/wholesale-sales/${saleId}/details`);
+            // The API returns { vehicles: [], payments: [] }
+            setPaymentHistory(res.data.payments || []);
+            setWholesalePaymentModalVisible(true);
+            
+            paymentForm.setFieldsValue({
+                payment_date: dayjs(),
+                amount: Math.max(0, Number(record.sale_price || 0) - Number(record.paid_amount_vnd || 0)),
+                payment_method: 'Tiền mặt'
+            });
+        } else {
+            // RETAIL
+            const saleId = record.retail_sale_id || record.id;
+            const res = await api.get(`/retail-sales/${saleId}/payments`);
+            setPaymentHistory(res.data);
+            setRetailPaymentModalVisible(true);
+            
+            const price = Number(record.sale_price || 0);
+            const paid = Number(record.paid_amount || 0);
+            const isDisbursed = record.is_disbursed === true || record.is_disbursed === 1;
+            const loan = isDisbursed ? Number(record.loan_amount || 0) : 0;
+            
+            paymentForm.setFieldsValue({
+                payment_date: dayjs(),
+                amount: Math.max(0, price - paid - loan),
+                payment_method: 'Tiền mặt'
+            });
+        }
+    } catch (error) {
+        message.error("Không thể tải lịch sử thanh toán: " + error.message);
+    } finally {
+        setPaymentLoading(false);
+    }
+  };
+
+  const onAddPayment = async (values) => {
+    try {
+      setPaymentLoading(true);
+      const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
+      
+      if (isWholesale) {
+          const saleId = selectedSaleForPayment.isGroup ? selectedSaleForPayment.id : selectedSaleForPayment.wholesale_sale_id;
+          await api.post('/wholesale-sales/payment', {
+            wholesale_sale_id: saleId,
+            amount_paid_vnd: values.amount,
+            payment_date: values.payment_date.format('YYYY-MM-DD'),
+            notes: values.notes
+          });
+          message.success('Đã ghi nhận tiền trả từ khách buôn!');
+          
+          // Refresh Full Data
+          const res = await api.get(`/wholesale-sales/${saleId}/details`);
+          setPaymentHistory(res.data.payments || []);
+          setSelectedSaleForPayment(prev => ({ ...prev, ...res.data })); // Update paid_amount_vnd
+      } else {
+          const saleId = selectedSaleForPayment.retail_sale_id || selectedSaleForPayment.id;
+          await api.post("/retail-payments", {
+            ...values,
+            retail_sale_id: saleId,
+            payment_date: values.payment_date.format('YYYY-MM-DD'),
+          });
+          message.success("Đã thêm khoản thanh toán bán lẻ!");
+          
+          // Refresh Payments and calculate new total for UI
+          const res = await api.get(`/retail-sales/${saleId}/payments`);
+          setPaymentHistory(res.data);
+          
+          const newTotalPaid = res.data.reduce((sum, p) => sum + Number(p.amount), 0);
+          setSelectedSaleForPayment(prev => ({ ...prev, paid_amount: newTotalPaid }));
+      }
+      
+      paymentForm.resetFields(["amount", "notes"]);
+      handleSearch(form.getFieldsValue()); // Refresh main table to update debt numbers
+    } catch (error) {
+      message.error("Lỗi: " + (error.response?.data?.message || error.message));
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const handleDeletePayment = async (id) => {
+    try {
+      setPaymentLoading(true);
+      const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
+      
+      if (isWholesale) {
+          await api.delete(`/wholesale-payments/${id}`);
+          const saleId = selectedSaleForPayment.isGroup ? selectedSaleForPayment.id : selectedSaleForPayment.wholesale_sale_id;
+          const res = await api.get(`/wholesale-sales/${saleId}/details`);
+          setPaymentHistory(res.data.payments || []);
+          setSelectedSaleForPayment(prev => ({ ...prev, ...res.data }));
+      } else {
+          await api.delete(`/retail-payments/${id}`);
+          const res = await api.get(`/retail-sales/${selectedSaleForPayment.id}/payments`);
+          setPaymentHistory(res.data);
+          
+          const newTotalPaid = res.data.reduce((sum, p) => sum + Number(p.amount), 0);
+          setSelectedSaleForPayment(prev => ({ ...prev, paid_amount: newTotalPaid }));
+      }
+      
+      message.success("Đã xóa khoản thanh toán");
+      handleSearch(form.getFieldsValue());
+    } catch (error) {
+      message.error("Lỗi: " + error.message);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const showBatchDetail = (record) => {
     setSelectedBatchData(record.batch_items || []);
     setSelectedBatchInfo(record);
     setBatchVisible(true);
+  };
+
+  const handlePrintBatch = (record) => {
+    if (!record || !record.batch_items) return;
+    
+    const items = record.batch_items;
+    const warehouse = warehouses.find(w => w.id === (items[0]?.warehouse_id || record.warehouse_id)) || {};
+    const date = dayjs(record.sale_date || record.import_date);
+
+    // Fix redundant "HEAD" text
+    const rawWhName = (warehouse.warehouse_name || 'HỆ THỐNG').toUpperCase();
+    const displayWhName = `HEAD ${rawWhName.replace(/^(HEAD\s*)+/i, '').trim()}`;
+
+    const title = isWholesaleOnly ? "PHIẾU XUẤT KHO LÔ HÀNG" : "PHIẾU NHẬP KHO LÔ HÀNG";
+    const partnerLabel = isWholesaleOnly ? "Khách hàng" : "Nhà cung cấp";
+    const priceLabel = isWholesaleOnly ? "Giá bán" : "Giá nhập";
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>In Phiếu Lô</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm; }
+          body { font-family: "Times New Roman", Times, serif; font-size: 11pt; color: black; background: white; padding: 0; line-height: 1.2; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+          .logo-side { font-weight: bold; font-size: 12pt; }
+          .title { text-align: center; font-size: 18pt; font-weight: bold; margin: 8px 0; }
+          .info-sec { display: flex; flex-wrap: wrap; border-top: 1.5px solid black; border-bottom: 1.5px solid black; padding: 6px 0; margin-bottom: 10px; }
+          .info-item { flex: 1; min-width: 200px; font-size: 11pt; margin-bottom: 1px; }
+          .info-label { font-weight: normal; }
+          .info-value { font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 9.5pt; }
+          th, td { border: 1px solid black; padding: 3px 4px; text-align: left; }
+          th { background: #f2f2f2; font-weight: bold; text-align: center; }
+          .footer { margin-top: 20px; display: flex; justify-content: space-between; text-align: center; font-size: 11pt; }
+          .sig-box { width: 180px; }
+          .total-sec { margin-top: 10px; text-align: right; }
+          @media print {
+            body { padding: 0; }
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo-side">
+            ${displayWhName}
+            <div style="font-weight: normal; font-size: 10pt;">${warehouse.address || ''}</div>
+          </div>
+          <div style="text-align: right; font-weight: bold;">
+            Ngày: ${date.format('DD/MM/YYYY')}
+          </div>
+        </div>
+        
+        <div class="title">${title}</div>
+        
+        <div class="info-sec">
+          <div class="info-item"><span class="info-label">${partnerLabel}:</span> <span class="info-value">${(isWholesaleOnly && record.customer_name && record.customer_name !== 'N/A') ? record.customer_name : (record.supplier_name || record.customer_name || 'N/A')}</span></div>
+          <div class="info-item"><span class="info-label">Mã giao dịch:</span> <span class="info-value">${record.id}</span></div>
+          <div class="info-item" style="width: 100%; margin-top: 2px;"><span class="info-label">Ghi chú:</span> <span>${record.notes || ''}</span></div>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25px;">STT</th>
+              <th>Loại xe</th>
+              <th style="width: 100px;">Số Máy</th>
+              <th style="width: 150px;">Số Khung</th>
+              <th style="text-align: right; width: 90px;">${priceLabel}</th>
+              ${!isWholesaleOnly ? '<th style="width: 60px;">Kiểm tra</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((v, i) => `
+              <tr>
+                <td style="text-align: center;">${i + 1}</td>
+                <td>${v.type_name} (${v.color_name})</td>
+                <td style="text-align: center;"><b>${v.engine_no}</b></td>
+                <td style="text-align: center;"><b>${v.chassis_no}</b></td>
+                <td style="text-align: right;"><b>${Number(isWholesaleOnly ? (v.sale_price || v.purchase_price) : v.purchase_price).toLocaleString()}</b></td>
+                ${!isWholesaleOnly ? '<td></td>' : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <div class="total-sec">
+          <div style="font-size: 13pt;">Tổng cộng: <b style="color: black;">${Number(record.sale_price || record.purchase_price).toLocaleString()} đ</b></div>
+        </div>
+        
+        <div class="footer">
+          <div class="sig-box">
+            <b>Người lập biểu</b><br/><i style="font-size: 9pt;">(Ký tên)</i>
+          </div>
+          <div class="sig-box">
+             <b>Người nhận hàng</b><br/><i style="font-size: 9pt;">(Ký tên)</i>
+          </div>
+          <div class="sig-box">
+            <b>Đại diện đơn vị</b><br/><i style="font-size: 9pt;">(Đóng dấu)</i>
+          </div>
+        </div>
+        
+        <script>
+          window.onload = function() { window.print(); };
+          window.onafterprint = function() { window.close(); };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const columns = [
@@ -557,14 +812,40 @@ const getTimelineIcon = (type) => {
             );
         }
     },
-    { title: 'Chủ hàng / Khách hàng', dataIndex: 'customer_name', ellipsis: true, render: (text, record) => text || record.supplier_name },
-    { title: 'Người thực hiện', dataIndex: 'importer_name' },
+    { 
+        title: isPurchaseOnly ? 'Chủ hàng (Nhà CC)' : 'Chủ hàng / Khách hàng', 
+        width: 180,
+        ellipsis: true, 
+        render: (text, record) => {
+            if (record.isGroup) {
+                if (isWholesaleOnly && record.customer_name && record.customer_name !== 'N/A') return record.customer_name;
+                return record.supplier_name || record.customer_name;
+            }
+            
+            // Nếu là trang Mua xe, ưu tiên hiện Chủ hàng (Người bán cho mình)
+            if (isPurchaseOnly) {
+                return <Text strong>{record.supplier_name}</Text>;
+            }
+            // Các trang khác (Bán lẻ/Bán sỉ) hiện tên Khách hàng
+            if (record.customer_name && record.customer_name !== 'N/A') return record.customer_name;
+            return record.supplier_name;
+        }
+    },
+    { title: 'Người thực hiện', dataIndex: 'importer_name', width: 150 },
     { 
         title: 'Thông tin xe / Lô', 
         dataIndex: 'type_name',
-        render: (text, record) => record.isGroup ? <span style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>{text}</span> : text 
+        render: (text, record) => (
+            <div>
+                {record.isGroup ? <span style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>{text}</span> : text}
+                {!record.isGroup && record.color_name && (
+                    <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>
+                        Màu: <Tag color="purple" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{record.color_name}</Tag>
+                    </div>
+                )}
+            </div>
+        )
     },
-    { title: 'Màu Xe', dataIndex: 'color_name' },
     { title: 'Số Máy', dataIndex: 'engine_no', className: 'strong-text' },
     { title: 'Số Khung', dataIndex: 'chassis_no', className: 'strong-text' },
     { 
@@ -578,7 +859,8 @@ const getTimelineIcon = (type) => {
             // Nếu là xem lô nhập (isPurchaseOnly), ưu tiên hiện Giá Nhập (purchase_price)
             // Nếu là xem lô bán (isWholesaleOnly/isRetailOnly), ưu tiên hiện Giá Bán (sale_price)
             const showPurchasePrice = isPurchaseOnly;
-            const primaryPrice = showPurchasePrice ? record.purchase_price : (record.sale_price || record.purchase_price);
+            // Nếu là trang Bán Lẻ, chỉ hiện sale_price. Nếu là trang tra cứu chung, ưu tiên sale_price cho xe đã bán.
+            const primaryPrice = showPurchasePrice ? record.purchase_price : (record.sale_channel === 'Bán Lẻ' ? record.sale_price : (record.sale_price || record.purchase_price));
             const secondaryPrice = showPurchasePrice ? record.sale_price : null;
 
             if (record.isGroup) {
@@ -591,9 +873,16 @@ const getTimelineIcon = (type) => {
                     </div>
                 );
             }
+
             return (
                 <div style={{ fontSize: 13 }}>
                     <div style={{ fontWeight: 'bold' }}>{Number(primaryPrice).toLocaleString()} đ</div>
+                    {Number(record.purchase_price) === 0 && (
+                        <Tag color="warning" style={{ fontSize: 9, padding: '0 4px', marginTop: 2 }}>XE MƯỢN</Tag>
+                    )}
+                    {Number(record.sale_price) === 0 && record.sale_date && (
+                        <Tag color="error" style={{ fontSize: 9, padding: '0 4px', marginTop: 2 }}>TRẢ XE</Tag>
+                    )}
                     {secondaryPrice && record.sale_date && (
                         <Text type="warning" style={{ fontSize: 10 }}>Bán: {Number(secondaryPrice).toLocaleString()} đ</Text>
                     )}
@@ -608,24 +897,54 @@ const getTimelineIcon = (type) => {
         title: 'Thao tác',
         fixed: 'right',
         width: 100,
-        render: (_, record) => !record.isGroup && (
+        render: (_, record) => (
             <Space>
-                {isAdmin && (
+                {record.isGroup ? (
                     <Button 
-                        type="default" 
-                        shape="circle"
-                        icon={<Edit2 size={16} />} 
-                        onClick={(e) => handleEditClick(record, e)}
-                        title="Sửa dữ liệu sai"
+                        type="primary" 
+                        ghost
+                        icon={<Printer size={16} />} 
+                        onClick={(e) => { e.stopPropagation(); handlePrintBatch(record); }}
+                        title="In phiếu lô hàng"
+                    />
+                ) : (
+                    <>
+                        {isAdmin && (
+                            <Button 
+                                type="default" 
+                                shape="circle"
+                                icon={<Edit2 size={16} />} 
+                                onClick={(e) => handleEditClick(record, e)}
+                                title="Sửa dữ liệu sai"
+                            />
+                        )}
+                        <Button 
+                            type="primary" 
+                            shape="circle"
+                            icon={<History size={16} />} 
+                            onClick={(e) => { e.stopPropagation(); showLifecycle(record.id); }}
+                            title="Xem vòng đời"
+                        />
+                        {record.sale_date && (
+                             <Button 
+                                type="text" 
+                                icon={<Banknote size={18} />} 
+                                onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(record); }}
+                                title="Lịch sử & Thu tiền"
+                                style={{ color: '#10b981' }}
+                            />
+                        )}
+                    </>
+                )}
+                {record.isGroup && record.sale_date && (
+                     <Button 
+                        type="text" 
+                        icon={<Banknote size={18} />} 
+                        onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(record); }}
+                        title="Lịch sử & Thu tiền nợ lô"
+                        style={{ color: '#10b981' }}
                     />
                 )}
-                <Button 
-                    type="primary" 
-                    shape="circle"
-                    icon={<History size={16} />} 
-                    onClick={(e) => { e.stopPropagation(); showLifecycle(record.id); }}
-                    title="Xem vòng đời"
-                />
             </Space>
         )
     }
@@ -635,6 +954,8 @@ const getTimelineIcon = (type) => {
   const stats = {
       total: results.length,
       sold: results.filter(v => v.sale_date).length,
+      soldRetail: results.filter(v => v.sale_channel === 'Bán Lẻ').length,
+      soldWholesale: results.filter(v => v.sale_channel === 'Bán Sỉ (Lô)').length,
       inStock: results.filter(v => !v.sale_date).length
   };
 
@@ -680,7 +1001,7 @@ const getTimelineIcon = (type) => {
 
       {/* Summary Cards */}
       <Row gutter={16} style={{ marginBottom: 20 }}>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={6}>
           <Card
             className="glass-card stat-card"
             style={{ borderLeft: "4px solid #3b82f6" }}
@@ -696,7 +1017,7 @@ const getTimelineIcon = (type) => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={6}>
           <Card
             className="glass-card stat-card"
             style={{ borderLeft: "4px solid #10b981" }}
@@ -714,7 +1035,7 @@ const getTimelineIcon = (type) => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={6}>
           <Card
             className="glass-card stat-card"
             style={{ borderLeft: "4px solid #f59e0b" }}
@@ -723,12 +1044,30 @@ const getTimelineIcon = (type) => {
               title={
                 <Space>
                   <ShoppingCart size={14} />{" "}
-                  {isPurchaseOnly ? "Số xe đã xuất bán" : "Số xe đã bán"}
+                  {isPurchaseOnly ? "Đã bán lẻ (Khách lẻ)" : "Số xe đã bán lẻ"}
                 </Space>
               }
-              value={stats.sold}
+              value={stats.soldRetail}
               valueStyle={{ color: "#f59e0b" }}
-              prefix={<Info size={20} color="#f59e0b" />}
+              prefix={<UserIcon size={20} color="#f59e0b" />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card
+            className="glass-card stat-card"
+            style={{ borderLeft: "4px solid #8b5cf6" }}
+          >
+            <Statistic
+              title={
+                <Space>
+                  <Warehouse size={14} />{" "}
+                  {isPurchaseOnly ? "Đã bán sỉ (Đại lý)" : "Số xe đã bán sỉ"}
+                </Space>
+              }
+              value={stats.soldWholesale}
+              valueStyle={{ color: "#8b5cf6" }}
+              prefix={<Warehouse size={20} color="#8b5cf6" />}
             />
           </Card>
         </Col>
@@ -814,7 +1153,7 @@ const getTimelineIcon = (type) => {
                   </Title>
                 </div>
                 <Row gutter={16}>
-                  <Col span={isAdmin ? 8 : 16}>
+                  <Col span={isPowerUser ? 8 : 16}>
                     <Form.Item label="Khoảng thời gian" name="dates">
                       <RangePicker
                         style={{ width: "100%" }}
@@ -823,7 +1162,7 @@ const getTimelineIcon = (type) => {
                       />
                     </Form.Item>
                   </Col>
-                  {isAdmin && (
+                  {isPowerUser && (
                     <Col span={8}>
                       <Form.Item label="Lọc theo kho" name="warehouse_id">
                         <Select placeholder="Tất cả kho" allowClear>
@@ -850,11 +1189,20 @@ const getTimelineIcon = (type) => {
                   </Col>
 
                   <Col span={8}>
-                    <Form.Item label="Trạng thái xe" name="status">
+                    <Form.Item label="Trạng thái tồn kho" name="status">
                       <Select placeholder="Tất cả trạng thái" allowClear>
                         <Select.Option value="In Stock">Trong kho (Chưa bán)</Select.Option>
                         <Select.Option value="Sold">Đã bán</Select.Option>
                         <Select.Option value="Transferring">Đang chuyển kho</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+
+                  <Col span={8}>
+                    <Form.Item label="Kênh Bán (Đầu ra)" name="sale_channel_filter">
+                      <Select placeholder="Tất cả kênh bán" allowClear>
+                        <Select.Option value="RETAIL">Bán Lẻ (Khách lẻ)</Select.Option>
+                        <Select.Option value="WHOLESALE">Bán Sỉ (Đại lý/Lô)</Select.Option>
                       </Select>
                     </Form.Item>
                   </Col>
@@ -1045,7 +1393,9 @@ const getTimelineIcon = (type) => {
                 <Box size={20} color="var(--primary-color)" />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <Text strong>CHI TIẾT LÔ HÀNG</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{selectedBatchInfo?.customer_name || selectedBatchInfo?.supplier_name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        {isPurchaseOnly ? selectedBatchInfo?.supplier_name : (selectedBatchInfo?.customer_name || selectedBatchInfo?.supplier_name)}
+                    </Text>
                 </div>
             </Space>
         }
@@ -1079,7 +1429,7 @@ const getTimelineIcon = (type) => {
                     title: 'Giá tiền', 
                     render: (r) => (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+                            <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)' }}>
                                 Nhập: {Number(r.purchase_price || 0).toLocaleString()} đ
                             </div>
                             {r.sale_date && (
@@ -1349,6 +1699,126 @@ const getTimelineIcon = (type) => {
             letter-spacing: 0.5px;
         }
       `}</style>
+      <Modal
+        title={
+          <Space>
+            <Banknote size={18} /> Thu tiền {selectedSaleForPayment?.sale_channel === 'Bán Sỉ (Lô)' ? 'Khách buôn' : 'Khách lẻ'}: {selectedSaleForPayment?.customer_name}
+          </Space>
+        }
+        open={retailPaymentModalVisible || wholesalePaymentModalVisible}
+        onCancel={() => { setRetailPaymentModalVisible(false); setWholesalePaymentModalVisible(false); }}
+        footer={null}
+        width={700}
+        className="glass-modal"
+      >
+        {selectedSaleForPayment && (
+          <div style={{ marginBottom: 20 }}>
+             <Row gutter={16}>
+                <Col span={12}>
+                    <Card size="small" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <div style={{ fontSize: 12, opacity: 0.6 }}>Tổng giá bán:</div>
+                        <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--primary-color)' }}>{Number(selectedSaleForPayment.sale_price || 0).toLocaleString()} đ</div>
+                    </Card>
+                </Col>
+                <Col span={12}>
+                    <Card size="small" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <div style={{ fontSize: 12, opacity: 0.6, textAlign: 'right' }}>Đã trả:</div>
+                        <div style={{ fontSize: 18, fontWeight: 'bold', color: '#10b981', textAlign: 'right' }}>
+                            {(() => {
+                                const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
+                                let totalPaidFromHistory = 0;
+                                
+                                if (paymentHistory && paymentHistory.length > 0) {
+                                    totalPaidFromHistory = paymentHistory.reduce((sum, p) => 
+                                        sum + Number(isWholesale ? (p.amount_paid_vnd || 0) : (p.amount || 0)), 0
+                                    );
+                                } else {
+                                    // Sử dụng dữ liệu đã được Backend tính toán sẵn (paid_amount)
+                                    totalPaidFromHistory = Number(selectedSaleForPayment.paid_amount || 0);
+                                }
+
+                                if (isWholesale) return totalPaidFromHistory.toLocaleString();
+
+                                // For Retail: Cộng thêm tiền giải ngân nếu đã chốt
+                                const isDisbursed = selectedSaleForPayment.is_disbursed === true || selectedSaleForPayment.is_disbursed === 1;
+                                const loan = isDisbursed ? Number(selectedSaleForPayment.loan_amount || 0) : 0;
+                                return (totalPaidFromHistory + loan).toLocaleString();
+                            })()} đ
+                        </div>
+                    </Card>
+                </Col>
+             </Row>
+
+             <Divider orientation="left" plain><span style={{ fontSize: 12, opacity: 0.7, fontWeight: 'bold' }}>THÊM KHOẢN THU (KHÁCH TRẢ THÊM)</span></Divider>
+
+             <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
+                <Row gutter={16}>
+                    <Col span={8}>
+                        <Form.Item label="Ngày thu" name="payment_date" rules={[{required: true}]}>
+                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
+                        </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                        <Form.Item label="Số tiền thu" name="amount" rules={[{required: true}]}>
+                            <InputNumber 
+                                style={{ width: '100%' }} 
+                                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                parser={v => v.replace(/\$\s?|(,*)/g, '')}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                        <Form.Item label="Hình thức" name="payment_method">
+                            <Select>
+                                <Select.Option value="Tiền mặt">Tiền mặt</Select.Option>
+                                <Select.Option value="Chuyển khoản">Chuyển khoản</Select.Option>
+                            </Select>
+                        </Form.Item>
+                    </Col>
+                </Row>
+                <Form.Item label="Ghi chú" name="notes">
+                    <Input placeholder="Nhập ghi chú..." />
+                </Form.Item>
+                <Button type="primary" icon={<Save size={16} />} block htmlType="submit" loading={paymentLoading}>
+                    XÁC NHẬN THU TIỀN
+                </Button>
+             </Form>
+
+             <Divider orientation="left" plain><span style={{ fontSize: 12, opacity: 0.7, fontWeight: 'bold' }}>CHI TIẾT CÁC LẦN TRẢ TIỀN</span></Divider>
+             
+             <Table 
+                dataSource={paymentHistory}
+                pagination={false}
+                size="small"
+                rowKey="id"
+                loading={paymentLoading}
+                columns={[
+                    { title: 'NGÀY', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') },
+                    { 
+                        title: 'SỐ TIỀN', 
+                        dataIndex: wholesalePaymentModalVisible ? 'amount_paid_vnd' : 'amount', 
+                        render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text> 
+                    },
+                    { title: 'HÌNH THỨC', dataIndex: 'payment_method', render: v => v || 'Tiền mặt' },
+                    { title: 'GHI CHÚ', dataIndex: 'notes' },
+                    { 
+                        title: '', 
+                        render: (_, record) => (
+                            <Popconfirm title="Xóa khoản thu này?" onConfirm={() => handleDeletePayment(record.id)}>
+                                <Button 
+                                    type="text" 
+                                    danger 
+                                    icon={<Trash2 size={14} />} 
+                                    size="small" 
+                                />
+                            </Popconfirm>
+                        ) 
+                    }
+                ]}
+             />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

@@ -45,6 +45,7 @@ const PartWholesalePage = () => {
   const canDelete = isAdmin || user.can_delete === true || user.can_delete === 1;
 
   const [items, setItems] = useState([]);
+  const paidAmountWatch = Form.useWatch('paid_amount', form);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
@@ -62,21 +63,31 @@ const PartWholesalePage = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(user.warehouse_id || null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [partSearchText, setPartSearchText] = useState('');
+
+  // Debounce search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (partSearchText) {
+            executePartSearch(partSearchText);
+        } else {
+            setPartOptions([]);
+        }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [partSearchText]);
 
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [whRes, partsRes, empRes, custRes] = await Promise.all([
+      const [whRes, empRes, custRes] = await Promise.all([
         api.get('/warehouses'),
-        api.get('/parts'),
         api.get('/auth/users'),
-        api.get('/wholesale-customers')
+        api.get('/wholesale-customers?type=PART')
       ]);
       setWarehouses(whRes.data);
-      setAllParts(partsRes.data);
       setEmployees(empRes.data);
-      // Only PART or BOTH customer types for parts wholesale
-      setCustomers(custRes.data.filter(c => c.customer_type === 'PART' || c.customer_type === 'BOTH'));
+      setCustomers(custRes.data);
     } catch (error) {
       message.error('Lỗi tải dữ liệu: ' + error.message);
     } finally {
@@ -109,49 +120,49 @@ const PartWholesalePage = () => {
     if (selectedWarehouseWatch) setSelectedWarehouseId(selectedWarehouseWatch);
   }, [selectedWarehouseWatch]);
 
-  const handlePartSearch = (value = '') => {
-    const v = value ? value.toLowerCase() : '';
-    const filtered = allParts.filter(p => 
-        (p.code && p.code.toLowerCase().includes(v)) || 
-        (p.name && p.name.toLowerCase().includes(v))
-    );
-    setPartOptions(filtered.slice(0, 30).map(p => {
-      let stockText = '0';
-      let stockColor = '#ef4444';
-      if (p.PartInventories && p.PartInventories.length > 0) {
-        if (selectedWarehouseId) {
-          const whStock = p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId);
-          const qty = Number(whStock?.quantity || 0);
-          stockText = qty.toLocaleString();
-          stockColor = qty > 5 ? '#10b981' : (qty > 0 ? '#f59e0b' : '#ef4444');
-        } else {
-          const totalQty = p.PartInventories.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-          stockText = `Tổng: ${totalQty.toLocaleString()}`;
-          stockColor = totalQty > 0 ? '#10b981' : '#ef4444';
-        }
-      }
-      return {
-        value: p.code,
-        label: (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <Text strong style={{ display: 'block' }}>{p.code}</Text>
-              <Text type="secondary" style={{ fontSize: '11px' }}>{p.name}</Text>
-            </div>
-            <div style={{ textAlign: 'right', minWidth: 100 }}>
-              <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
-              <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Sỉ: {Number(p.wholesale_price || p.selling_price).toLocaleString()} đ</Tag>
-            </div>
-          </div>
-        ),
-        part: p
-      };
-    }));
+  const executePartSearch = async (value = '') => {
+    try {
+        const res = await api.get(`/parts?search=${encodeURIComponent(value)}`);
+        const parts = res.data.rows;
+        setPartOptions(parts.map(p => {
+          let stockText = '0';
+          let stockColor = '#ef4444';
+          if (p.PartInventories && p.PartInventories.length > 0) {
+            if (selectedWarehouseId) {
+              const whStock = p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId);
+              const qty = Number(whStock?.quantity || 0);
+              stockText = qty.toLocaleString();
+              stockColor = qty > 5 ? '#10b981' : (qty > 0 ? '#f59e0b' : '#ef4444');
+            } else {
+              const totalQty = p.PartInventories.reduce((sum, inv) => sum + Number(inv.quantity), 0);
+              stockText = `Tổng: ${totalQty.toLocaleString()}`;
+              stockColor = totalQty > 0 ? '#10b981' : '#ef4444';
+            }
+          }
+          return {
+            value: p.code,
+            label: (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text strong style={{ display: 'block' }}>{p.code}</Text>
+                  <Text type="secondary" style={{ fontSize: '11px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Text>
+                </div>
+                <div style={{ textAlign: 'right', minWidth: 100, flexShrink: 0 }}>
+                  <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
+                  <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Sỉ: {Number(p.wholesale_price || p.selling_price).toLocaleString()} đ</Tag>
+                </div>
+              </div>
+            ),
+            part: p
+          };
+        }));
+    } catch (e) {
+    }
   };
 
   useEffect(() => {
-    handlePartSearch('');
-  }, [allParts, selectedWarehouseId]);
+    // No search on mount
+  }, [selectedWarehouseId]);
 
   const addItem = (part) => {
     if (items.find(i => i.part_id === part.id)) {
@@ -186,7 +197,7 @@ const PartWholesalePage = () => {
 
   const handlePrint = (saleData) => {
     const wh = warehouses.find(w => w.id === (saleData.warehouse_id || selectedWarehouseId))
-              || { warehouse_name: saleData?.Warehouse?.warehouse_name };
+              || saleData?.Warehouse || saleData?.warehouse;
     setLastSavedSale({ ...saleData, Warehouse: wh });
     setTimeout(() => printReceipt('print-part-sale-receipt'), 500);
   };
@@ -355,7 +366,7 @@ const PartWholesalePage = () => {
         />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header">
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁN BUÔN PHỤ TÙNG</Title>
         <Button 
           icon={<FileStack size={18} />} 
@@ -383,7 +394,7 @@ const PartWholesalePage = () => {
             key: '1',
             label: <Space><Plus size={16} /> LẬP PHIẾU BÁN BUÔN</Space>,
             children: (
-              <Row gutter={[24, 24]}>
+              <Row gutter={[24, 24]} className="mobile-stack-cols">
                 <Col xs={24} lg={9}>
                   <Card className="glass-card" title={<Space><Building2 size={18} /> THÔNG TIN ĐỐI TÁC</Space>}>
                     <Form
@@ -394,12 +405,12 @@ const PartWholesalePage = () => {
                       initialValues={{ sale_date: dayjs(), vat_percent: 0, seller_id: user.id }}
                     >
                       <Row gutter={12}>
-                        <Col xs={12}>
+                        <Col xs={24} sm={12}>
                           <Form.Item label="Ngày bán" name="sale_date" rules={[{ required: true }]}>
                             <DatePicker style={{ width: '100%' }} size="large" format="DD/MM/YYYY" />
                           </Form.Item>
                         </Col>
-                        <Col xs={12}>
+                        <Col xs={24} sm={12}>
                           <Form.Item label="Người bán" name="seller_id" rules={[{ required: true }]}>
                             <Select size="large" disabled={!isAdmin} showSearch optionFilterProp="children">
                               {employees.map(e => <Select.Option key={e.id} value={e.id}>{e.full_name}</Select.Option>)}
@@ -457,9 +468,9 @@ const PartWholesalePage = () => {
                         />
                       </Form.Item>
 
-                      {Form.useWatch('paid_amount', form) > 0 && Form.useWatch('paid_amount', form) < totalAmount && (
+                      {paidAmountWatch > 0 && paidAmountWatch < totalAmount && (
                         <Alert 
-                          message={`Còn nợ: ${(totalAmount - (Form.useWatch('paid_amount', form) || 0)).toLocaleString('vi-VN')} đ`}
+                          message={`Còn nợ: ${(totalAmount - (paidAmountWatch || 0)).toLocaleString('vi-VN')} đ`}
                           type="warning" showIcon style={{ marginBottom: 16 }}
                         />
                       )}
@@ -485,11 +496,13 @@ const PartWholesalePage = () => {
                     <div style={{ marginBottom: 16 }}>
                       <AutoComplete
                         style={{ width: '100%' }}
-                        onSearch={handlePartSearch}
+                        onSearch={setPartSearchText}
                         onSelect={(val, option) => addItem(option.part)}
                         options={partOptions}
-                        onFocus={() => handlePartSearch('')}
-                        placeholder="🔍 Gõ mã hoặc tên phụ tùng để tìm kiếm..."
+                        onFocus={() => executePartSearch(partSearchText)}
+                        placeholder="🔍 Tìm theo mã hoặc tên (ví dụ: 'DAU HONDA')..."
+                        popupMatchSelectWidth={false}
+                        dropdownStyle={{ minWidth: 450 }}
                       >
                         <Input size="large" />
                       </AutoComplete>
@@ -498,7 +511,8 @@ const PartWholesalePage = () => {
                       dataSource={items} 
                       columns={itemColumns} 
                       pagination={false} 
-                      className="modern-table" 
+                      className="modern-table small-screen-optimized" 
+                      size={window.innerWidth < 768 ? 'small' : 'middle'}
                       scroll={{ x: 'max-content', y: 450 }}
                       locale={{ emptyText: 'Tìm kiếm phụ tùng ở thanh trên để thêm vào đơn hàng' }}
                     />
@@ -530,6 +544,8 @@ const PartWholesalePage = () => {
                   loading={historyLoading}
                   pagination={{ pageSize: 12 }}
                   className="modern-table"
+                  size={window.innerWidth < 768 ? 'small' : 'middle'}
+                  scroll={{ x: 'max-content' }}
                   style={{ marginTop: 8 }}
                 />
               </Card>
@@ -543,7 +559,8 @@ const PartWholesalePage = () => {
         title={`CHI TIẾT ĐƠN HÀNG BUÔN #${selectedSaleForDetail?.id?.slice(-8).toUpperCase()}`}
         open={isDetailModalOpen && !isPaymentModalOpen}
         onCancel={() => setIsDetailModalOpen(false)}
-        width={800}
+        width={window.innerWidth < 768 ? '95%' : 800}
+        centered
         footer={[
           <Button key="close" onClick={() => setIsDetailModalOpen(false)}>Đóng</Button>,
           canManageMoney && <Button key="pay" icon={<Banknote size={16} />} onClick={() => { setIsDetailModalOpen(false); handleOpenPaymentModal(selectedSaleForDetail); }}>Thu tiền</Button>,
@@ -552,11 +569,11 @@ const PartWholesalePage = () => {
       >
         {selectedSaleForDetail && (
           <>
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col span={6}><Text type="secondary">Ngày bán:</Text> <Text strong>{dayjs(selectedSaleForDetail.sale_date).format('DD/MM/YYYY')}</Text></Col>
-              <Col span={8}><Text type="secondary">Đối tác:</Text> <Text strong>{selectedSaleForDetail.customer_name || '—'}</Text></Col>
-              <Col span={5}><Text type="secondary">SĐT:</Text> <Text>{selectedSaleForDetail.customer_phone || '—'}</Text></Col>
-              <Col span={5}><Text type="secondary">Kho:</Text> <Text>{selectedSaleForDetail.Warehouse?.warehouse_name || '—'}</Text></Col>
+            <Row gutter={[16, 8]} style={{ marginBottom: 16 }}>
+              <Col xs={12} sm={6}><Text type="secondary">Ngày bán:</Text> <Text strong style={{ display: 'block' }}>{dayjs(selectedSaleForDetail.sale_date).format('DD/MM/YYYY')}</Text></Col>
+              <Col xs={12} sm={8}><Text type="secondary">Đối tác:</Text> <Text strong style={{ display: 'block' }}>{selectedSaleForDetail.customer_name || '—'}</Text></Col>
+              <Col xs={12} sm={5}><Text type="secondary">SĐT:</Text> <Text style={{ display: 'block' }}>{selectedSaleForDetail.customer_phone || '—'}</Text></Col>
+              <Col xs={12} sm={5}><Text type="secondary">Kho:</Text> <Text style={{ display: 'block' }}>{selectedSaleForDetail.Warehouse?.warehouse_name || '—'}</Text></Col>
             </Row>
             <Table 
               dataSource={selectedSaleForDetail.PartSaleItems}

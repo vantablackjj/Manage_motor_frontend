@@ -70,8 +70,9 @@ const TransferPage = () => {
   useEffect(() => {
     fetchWarehouses();
     fetchTransfers();
-    if (user.warehouse_id) {
-       fetchAvailableVehicles(user.warehouse_id);
+    const primaryWH = user.warehouse_id;
+    if (primaryWH) {
+       fetchAvailableVehicles(primaryWH);
     }
   }, []);
 
@@ -79,7 +80,17 @@ const TransferPage = () => {
   const fetchWarehouses = async () => {
     try {
       const res = await api.get('/warehouses');
-      setWarehouses(res.data);
+      if (isAdmin || user.accessible_warehouses) {
+        const allWh = res.data;
+        if (isAdmin) {
+          setWarehouses(allWh);
+        } else {
+          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])];
+          setWarehouses(allWh.filter(w => allowedIds.includes(w.id)));
+        }
+      } else {
+        setWarehouses(res.data);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -127,7 +138,7 @@ const TransferPage = () => {
         message.success('Đã cập nhật phiếu chuyển kho!');
       } else {
         await api.post('/transfers', {
-          from_warehouse_id: isAdmin ? values.from_warehouse_id : user.warehouse_id,
+          from_warehouse_id: values.from_warehouse_id,
           to_warehouse_id: values.to_warehouse_id,
           vehicle_ids: selectedVehicleIds,
           notes: values.notes
@@ -370,6 +381,11 @@ const TransferPage = () => {
   );
 
 
+  const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+  // Allow selection if power user OR has multiple warehouses
+  const canSelectFromWarehouse = isPowerUser || warehouses.length > 1;
+  const filteredFromWarehouses = warehouses;
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -377,13 +393,17 @@ const TransferPage = () => {
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>LUÂN CHUYỂN XE GIỮA CÁC KHO</Title>
           <Text type="secondary">Quy trình: Tạo phiếu (Kho A) → Duyệt (Admin) → Xác nhận nhận (Kho B)</Text>
         </div>
-        {!isAdmin && user.warehouse_id && (
+        { (!isAdmin && (user.accessible_warehouses && user.accessible_warehouses.length > 0)) ? (
+           <Card size="small" style={{ borderRadius: 12, background: 'rgba(59, 130, 246, 0.1)', borderColor: 'var(--primary-color)' }}>
+              <Space><MapPin size={16} /> <Text strong>Bạn có quyền truy cập {1 + (user.accessible_warehouses ? user.accessible_warehouses.split(',').length : 0)} kho</Text></Space>
+           </Card>
+        ) : (!isAdmin && user.warehouse_id && (
            <Badge count={availableVehicles.length} overflowCount={999} offset={[-10, 10]}>
              <Card size="small" style={{ borderRadius: 12, background: 'rgba(59, 130, 246, 0.1)', borderColor: 'var(--primary-color)' }}>
                 <Space><MapPin size={16} /> <Text strong>Kho của bạn: {warehouses.find(w => w.id === user.warehouse_id)?.warehouse_name}</Text></Space>
              </Card>
            </Badge>
-        )}
+        ))}
       </div>
 
       <Tabs activeKey={activeTab} onChange={setActiveTab} type="card" items={[
@@ -401,10 +421,10 @@ const TransferPage = () => {
                       <Select 
                         placeholder="Chọn kho xuất hàng" 
                         size="large" 
-                        disabled={!isAdmin}
                         onChange={handleFromWarehouseChange}
+                        disabled={!canSelectFromWarehouse}
                       >
-                        {warehouses.map(w => (
+                        {filteredFromWarehouses.map(w => (
                           <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>
                         ))}
                       </Select>

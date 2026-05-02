@@ -42,9 +42,11 @@ const DailyReportPage = () => {
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isPowerUser) {
       fetchWarehouses();
     }
     fetchReport();
@@ -101,7 +103,7 @@ const DailyReportPage = () => {
             allowClear={false}
             className="glass-input"
           />
-          {isAdmin && (
+          {isPowerUser && (
             <Select 
               size="large"
               placeholder="Tất cả các kho" 
@@ -180,7 +182,12 @@ const DailyReportPage = () => {
                         <Statistic title="DT Dịch vụ" value={data.maintenanceRevenue} suffix="đ" valueStyle={{ fontSize: 16 }} />
                         <Text type="secondary" style={{ fontSize: 11 }}>{data.maintenanceCount} phiếu</Text>
                     </Col>
+                    <Col span={24}>
+                         <Statistic title="Thu nhập khác" value={data.otherIncomes} suffix="đ" valueStyle={{ fontSize: 16, color: '#10b981' }} />
+                         <Text type="secondary" style={{ fontSize: 11 }}>Gửi xe, thuê nhà, hoa hồng...</Text>
+                    </Col>
                     <Divider style={{ margin: '12px 0' }} />
+
                     <Col span={24}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                             <Text>Tổng các khoản thu hôm nay:</Text>

@@ -19,7 +19,7 @@ import ImportExcelModal from '../../components/ImportExcelModal';
 import { exportToExcel } from '../../utils/excelExport';
 import dayjs from 'dayjs';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 const VehicleTypePage = () => {
   const [form] = Form.useForm();
@@ -137,17 +137,18 @@ const VehicleTypePage = () => {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div className="page-header" style={{ marginBottom: 32 }}>
         <div>
-          <h2 className="gradient-text" style={{ fontSize: 24, margin: 0 }}>ĐĂNG KÝ LOẠI XE</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Quản lý danh sách các dòng xe và quy tắc mã khung/máy.</p>
+          <Title level={2} className="gradient-text" style={{ margin: 0 }}>ĐĂNG KÝ LOẠI XE</Title>
+          <Text type="secondary">Quản lý danh sách các dòng xe và quy tắc mã khung/máy.</Text>
         </div>
-        <Space>
+        <Space wrap className="mobile-stack">
           <Button 
             icon={<Download size={16} />} 
             ghost 
             type="primary" 
             onClick={handleExport}
+            block={window.innerWidth < 768}
           >
             Xuất Excel
           </Button>
@@ -157,6 +158,7 @@ const VehicleTypePage = () => {
               ghost 
               type="primary" 
               onClick={() => setImportVisible(true)}
+              block={window.innerWidth < 768}
             >
               Nhập từ Excel
             </Button>
@@ -179,28 +181,28 @@ const VehicleTypePage = () => {
             layout="vertical"
             onFinish={onFinish}
           >
-            <Row gutter={16}>
-              <Col xs={24} md={12}>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={12}>
                 <Form.Item label="Tên xe (Brand/Model)" name="name" rules={[{ required: true }]}>
-                  <Input placeholder="Ví dụ: Vision 2024" />
+                  <Input placeholder="Ví dụ: Vision 2024" size="large" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item label="Phân loại (Loại xe)" name="type" rules={[{ required: true }]}>
-                  <Input placeholder="Ví dụ: Xe ga, Xe số, Côn tay" />
+                  <Input placeholder="Ví dụ: Xe ga, Xe số, Côn tay" size="large" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item label="Mã khung (Ký hiệu đầu)" name="chassis_prefix">
-                  <Input placeholder="Ví dụ: RLH..." />
+                  <Input placeholder="Ví dụ: RLH..." size="large" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item label="Mã máy (Ký hiệu đầu)" name="engine_prefix">
-                  <Input placeholder="Ví dụ: JF62..." />
+                  <Input placeholder="Ví dụ: JF62..." size="large" />
                 </Form.Item>
               </Col>
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={12}>
                 <Form.Item label="Giá gợi ý (đ)" name="suggested_price">
                   <InputNumber 
                     style={{ width: '100%' }}
@@ -212,8 +214,13 @@ const VehicleTypePage = () => {
                 </Form.Item>
               </Col>
             </Row>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Button icon={<RotateCcw size={16} />} ghost onClick={editingId ? handleCancelEdit : () => form.resetFields()}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+              <Button 
+                icon={<RotateCcw size={16} />} 
+                ghost 
+                onClick={editingId ? handleCancelEdit : () => form.resetFields()}
+                block={window.innerWidth < 768}
+              >
                 {editingId ? 'Hủy bỏ sửa' : 'Làm mới'}
               </Button>
               <Button 
@@ -221,6 +228,7 @@ const VehicleTypePage = () => {
                 type="primary" 
                 onClick={() => form.submit()} 
                 style={{ background: editingId ? '#10b981' : 'var(--primary-color)' }}
+                block={window.innerWidth < 768}
               >
                 {editingId ? 'Cập nhật danh mục' : 'Lưu danh mục'}
               </Button>
@@ -236,6 +244,8 @@ const VehicleTypePage = () => {
         className="modern-table"
         loading={loading}
         pagination={{ pageSize: 10 }}
+        size={window.innerWidth < 768 ? 'small' : 'middle'}
+        scroll={{ x: 'max-content' }}
       />
     </div>
   );

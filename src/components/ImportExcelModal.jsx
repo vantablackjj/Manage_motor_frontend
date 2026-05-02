@@ -65,10 +65,22 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
       return;
     }
 
+    // Require warehouse selection for types that need it
+    const warehouseRequiredTypes = ['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases'];
+    if (warehouseRequiredTypes.includes(type) && !selectedWarehouseId) {
+      message.warning('Vui lòng chọn kho trước khi tải lên!');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', fileList[0]);
     formData.append('type', type);
     
+    // FIXED: Send warehouse_id to backend (was missing before)
+    if (selectedWarehouseId) {
+      formData.append('warehouse_id', selectedWarehouseId);
+    }
+
     // Append extra data (like customer_type)
     Object.keys(extraData).forEach(key => {
       formData.append(key, extraData[key]);
@@ -117,7 +129,8 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
     part_inventory: ['Mã phụ tùng', 'Số lượng tồn', 'Kho'],
     part_retail_sales: ['Ngày bán', 'Tên khách', 'Số điện thoại', 'Mã PT', 'Số lượng', 'Đơn giá', 'Đã trả', 'VAT (%)', 'Tên kho'],
     part_wholesale_sales: ['Ngày bán', 'Mã khách hàng', 'Mã PT', 'Số lượng', 'Giá sỉ', 'Đã trả', 'VAT (%)', 'Tên kho'],
-    part_purchases: ['SỐ PO', 'SỐ HOÁ ĐƠN HVN', 'MÃ PHỤ TÙNG', 'TÊN PHỤ TÙNG', 'SỐ LƯỢNG', 'DNP', 'THÀNH TIỀN CHƯA VAT', 'VAT', 'VAT THÀNH TIỀN', 'NGÀY NHẬP', 'TÊN KHO', 'TÊN NCC']
+    part_purchases: ['SỐ PO', 'SỐ HOÁ ĐƠN HVN', 'MÃ PHỤ TÙNG', 'TÊN PHỤ TÙNG', 'SỐ LƯỢNG', 'DNP', 'THÀNH TIỀN CHƯA VAT', 'VAT', 'VAT THÀNH TIỀN', 'NGÀY NHẬP', 'TÊN KHO', 'TÊN NCC'],
+    maintenance: ['Ngày bảo trì', 'Tên khách', 'Số điện thoại', 'Biển số', 'Số máy', 'Loại dịch vụ', 'Mã phụ tùng', 'Số lượng', 'Đơn giá', 'Tổng tiền', 'Đã trả', 'Tên kho']
 
   };
 
@@ -201,7 +214,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
                         File của bạn cần có các cột tiêu đề sau (chính xác tên):
                     </Text>
                     <Space>
-                        {(['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases'].includes(type)) && (
+                        {(['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases', 'maintenance'].includes(type)) && (
                             <Select
                                 placeholder="Lọc xe theo kho..."
                                 style={{ width: 170 }}

@@ -38,6 +38,9 @@ import PartUsageReportPage from './pages/reports/PartUsageReportPage';
 import PartWholesalePage from './pages/wholesale/PartWholesalePage';
 import PartWholesaleCustomerPage from './pages/master-data/PartWholesaleCustomerPage';
 import PartWholesaleReportPage from './pages/reports/PartWholesaleReportPage';
+import MaintenanceReportPage from './pages/reports/MaintenanceReportPage';
+import BackupPage from './pages/system/BackupPage';
+import MaintenanceRulePage from './pages/master-data/MaintenanceRulePage';
 
 
 
@@ -158,6 +161,7 @@ function App() {
                     <Route path="/part-inventory" element={<PartInventoryPage />} />
                     {/* BÀO TRÌ & DỊCH VỤ HỢP NHẤT */}
                     <Route path="/maintenance-hub" element={<MaintenanceHub />} />
+                    <Route path="/maintenance-rules" element={<MaintenanceRulePage />} />
                     <Route path="/maintenance-hub/:id" element={<MaintenanceHub />} />
                     <Route path="/part-transfer" element={<PartTransferPage />} />
                     <Route path="/part-retail" element={<PartRetailPage />} />
@@ -179,6 +183,15 @@ function App() {
                     <Route path="/report/parts-sales" element={<PartSalesReportPage />} />
                     <Route path="/report/parts-wholesale" element={<PartWholesaleReportPage />} />
                     <Route path="/report/parts-usage" element={<PartUsageReportPage />} />
+                    <Route path="/report/maintenance" element={<MaintenanceReportPage />} />
+                    <Route 
+                      path="/system/backups" 
+                      element={
+                        <ProtectedRoute adminOnly={true}>
+                          <BackupPage />
+                        </ProtectedRoute>
+                      } 
+                    />
                   </Routes>
 
 

@@ -19,10 +19,17 @@ const PartUsageReportPage = () => {
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [query, setQuery] = useState('');
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+
   const fetchWarehouses = async () => {
     try {
       const res = await api.get('/warehouses');
-      setWarehouses(res.data);
+      if (isPowerUser) {
+        setWarehouses(res.data);
+      } else {
+        setWarehouses(res.data.filter(w => w.id === user.warehouse_id));
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -153,10 +160,11 @@ const PartUsageReportPage = () => {
           </Col>
           <Col>
             <Select 
-              placeholder="Chọn kho" 
+              placeholder={isPowerUser ? "Chọn kho" : "Kho hiện tại"}
               style={{ width: 180 }} 
-              allowClear
-              value={selectedWarehouse}
+              allowClear={isPowerUser}
+              disabled={!isPowerUser}
+              value={selectedWarehouse || (isPowerUser ? undefined : user.warehouse_id)}
               onChange={setSelectedWarehouse}
               className="glass-input"
             >

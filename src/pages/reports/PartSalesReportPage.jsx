@@ -26,10 +26,18 @@ const PartSalesReportPage = () => {
     const [selectedSaleForPrint, setSelectedSaleForPrint] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+    const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
+
     const fetchWarehouses = async () => {
         try {
             const res = await api.get('/warehouses');
-            setWarehouses(res.data);
+            if (isPowerUser) {
+                setWarehouses(res.data);
+            } else {
+                setWarehouses(res.data.filter(w => allowedWarehouseIds.includes(w.id.toString())));
+            }
         } catch (e) { console.error(e); }
     };
 
@@ -51,7 +59,12 @@ const PartSalesReportPage = () => {
     }, []);
 
     const handlePrint = (sale) => {
-        setSelectedSaleForPrint(sale);
+        // Aggressively search for full warehouse details in the loaded warehouses list
+        // to ensure address and phone number are present
+        const fullWh = warehouses.find(w => w.id === sale.warehouse_id);
+        const enrichedSale = fullWh ? { ...sale, Warehouse: fullWh } : sale;
+        
+        setSelectedSaleForPrint(enrichedSale);
         // Timeout to ensure component renders before printing
         setTimeout(() => {
             printReceipt('print-part-sale-receipt');
@@ -187,8 +200,10 @@ const PartSalesReportPage = () => {
                         <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Kho xuất:</Text>
                         <Select 
                             style={{ width: '100%' }}
-                            placeholder="Tất cả các kho"
-                            allowClear
+                            placeholder={isPowerUser ? "Tất cả các kho" : "Kho hiện tại"}
+                            allowClear={isPowerUser}
+                            disabled={!isPowerUser}
+                            value={filters.warehouse_id || (isPowerUser ? undefined : user.warehouse_id)}
                             onChange={v => setFilters(prev => ({ ...prev, warehouse_id: v }))}
                         >
                             {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}

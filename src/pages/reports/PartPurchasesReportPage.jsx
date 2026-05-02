@@ -56,6 +56,9 @@ const PartPurchasesReportPage = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
 
   useEffect(() => {
     fetchOptions();
@@ -69,7 +72,7 @@ const PartPurchasesReportPage = () => {
         api.get('/suppliers')
       ]);
       setOptions({
-        warehouses: wRes.data,
+        warehouses: isPowerUser ? wRes.data : wRes.data.filter(w => allowedWarehouseIds.includes(w.id.toString())),
         suppliers: sRes.data
       });
     } catch (e) {
@@ -270,11 +273,12 @@ const PartPurchasesReportPage = () => {
           <Col xs={24} md={8}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Kho nhập:</Text>
             <Select 
-              allowClear 
+              allowClear={isPowerUser}
+              disabled={!isPowerUser}
               style={{ width: '100%' }} 
-              placeholder="--- Tất cả các kho ---" 
+              placeholder={isPowerUser ? "--- Tất cả các kho ---" : "Kho hiện tại"}
               size="large"
-              defaultValue={isAdmin ? undefined : user.warehouse_id}
+              value={filters.warehouse_id || (isPowerUser ? undefined : user.warehouse_id)}
               onChange={v => handleFilterChange('warehouse_id', v)}
             >
               {options.warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
