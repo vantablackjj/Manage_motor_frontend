@@ -310,6 +310,25 @@ const AdminDashboardPage = () => {
                         font-size: 24px;
                     }
                 }
+                .scrollable-breakdown {
+                    max-height: 220px;
+                    overflow-y: auto;
+                    padding-right: 8px;
+                    margin-right: -8px;
+                }
+                .scrollable-breakdown::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .scrollable-breakdown::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .scrollable-breakdown::-webkit-scrollbar-thumb {
+                    background: #e2e8f0;
+                    border-radius: 10px;
+                }
+                .scrollable-breakdown::-webkit-scrollbar-thumb:hover {
+                    background: #cbd5e1;
+                }
             `}</style>
 
             {/* HEADER */}
@@ -513,24 +532,61 @@ const AdminDashboardPage = () => {
 
                             <Card bordered={false} styles={{ body: { padding: '16px' } }} style={{ background: '#f8fafc', borderRadius: 16 }}>
                                 <Text strong style={{ fontSize: 12, opacity: 0.6, textTransform: 'uppercase' }}>Cơ cấu chi phí</Text>
-                                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <Space><Truck size={14} opacity={0.6} /> <Text>Nhập xe máy:</Text></Space>
-                                        <Text strong>{formatCurrency(stats?.purchase?.spent)}</Text>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Space><Truck size={14} opacity={0.6} /> <Text>Nhập xe máy:</Text></Space>
+                                            <Text strong>{formatCurrency(stats?.purchase?.spent)}</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Space><Settings size={14} opacity={0.6} /> <Text>Nhập phụ tùng:</Text></Space>
+                                            <Text strong>{formatCurrency(stats?.parts?.purchase?.spent)}</Text>
+                                        </div>
+                                        <div style={{ borderTop: '1px dashed #e2e8f0', margin: '4px 0' }}></div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Space><AlertTriangle size={14} color="#ef4444" /> <Text strong>Chi vận hành:</Text></Space>
+                                            <Text strong style={{ color: '#ef4444' }}>{formatCurrency(stats?.expenses)}</Text>
+                                        </div>
+                                        {/* Breakdown for Expenses */}
+                                        <div className="scrollable-breakdown">
+                                            <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {stats?.expenseBreakdown?.map((eb, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                                        <Text type="secondary">• {eb.category}</Text>
+                                                        <Text type="secondary">{formatCurrency(eb.total)}</Text>
+                                                    </div>
+                                                ))}
+                                                {(!stats?.expenseBreakdown || stats?.expenseBreakdown.length === 0) && (
+                                                    <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic' }}>Không có dữ liệu chi tiết</Text>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ borderTop: '1px dashed #e2e8f0', margin: '4px 0' }}></div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Space><Wallet size={14} color="#10b981" /> <Text strong>Thu nhập khác:</Text></Space>
+                                            <Text strong style={{ color: '#10b981' }}>+ {formatCurrency(stats?.otherIncomes)}</Text>
+                                        </div>
+                                        {/* Breakdown for Incomes */}
+                                        <div className="scrollable-breakdown">
+                                            <div style={{ paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {stats?.incomeBreakdown?.map((ib, idx) => (
+                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                                                        <Text type="secondary">• {ib.category}</Text>
+                                                        <Text type="secondary">{formatCurrency(ib.total)}</Text>
+                                                    </div>
+                                                ))}
+                                                {(!stats?.incomeBreakdown || stats?.incomeBreakdown.length === 0) && (
+                                                    <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic' }}>Không có dữ liệu chi tiết</Text>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ borderTop: '1px dashed #e2e8f0', margin: '4px 0' }}></div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <Space><TrendingUp size={14} color="#f59e0b" /> <Text strong>Chi khuyến mại (Quà):</Text></Space>
+                                            <Text strong style={{ color: '#f59e0b' }}>{formatCurrency(stats?.giftCost)}</Text>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <Space><Settings size={14} opacity={0.6} /> <Text>Nhập phụ tùng:</Text></Space>
-                                        <Text strong>{formatCurrency(stats?.parts?.purchase?.spent)}</Text>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <Space><AlertTriangle size={14} color="#ef4444" /> <Text>Chi vận hành:</Text></Space>
-                                        <Text strong color="#ef4444">{formatCurrency(stats?.expenses)}</Text>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <Space><Wallet size={14} color="#10b981" /> <Text>Thu nhập khác:</Text></Space>
-                                        <Text strong style={{ color: '#10b981' }}>+ {formatCurrency(stats?.otherIncomes)}</Text>
-                                    </div>
-                                </div>
                             </Card>
 
                             <div style={{ marginTop: 8 }}>

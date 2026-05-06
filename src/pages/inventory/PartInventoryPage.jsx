@@ -106,6 +106,19 @@ const PartInventoryPage = () => {
     },
 
     { 
+        title: 'Vị trí', 
+        dataIndex: 'location', 
+        key: 'location',
+        render: (text, record) => (
+            <Input 
+                defaultValue={text} 
+                onBlur={(e) => handleUpdateLocation(record.id, e.target.value)}
+                placeholder="VD: Kệ A hàng 3"
+                style={{ width: '150px' }}
+            />
+        )
+    },
+    { 
         title: 'Số lượng tồn (Lẻ)', 
         dataIndex: 'quantity', 
         key: 'quantity',
@@ -116,6 +129,15 @@ const PartInventoryPage = () => {
         )
     },
   ];
+
+  const handleUpdateLocation = async (id, location) => {
+      try {
+          await api.put(`/part-inventory/${id}`, { location });
+          message.success('Cập nhật vị trí thành công');
+      } catch (error) {
+          message.error('Lỗi cập nhật vị trí: ' + error.message);
+      }
+  };
 
   return (
     <div style={{ padding: '24px' }}>

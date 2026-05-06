@@ -42,6 +42,7 @@ const PartImportPage = () => {
       unit_price: 0,
       conversion_rate: 1,
       total_price: 0,
+      location: "",
     },
   ]);
   const [suppliers, setSuppliers] = useState([]);
@@ -68,6 +69,7 @@ const PartImportPage = () => {
   const [activeTab, setActiveTab] = useState('1');
   const [selectedPurchaseDetail, setSelectedPurchaseDetail] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
@@ -75,11 +77,13 @@ const PartImportPage = () => {
   const isPowerUser = isAdmin || isManager;
   const canDelete = user.can_delete === true || user.can_delete === 1 || isAdmin;
 
-  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])].filter(Boolean);
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])]
+    .filter(Boolean)
+    .map(id => String(id).trim());
 
   const filteredWarehouses = isPowerUser 
     ? warehouses 
-    : warehouses.filter(w => allowedWarehouseIds.includes(w.id));
+    : warehouses.filter(w => allowedWarehouseIds.includes(String(w.id)));
 
   const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
 
@@ -91,7 +95,7 @@ const PartImportPage = () => {
     setLoading(true);
     try {
       const [suppRes, whRes] = await Promise.all([
-        api.get('/suppliers'),
+        api.get('/suppliers?type=PART'),
         api.get('/warehouses')
       ]);
       setSuppliers(suppRes.data);
@@ -129,23 +133,31 @@ const PartImportPage = () => {
     try {
         const res = await api.get(`/parts?search=${encodeURIComponent(value)}`);
         const parts = res.data.rows;
+        const selectedWh = form.getFieldValue('warehouse_id');
+        
         setPartOptions(
-          parts.map((p) => ({
-            value: p.code,
-            label: (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', gap: '16px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text strong style={{ display: 'block' }}>{p.code}</Text>
-                  <Text type="secondary" style={{ fontSize: '12px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Text>
+          parts.map((p) => {
+            const inv = selectedWh ? (p.PartInventories || []).find(i => i.warehouse_id === selectedWh) : null;
+            return {
+              value: p.code,
+              label: (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', gap: '16px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text strong style={{ display: 'block' }}>{p.code}</Text>
+                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Text>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <Tag color="blue" style={{ margin: 0 }}>{p.unit}</Tag>
+                      {inv?.location && (
+                        <div style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: 'bold' }}>Vị trí: {inv.location}</div>
+                      )}
+                      <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>Giá lẻ: {Number(p.selling_price).toLocaleString()} đ</div>
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <Tag color="blue" style={{ margin: 0 }}>{p.unit}</Tag>
-                    <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>Giá lẻ: {Number(p.selling_price).toLocaleString()} đ</div>
-                </div>
-              </div>
-            ),
-            part: p,
-          })),
+              ),
+              part: p,
+            };
+          }),
         );
     } catch (e) {
     }
@@ -164,6 +176,7 @@ const PartImportPage = () => {
         unit_price: 0,
         conversion_rate: 1,
         total_price: 0,
+        location: "",
       },
     ]);
   };
@@ -191,12 +204,50 @@ const PartImportPage = () => {
     const newItems = items.map(item => {
       if (item.key === key) {
         const updated = { ...item, [field]: value };
-        updated.total_price = Number(updated.quantity) * Number(updated.unit_price);
+        // If unit_price or quantity changes, update total_price
+        if (field === 'unit_price' || field === 'quantity') {
+            updated.total_price = Number(updated.quantity) * Number(updated.unit_price);
+        }
         return updated;
       }
       return item;
     });
     setItems(newItems);
+  };
+
+  const handleEdit = (record) => {
+    setEditingId(record.id);
+    form.setFieldsValue({
+        purchase_date: dayjs(record.purchase_date),
+        supplier_id: record.supplier_id,
+        warehouse_id: record.warehouse_id,
+        invoice_no: record.invoice_no,
+        notes: record.notes,
+        vat_percent: record.vat_percent,
+        paid_amount: record.paid_amount
+    });
+    
+    setItems(record.PartPurchaseItems.map(item => ({
+        key: item.id,
+        part_id: item.part_id,
+        code: item.Part?.code || '',
+        name: item.Part?.name || item.description || '',
+        unit: item.unit,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        conversion_rate: item.conversion_rate || 1,
+        total_price: item.total_price,
+        location: item.location
+    })));
+    
+    setActiveTab('1');
+    message.info("Đã tải dữ liệu phiếu nhập để chỉnh sửa");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    form.resetFields();
+    setItems([{ key: Date.now(), part_id: null, code: "", name: "", unit: "", quantity: 1, unit_price: 0, conversion_rate: 1, total_price: 0, location: "" }]);
   };
 
   const calculateTotal = () => {
@@ -219,12 +270,20 @@ const PartImportPage = () => {
           unit_price: i.unit_price,
           conversion_rate: i.conversion_rate,
           description: i.name,
+          location: i.location,
         })),
       };
 
-      await api.post("/part-purchase", payload);
-      message.success("Nhập hàng thành công!");
-      setItems([{ key: Date.now(), part_id: null, code: "", name: "", unit: "", quantity: 1, unit_price: 0, conversion_rate: 1, total_price: 0 }]);
+      if (editingId) {
+        await api.put(`/part-purchase/${editingId}`, payload);
+        message.success("Cập nhật phiếu nhập thành công!");
+      } else {
+        await api.post("/part-purchase", payload);
+        message.success("Nhập hàng thành công!");
+      }
+      
+      setEditingId(null);
+      setItems([{ key: Date.now(), part_id: null, code: "", name: "", unit: "", quantity: 1, unit_price: 0, conversion_rate: 1, total_price: 0, location: "" }]);
       form.resetFields();
       fetchHistory();
     } catch (error) {
@@ -264,6 +323,7 @@ const PartImportPage = () => {
     )},
     { title: "Tên PT", dataIndex: "name", render: (text, record) => <Input value={text} onChange={(e) => updateItem(record.key, "name", e.target.value)} /> },
     { title: "SL", dataIndex: "quantity", width: 80, render: (v, r) => <InputNumber min={1} value={v} onChange={(v) => updateItem(r.key, "quantity", v)} /> },
+    { title: "Vị trí", dataIndex: "location", width: 120, render: (v, r) => <Input value={v} placeholder="VD: Kệ A" onChange={(e) => updateItem(r.key, "location", e.target.value)} /> },
     { title: "Đơn giá", dataIndex: "unit_price", width: 120, render: (v, r) => <InputNumber min={0} value={v} onChange={(v) => updateItem(r.key, "unit_price", v)} /> },
     { title: "Thành tiền", dataIndex: "total_price", render: (v) => <Text strong>{Number(v).toLocaleString()} đ</Text> },
     { title: "", width: 50, render: (_, r) => <Button type="text" danger icon={<Trash2 size={16} />} onClick={() => setItems(items.filter(i => i.key !== r.key))} /> }
@@ -281,6 +341,7 @@ const PartImportPage = () => {
             <Space>
                 <Button size="small" icon={<Eye size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setIsDetailModalOpen(true); }} />
                 <Button size="small" type="primary" ghost icon={<Printer size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setTimeout(() => printReceipt('print-part-purchase-receipt'), 300); }} />
+                <Button size="small" icon={<Save size={14} />} onClick={() => handleEdit(r)} title="Sửa phiếu nhập" />
                 {canDelete && (
                     <Popconfirm title="Xóa phiếu nhập PT này?" description="Hành động này sẽ TRỪ LẠI số lượng trong tồn kho. Bạn chắc chứ?" onConfirm={() => handleDelete(r.id)} okText="Xác nhận xóa" cancelText="Hủy">
                         <Button size="small" danger icon={<Trash2 size={14} />} />
@@ -342,9 +403,16 @@ const PartImportPage = () => {
 
                             <Form.Item label="Nhà cung cấp" name="supplier_id" rules={[{ required: true }]}>
                                 <Select size="large" placeholder="Chọn nhà cung cấp..." showSearch optionFilterProp="children">
-                                    {suppliers.map((s) => (
-                                        <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
-                                    ))}
+                                    <Select.OptGroup label="HỆ THỐNG HONDA">
+                                        {suppliers.filter(s => s.name.toLowerCase().includes('honda')).map((s) => (
+                                            <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
+                                        ))}
+                                    </Select.OptGroup>
+                                    <Select.OptGroup label="CHỦ HÀNG / NCC KHÁC">
+                                        {suppliers.filter(s => !s.name.toLowerCase().includes('honda')).map((s) => (
+                                            <Select.Option key={s.id} value={s.id}>{s.name}</Select.Option>
+                                        ))}
+                                    </Select.OptGroup>
                                 </Select>
                             </Form.Item>
 
@@ -378,12 +446,20 @@ const PartImportPage = () => {
                             </div>
 
                             <Button type="primary" block size="large" icon={<Save size={20} />} style={{ marginTop: 24, height: 50, fontWeight: "bold" }} loading={submitLoading} onClick={() => form.submit()}>
-                                XÁC NHẬN NHẬP KHO
+                                {editingId ? "CẬP NHẬT PHIẾU NHẬP" : "XÁC NHẬN NHẬP KHO"}
                             </Button>
 
-                            <Button block ghost icon={<FileStack size={18} />} style={{ marginTop: 12 }} onClick={() => setIsImportModalOpen(true)}>
-                                NHẬP TỪ EXCEL (FILE HVN)
-                            </Button>
+                            {editingId && (
+                                <Button block size="large" style={{ marginTop: 12 }} onClick={cancelEdit}>
+                                    HỦY CHỈNH SỬA
+                                </Button>
+                            )}
+
+                            {!editingId && (
+                                <Button block ghost icon={<FileStack size={18} />} style={{ marginTop: 12 }} onClick={() => setIsImportModalOpen(true)}>
+                                    NHẬP TỪ EXCEL (FILE HVN)
+                                </Button>
+                            )}
                             </Form>
                         </Card>
                         </Col>
@@ -401,8 +477,13 @@ const PartImportPage = () => {
                 label: <Space><History size={18} /> LỊCH SỬ NHẬP KHO</Space>,
                 children: (
                     <Card className="glass-card" styles={{ body: { padding: 0 } }}>
-                         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between' }}>
-                            <Text type="secondary">Các phiếu nhập kho trong tháng</Text>
+                         <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Space size="large">
+                                <Text type="secondary">Các phiếu nhập kho trong tháng</Text>
+                                <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>
+                                    Tổng tiền: <strong>{history.reduce((sum, r) => sum + Number(r.total_amount || 0), 0).toLocaleString()} đ</strong>
+                                </Tag>
+                            </Space>
                             <Button size="small" icon={<RotateCcw size={14} />} onClick={fetchHistory} loading={historyLoading}>Làm mới</Button>
                          </div>
                          <Table 

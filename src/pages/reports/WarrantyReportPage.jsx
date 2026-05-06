@@ -52,7 +52,6 @@ const WarrantyReportPage = () => {
             'Ngày bán': dayjs(r.sale_date).format('DD/MM/YYYY'),
             'Tên khách hàng': r.customer_name,
             'Loại xe': r.Vehicle?.VehicleType?.name || 'N/A',
-            'Màu xe': r.Vehicle?.VehicleColor?.color_name || 'N/A',
             'Số khung': r.Vehicle?.chassis_no || 'N/A',
             'Số máy': r.Vehicle?.engine_no || 'N/A',
             'Lượt bảo hành': `Lần ${filters.turn}`
@@ -113,11 +112,6 @@ const WarrantyReportPage = () => {
             title: 'Loại xe', 
             width: 180,
             render: (_, r) => r.Vehicle?.VehicleType?.name || 'N/A'
-        },
-        { 
-            title: 'Màu xe', 
-            width: 120,
-            render: (_, r) => r.Vehicle?.VehicleColor?.color_name || 'N/A'
         },
         { 
             title: 'Số khung', 

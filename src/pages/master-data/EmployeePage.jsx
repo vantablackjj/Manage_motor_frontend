@@ -105,6 +105,7 @@ const EmployeePage = () => {
         can_manage_expenses: record.can_manage_expenses,
         can_delete_ticket: record.can_delete_ticket,
         can_edit_ticket: record.can_edit_ticket,
+        can_approve_transfer: record.can_approve_transfer,
         expense_warehouses: record.expense_warehouses ? record.expense_warehouses.split(',') : [],
         accessible_warehouses: record.accessible_warehouses ? record.accessible_warehouses.split(',') : [],
       });
@@ -121,6 +122,7 @@ const EmployeePage = () => {
         can_manage_expenses: false,
         can_delete_ticket: false,
         can_edit_ticket: false,
+        can_approve_transfer: false,
         expense_warehouses: [],
         accessible_warehouses: []
       });
@@ -211,6 +213,7 @@ const EmployeePage = () => {
           {record.can_manage_expenses && <Tag color="volcano" style={{fontSize: '10px'}}>Chi tiêu</Tag>}
           {record.can_delete_ticket && <Tag color="orange" style={{fontSize: '10px'}}>Xóa phiếu</Tag>}
           {record.can_edit_ticket && <Tag color="blue" style={{fontSize: '10px'}}>Sửa phiếu</Tag>}
+          {record.can_approve_transfer && <Tag color="magenta" style={{fontSize: '10px'}}>Duyệt chuyển kho</Tag>}
           {!record.can_manage_debt && !record.can_delete && !record.can_manage_money && !record.can_manage_spare_parts && !record.can_manage_master_data && !record.can_manage_sales && !record.can_manage_expenses && !record.can_delete_ticket && !record.can_edit_ticket && <Text type="secondary" style={{fontSize: '11px'}}>---</Text>}
         </Space>
       )
@@ -326,6 +329,7 @@ const EmployeePage = () => {
                 can_manage_expenses: false,
                 can_delete_ticket: true,
                 can_edit_ticket: true,
+                can_approve_transfer: true,
               });
             } else if (changedValues.role === 'ADMIN') {
               form.setFieldsValue({
@@ -338,6 +342,7 @@ const EmployeePage = () => {
                 can_manage_expenses: true,
                 can_delete_ticket: true,
                 can_edit_ticket: true,
+                can_approve_transfer: true,
               });
             }
           }}
@@ -455,6 +460,11 @@ const EmployeePage = () => {
             <Col xs={12} sm={6}>
               <Form.Item name="can_edit_ticket" valuePropName="checked" noStyle>
                 <Checkbox>Sửa phiếu</Checkbox>
+              </Form.Item>
+            </Col>
+            <Col xs={12} sm={6}>
+              <Form.Item name="can_approve_transfer" valuePropName="checked" noStyle>
+                <Checkbox>Duyệt chuyển</Checkbox>
               </Form.Item>
             </Col>
           </Row>

@@ -19,8 +19,10 @@ import {
   Divider,
   Badge,
   Alert,
-  InputNumber,
-  AutoComplete
+  AutoComplete,
+  DatePicker,
+  Dropdown,
+  InputNumber
 } from 'antd';
 import { 
   ArrowRightLeft, 
@@ -43,9 +45,12 @@ import api from '../../utils/api';
 import dayjs from 'dayjs';
 import PrintPartTransfer from '../../components/PrintPartTransfer';
 import { printReceipt } from '../../utils/printHelper';
+import { exportToExcel } from '../../utils/excelExport';
+import { Download, FileText } from 'lucide-react';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const PartTransferPage = () => {
   const [activeTab, setActiveTab] = useState('1');
@@ -59,10 +64,23 @@ const PartTransferPage = () => {
   const [detailData, setDetailData] = useState(null);
   const [inventorySearchText, setInventorySearchText] = useState('');
   const [historySearchText, setHistorySearchText] = useState('');
+  const [historyFilters, setHistoryFilters] = useState({
+    from_date: dayjs().startOf('month').format('YYYY-MM-DD'),
+    to_date: dayjs().format('YYYY-MM-DD'),
+    warehouse_id: undefined,
+    status: undefined
+  });
   const [form] = Form.useForm();
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const canApproveTransfer = isAdmin || isManager || user.can_approve_transfer === true || user.can_approve_transfer === 1;
+  const isPowerUser = isAdmin || isManager;
+
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])]
+    .filter(Boolean)
+    .map(id => String(id).trim());
 
   useEffect(() => {
     fetchWarehouses();
@@ -81,10 +99,10 @@ const PartTransferPage = () => {
     }
   };
 
-  const fetchTransfers = async () => {
+  const fetchTransfers = async (currentFilters = historyFilters) => {
     setLoading(true);
     try {
-      const res = await api.get('/part-transfers');
+      const res = await api.get('/part-transfers', { params: currentFilters });
       setTransfers(res.data);
     } catch (e) {
       message.error('Lỗi tải danh sách chuyển kho');
@@ -120,7 +138,8 @@ const PartTransferPage = () => {
         from_warehouse_id: isAdmin ? values.from_warehouse_id : user.warehouse_id,
         to_warehouse_id: values.to_warehouse_id,
         items: itemsToTransfer.map(i => ({ part_id: i.part_id, quantity: i.quantity })),
-        notes: values.notes
+        notes: values.notes,
+        transfer_date: values.transfer_date ? values.transfer_date.format('YYYY-MM-DD') : undefined
       });
       message.success('Đã gửi yêu cầu chuyển kho phụ tùng!');
 
@@ -252,7 +271,7 @@ const PartTransferPage = () => {
     { title: 'Đến Kho', dataIndex: 'ToWarehouse', render: wh => wh?.warehouse_name || 'N/A' },
     { title: 'Người lập', dataIndex: 'creator', render: u => u?.full_name || 'N/A' },
     { title: 'Trạng Thái', dataIndex: 'status', render: status => getStatusTag(status) },
-    { title: 'Ngày tạo', dataIndex: 'createdAt', render: d => dayjs(d).format('DD/MM/YYYY HH:mm') },
+    { title: 'Ngày lập', dataIndex: 'transfer_date', render: d => dayjs(d).format('DD/MM/YYYY') },
     { title: '', key: 'action', render: (_, r) => <Button size="small" onClick={() => loadDetails(r.id)}>Chi tiết</Button> }
   ];
 
@@ -260,8 +279,71 @@ const PartTransferPage = () => {
     printReceipt('print-part-transfer-receipt');
   };
 
-  const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
-  const filteredFromWarehouses = isPowerUser ? warehouses : warehouses.filter(w => w.id === user.warehouse_id);
+  const filteredFromWarehouses = isPowerUser ? warehouses : warehouses.filter(w => allowedWarehouseIds.includes(String(w.id)));
+  const canSelectFromWarehouse = isPowerUser || filteredFromWarehouses.length > 1;
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+        // Use the specialized report endpoint for export as it includes items
+        const res = await api.get('/reports/parts/transfers', { params: historyFilters });
+        const data = res.data;
+        
+        if (!data || data.length === 0) return message.warning('Không có dữ liệu để xuất!');
+        
+        const exportData = [];
+        data.forEach(t => {
+            t.PartTransferItems?.forEach(item => {
+                exportData.push({
+                    'Mã phiếu': t.transfer_code,
+                    'Ngày lập': dayjs(t.transfer_date).format('DD/MM/YYYY'),
+                    'Từ kho': t.FromWarehouse?.warehouse_name || 'N/A',
+                    'Đến kho': t.ToWarehouse?.warehouse_name || 'N/A',
+                    'Trạng thái': t.status === 'PENDING_ADMIN' ? 'Chờ duyệt' : t.status === 'ADMIN_APPROVED' ? 'Đang giao' : t.status === 'RECEIVED' ? 'Đã nhận' : 'Đã hủy',
+                    'Người lập': t.creator?.full_name || 'N/A',
+                    'Mã phụ tùng': item.Part?.code,
+                    'Tên phụ tùng': item.Part?.name,
+                    'Số lượng': Number(item.quantity),
+                    'Đơn vị': item.unit || item.Part?.unit,
+                    'Ghi chú': t.notes
+                });
+            });
+        });
+        exportToExcel(exportData, `NhatKyChuyenPhuTung_${dayjs().format('YYYYMMDD')}`);
+    } catch (error) {
+        message.error('Lỗi khi xuất Excel');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleExportMonthly = () => {
+    const { from_date, to_date, warehouse_id } = historyFilters;
+    if (!warehouse_id) return message.warning('Vui lòng chọn Kho liên quan để xuất báo cáo mẫu!');
+    
+    setLoading(true);
+    api.get('/reports/parts/transfers/export-monthly', { 
+        params: { from_date, to_date, warehouse_id },
+        responseType: 'blob' 
+    })
+    .then(response => {
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Bao_Cao_XN_Noi_Bo_${dayjs(from_date).format('MM_YYYY')}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    })
+    .catch(err => {
+        message.error('Lỗi khi xuất báo cáo: ' + err.message);
+    })
+    .finally(() => setLoading(false));
+  };
+
+  const handleHistoryFilterChange = (key, value) => {
+    setHistoryFilters(prev => ({ ...prev, [key]: value }));
+  };
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px' }}>
@@ -276,9 +358,16 @@ const PartTransferPage = () => {
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>LUÂN CHUYỂN PHỤ TÙNG NỘI BỘ</Title>
           <Text type="secondary">Cấu trúc và quy trình thống nhất với hệ thống quản lý xe máy</Text>
         </div>
-        {!isAdmin && user.warehouse_id && (
+        {(!isAdmin && filteredFromWarehouses.length > 0) && (
            <Card size="small" style={{ borderRadius: 12, background: 'rgba(59, 130, 246, 0.1)', borderColor: 'var(--primary-color)' }}>
-              <Space><MapPin size={16} /> <Text strong>Kho của bạn: {warehouses.find(w => w.id === user.warehouse_id)?.warehouse_name}</Text></Space>
+              <Space>
+                <MapPin size={16} /> 
+                <Text strong>
+                  {filteredFromWarehouses.length > 1 
+                    ? `Bạn có quyền tại ${filteredFromWarehouses.length} kho` 
+                    : `Kho của bạn: ${warehouses.find(w => w.id === user.warehouse_id)?.warehouse_name}`}
+                </Text>
+              </Space>
            </Card>
         )}
       </div>
@@ -289,24 +378,29 @@ const PartTransferPage = () => {
           label: <Space><Plus size={18} /> TẠO PHIẾU CHUYỂN</Space>,
           children: (
             <Card className="glass-card">
-              <Form form={form} layout="vertical" initialValues={{ from_warehouse_id: user.warehouse_id }}>
+              <Form form={form} layout="vertical" initialValues={{ from_warehouse_id: user.warehouse_id, transfer_date: dayjs() }}>
                 <Row gutter={24}>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Form.Item label="Từ kho xuất" name="from_warehouse_id" rules={[{ required: true }]}>
-                      <Select placeholder="Chọn kho xuất" size="large" disabled={!isPowerUser} onChange={handleFromWarehouseChange}>
+                      <Select placeholder="Chọn kho xuất" size="large" disabled={!canSelectFromWarehouse} onChange={handleFromWarehouseChange}>
                         {filteredFromWarehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                       </Select>
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
+                  <Col span={6}>
                     <Form.Item label="Đến kho nhận" name="to_warehouse_id" rules={[{ required: true }]}>
                       <Select placeholder="Chọn kho nhận" size="large">
                         {warehouses.filter(w => w.id !== form.getFieldValue('from_warehouse_id')).map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                       </Select>
                     </Form.Item>
                   </Col>
-                  <Col span={8}>
-                    <Form.Item label="Ghi chú vận chuyển" name="notes">
+                  <Col span={6}>
+                    <Form.Item label="Ngày lập phiếu" name="transfer_date" rules={[{ required: true }]}>
+                      <DatePicker style={{ width: '100%' }} size="large" format="DD/MM/YYYY" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={6}>
+                    <Form.Item label="Ghi chú" name="notes">
                       <Input placeholder="Người vận chuyển, lý do..." size="large" />
                     </Form.Item>
                   </Col>
@@ -370,15 +464,87 @@ const PartTransferPage = () => {
           label: <Space><History size={18} /> LỊCH SỬ CHUYỂN PHỤ TÙNG</Space>,
           children: (
             <Card className="glass-card">
-              <div style={{ marginBottom: 16 }}>
-                <Input 
-                   placeholder="Tìm theo mã phiếu..." 
-                   prefix={<Search size={18} opacity={0.6} />}
-                   allowClear
-                   value={historySearchText}
-                   onChange={(e) => setHistorySearchText(e.target.value)}
-                   style={{ width: 300, borderRadius: 10 }}
-                />
+              <div style={{ marginBottom: 20 }}>
+                <Row gutter={[16, 16]} align="bottom">
+                  <Col xs={24} md={6}>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>Khoảng thời gian:</Text>
+                    <RangePicker 
+                      style={{ width: '100%' }}
+                      defaultValue={[dayjs().startOf('month'), dayjs()]}
+                      onChange={(dates) => {
+                        if (dates) {
+                          handleHistoryFilterChange('from_date', dates[0].format('YYYY-MM-DD'));
+                          handleHistoryFilterChange('to_date', dates[1].format('YYYY-MM-DD'));
+                        }
+                      }}
+                      allowClear={false}
+                    />
+                  </Col>
+                  <Col xs={24} md={5}>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>Kho liên quan:</Text>
+                    <Select 
+                      allowClear={isPowerUser}
+                      disabled={!isPowerUser}
+                      style={{ width: '100%' }} 
+                      placeholder="--- Tất cả ---"
+                      value={historyFilters.warehouse_id}
+                      onChange={v => handleHistoryFilterChange('warehouse_id', v)}
+                    >
+                      {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
+                    </Select>
+                  </Col>
+                  <Col xs={24} md={4}>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>Trạng thái:</Text>
+                    <Select 
+                      allowClear 
+                      style={{ width: '100%' }} 
+                      placeholder="--- Tất cả ---"
+                      onChange={v => handleHistoryFilterChange('status', v)}
+                    >
+                      <Option value="PENDING_ADMIN">Chờ duyệt</Option>
+                      <Option value="ADMIN_APPROVED">Đang giao</Option>
+                      <Option value="RECEIVED">Đã hoàn tất</Option>
+                      <Option value="CANCELLED">Đã hủy</Option>
+                    </Select>
+                  </Col>
+                  <Col xs={24} md={5}>
+                    <Input 
+                       placeholder="Tìm theo mã phiếu..." 
+                       prefix={<Search size={18} opacity={0.6} />}
+                       allowClear
+                       value={historySearchText}
+                       onChange={(e) => setHistorySearchText(e.target.value)}
+                       style={{ borderRadius: 10 }}
+                    />
+                  </Col>
+                  <Col xs={24} md={4}>
+                    <Space style={{ width: '100%' }}>
+                      <Button type="primary" icon={<Search size={16} />} onClick={() => fetchTransfers()} loading={loading}>Lọc</Button>
+                      <Dropdown
+                        menu={{
+                          items: [
+                            {
+                              key: 'simple',
+                              label: 'Danh sách phiếu (Dạng bảng)',
+                              icon: <Download size={14} />,
+                              onClick: handleExport
+                            },
+                            {
+                              key: 'monthly',
+                              label: 'Báo cáo X-N nội bộ (Mẫu)',
+                              icon: <FileText size={14} />,
+                              onClick: handleExportMonthly,
+                              disabled: !historyFilters.warehouse_id
+                            }
+                          ]
+                        }}
+                        placement="bottomRight"
+                      >
+                        <Button icon={<Download size={16} />}>Excel</Button>
+                      </Dropdown>
+                    </Space>
+                  </Col>
+                </Row>
               </div>
               <Table 
                 dataSource={transfers.filter(t => t.transfer_code?.toLowerCase().includes(historySearchText.toLowerCase()))} 
@@ -434,7 +600,7 @@ const PartTransferPage = () => {
                 />
 
                 <div style={{ marginTop: 32, display: 'flex', gap: 12 }}>
-                  {isAdmin && detailData.transfer.status === 'PENDING_ADMIN' && (
+                  {canApproveTransfer && detailData.transfer.status === 'PENDING_ADMIN' && (
                     <Button type="primary" icon={<ShieldCheck size={18} />} style={{ background: '#10b981', height: 45 }} block onClick={() => handleApprove(detailData.transfer.id)}>CHẤP THUẬN DUYỆT</Button>
                   )}
                   {detailData.transfer.status === 'ADMIN_APPROVED' && (user.warehouse_id === detailData.transfer.to_warehouse_id || isAdmin) && (

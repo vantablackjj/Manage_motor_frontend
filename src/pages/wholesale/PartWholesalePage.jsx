@@ -41,8 +41,15 @@ const PartWholesalePage = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
-  const canManageMoney = isAdmin || user.can_manage_money === true || user.can_manage_money === 1;
-  const canDelete = isAdmin || user.can_delete === true || user.can_delete === 1;
+  const isManager = user.role === 'MANAGER';
+  const isPowerUser = isAdmin || isManager;
+  const canManageMoney = isPowerUser || user.can_manage_money === true || user.can_manage_money === 1;
+  const canDelete = isPowerUser || user.can_delete === true || user.can_delete === 1;
+
+  const allowedWarehouseIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])]
+    .filter(Boolean)
+    .map(id => String(id).trim());
+  const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
 
   const [items, setItems] = useState([]);
   const paidAmountWatch = Form.useWatch('paid_amount', form);
@@ -85,7 +92,12 @@ const PartWholesalePage = () => {
         api.get('/auth/users'),
         api.get('/wholesale-customers?type=PART')
       ]);
-      setWarehouses(whRes.data);
+      const allWh = whRes.data;
+      if (isAdmin) {
+        setWarehouses(allWh);
+      } else {
+        setWarehouses(allWh.filter(w => allowedWarehouseIds.includes(String(w.id))));
+      }
       setEmployees(empRes.data);
       setCustomers(custRes.data);
     } catch (error) {
@@ -149,6 +161,11 @@ const PartWholesalePage = () => {
                 </div>
                 <div style={{ textAlign: 'right', minWidth: 100, flexShrink: 0 }}>
                   <div style={{ fontWeight: 800, color: stockColor, fontSize: 13 }}>Tồn: {stockText}</div>
+                  {selectedWarehouseId && p.PartInventories?.find(inv => inv.warehouse_id === selectedWarehouseId)?.location && (
+                    <div style={{ fontSize: '10px', color: 'var(--primary-color)', fontWeight: 'bold' }}>
+                      Vị trí: {p.PartInventories.find(inv => inv.warehouse_id === selectedWarehouseId).location}
+                    </div>
+                  )}
                   <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>Sỉ: {Number(p.wholesale_price || p.selling_price).toLocaleString()} đ</Tag>
                 </div>
               </div>
@@ -425,7 +442,7 @@ const PartWholesalePage = () => {
                         </Select>
                       </Form.Item>
 
-                      {isAdmin ? (
+                      {showWarehouseSelector ? (
                         <Form.Item label="Kho xuất hàng" name="warehouse_id" rules={[{ required: true }]}>
                           <Select size="large" placeholder="Chọn kho..." onChange={val => setSelectedWarehouseId(val)}>
                             {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}

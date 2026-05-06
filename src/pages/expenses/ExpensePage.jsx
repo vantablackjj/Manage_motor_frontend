@@ -79,8 +79,8 @@ const ExpensePage = () => {
       };
       
       if (f.dates && f.dates[0] && f.dates[1]) {
-          params.from_date = f.dates[0].startOf('day').toISOString();
-          params.to_date = f.dates[1].endOf('day').toISOString();
+          params.from_date = f.dates[0].format('YYYY-MM-DD');
+          params.to_date = f.dates[1].format('YYYY-MM-DD');
       }
 
       const [expenseRes, incomeRes, vRes, wRes] = await Promise.all([

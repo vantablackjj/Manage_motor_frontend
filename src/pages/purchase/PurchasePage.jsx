@@ -77,6 +77,7 @@ const PurchasePage = () => {
   });
   const [activeTab, setActiveTab] = useState("1");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isPayAllModalOpen, setIsPayAllModalOpen] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
 
   // Search states
@@ -91,7 +92,7 @@ const PurchasePage = () => {
   const fetchMasterData = async () => {
     try {
       const [sRes, wRes, tRes, cRes] = await Promise.all([
-        api.get("/suppliers"),
+        api.get("/suppliers?type=VEHICLE"),
         api.get("/warehouses"),
         api.get("/vehicle-types"),
         api.get("/colors"),
@@ -100,7 +101,6 @@ const PurchasePage = () => {
       setSuppliers(sRes.data);
       setWarehouses(wRes.data);
       setVehicleTypes(tRes.data);
-      setColors(cRes.data);
     } catch (e) {
       console.error(e);
     }
@@ -120,11 +120,13 @@ const PurchasePage = () => {
     ...(user.accessible_warehouses
       ? user.accessible_warehouses.split(",")
       : []),
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((id) => String(id).trim());
 
   const filteredWarehouses = isPowerUser
     ? warehouses
-    : warehouses.filter((w) => allowedWarehouseIds.includes(w.id));
+    : warehouses.filter((w) => allowedWarehouseIds.includes(String(w.id)));
 
   const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
 
@@ -161,7 +163,6 @@ const PurchasePage = () => {
       {
         key: newKey,
         type_id: null,
-        color_id: null,
         engine_no: "",
         chassis_no: "",
         price_vnd: undefined,
@@ -213,13 +214,15 @@ const PurchasePage = () => {
         const item = inputItems[i];
         if (!item.type_id)
           return message.error(`Dòng ${i + 1}: Chưa chọn Loại xe!`);
-        if (!item.color_id)
-          return message.error(`Dòng ${i + 1}: Chưa chọn Màu xe!`);
         if (!item.engine_no || item.engine_no.trim() === "")
           return message.error(`Dòng ${i + 1}: Chưa nhập Số máy!`);
         if (!item.chassis_no || item.chassis_no.trim() === "")
           return message.error(`Dòng ${i + 1}: Chưa nhập Số khung!`);
-        if (item.price_vnd === undefined || item.price_vnd === null || item.price_vnd < 0)
+        if (
+          item.price_vnd === undefined ||
+          item.price_vnd === null ||
+          item.price_vnd < 0
+        )
           return message.error(`Dòng ${i + 1}: Giá nhập không hợp lệ!`);
       }
 
@@ -237,7 +240,6 @@ const PurchasePage = () => {
         {
           key: Date.now().toString(),
           type_id: null,
-          color_id: null,
           engine_no: "",
           chassis_no: "",
           price_vnd: undefined,
@@ -268,6 +270,30 @@ const PurchasePage = () => {
       handleSearchHistory(form.getFieldValue("supplier_id"));
     } catch (error) {
       message.error(error.message);
+    }
+  };
+
+  const handlePayAll = async (values) => {
+    try {
+      setLoading(true);
+      await api.post("/purchases/pay-all", {
+        supplier_id: form.getFieldValue("supplier_id"),
+        amount_paid_vnd: values.amount,
+        payment_date: values.date.format("YYYY-MM-DD"),
+        notes: values.notes,
+      });
+      message.success("Đã thanh toán gộp cho nhà cung cấp!");
+      setIsPayAllModalOpen(false);
+      paymentForm.resetFields();
+      handleSearchHistory(form.getFieldValue("supplier_id"));
+      if (selectedLot) {
+         const updatedLot = purchaseHistory.find(h => h.id === selectedLot.id);
+         if (updatedLot) loadLotDetails(updatedLot);
+      }
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -466,7 +492,6 @@ const PurchasePage = () => {
               <tr>
                 <th style="width: 25px;">STT</th>
                 <th>Loại xe</th>
-                <th style="width: 70px;">Màu xe</th>
                 <th style="width: 100px;">Số Máy</th>
                 <th style="width: 150px;">Số Khung</th>
                 <th style="text-align: right; width: 90px;">Giá nhập</th>
@@ -480,7 +505,6 @@ const PurchasePage = () => {
                 <tr>
                   <td style="text-align: center;">${i + 1}</td>
                   <td>${vehicleTypes.find((t) => t.id === v.type_id)?.name || "N/A"}</td>
-                  <td style="text-align: center;">${colors.find((c) => c.id === v.color_id)?.color_name || "N/A"}</td>
                   <td style="text-align: center;"><b>${v.engine_no}</b></td>
                   <td style="text-align: center;"><b>${v.chassis_no}</b></td>
                   <td style="text-align: right;"><b>${Number(v.price_vnd).toLocaleString()}</b></td>
@@ -627,32 +651,15 @@ const PurchasePage = () => {
       ),
     },
     {
-      title: "Màu",
-      dataIndex: "color_id",
       width: "12%",
-      render: (val, record) => (
-        <Select
-          style={{ width: "100%" }}
-          showSearch
-          placeholder="Màu..."
-          optionFilterProp="children"
-          value={val}
-          onChange={(v) => updateItem(record.key, "color_id", v)}
-        >
-          {colors.map((c) => (
-            <Option key={c.id} value={c.id}>
-              {c.color_name}
-            </Option>
-          ))}
-        </Select>
-      ),
+      render: (val, record) => <Text type="secondary">-</Text>,
     },
     {
       title: "Giá Nhập (đ)",
       dataIndex: "price_vnd",
       width: "15%",
       render: (val, record) => (
-        <Space direction="vertical" style={{ width: '100%' }} size={0}>
+        <Space direction="vertical" style={{ width: "100%" }} size={0}>
           <InputNumber
             style={{ width: "100%" }}
             value={val}
@@ -661,7 +668,11 @@ const PurchasePage = () => {
             parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
             onChange={(v) => updateItem(record.key, "price_vnd", v)}
           />
-          {Number(val) === 0 && <Tag color="warning" style={{ fontSize: 10, margin: 0 }}>XE MƯỢN</Tag>}
+          {Number(val) === 0 && (
+            <Tag color="warning" style={{ fontSize: 10, margin: 0 }}>
+              XE MƯỢN
+            </Tag>
+          )}
         </Space>
       ),
     },
@@ -722,12 +733,6 @@ const PurchasePage = () => {
       title: "Số Khung",
       dataIndex: "chassis_no",
       render: (v) => <Text code>{v}</Text>,
-    },
-    {
-      title: "Màu",
-      width: "90px",
-      render: (_, r) =>
-        colors.find((c) => c.id === r.color_id)?.color_name || "N/A",
     },
     {
       title: "Giá Nhập",
@@ -794,11 +799,20 @@ const PurchasePage = () => {
                     setActiveTab("2");
                   }}
                 >
-                  {suppliers.map((s) => (
-                    <Option key={s.id} value={s.id}>
-                      {s.name}
-                    </Option>
-                  ))}
+                  <Select.OptGroup label="HỆ THỐNG HONDA">
+                    {suppliers.filter(s => s.name.toLowerCase().includes('honda')).map((s) => (
+                      <Option key={s.id} value={s.id}>
+                        {s.name}
+                      </Option>
+                    ))}
+                  </Select.OptGroup>
+                  <Select.OptGroup label="CHỦ HÀNG / NCC KHÁC">
+                    {suppliers.filter(s => !s.name.toLowerCase().includes('honda')).map((s) => (
+                      <Option key={s.id} value={s.id}>
+                        {s.name}
+                      </Option>
+                    ))}
+                  </Select.OptGroup>
                 </Select>
               </Form.Item>
             </Col>
@@ -878,9 +892,17 @@ const PurchasePage = () => {
                     gap: 12,
                   }}
                 >
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Nhập danh sách xe mới vào bảng (Batch Entry)
-                  </Text>
+                  <Space>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Nhập danh sách xe mới vào bảng (Batch Entry)
+                    </Text>
+                    <Tag
+                      color="blue"
+                      style={{ borderRadius: 12, fontWeight: "bold" }}
+                    >
+                      Số lượng: {batchItems.length} xe
+                    </Tag>
+                  </Space>
                   <Button
                     icon={<Plus size={16} />}
                     onClick={addRow}
@@ -895,6 +917,55 @@ const PurchasePage = () => {
                   pagination={false}
                   size={window.innerWidth < 768 ? "small" : "middle"}
                   scroll={{ x: "max-content" }}
+                  summary={(pageData) => {
+                    let total = 0;
+                    let count = pageData.length;
+                    let validCount = pageData.filter(
+                      (i) =>
+                        i.type_id && i.color_id && i.engine_no && i.chassis_no,
+                    ).length;
+
+                    pageData.forEach(({ price_vnd }) => {
+                      total += Number(price_vnd) || 0;
+                    });
+                    return (
+                      <Table.Summary fixed>
+                        <Table.Summary.Row
+                          style={{ background: "rgba(255,255,255,0.02)" }}
+                        >
+                          <Table.Summary.Cell
+                            index={0}
+                            colSpan={5}
+                            align="right"
+                          >
+                            <Space size={24} style={{ marginRight: 16 }}>
+                              <Text strong style={{ fontSize: 14 }}>
+                                SỐ LƯỢNG:{" "}
+                                <span
+                                  style={{ color: "#3b82f6", fontSize: 16 }}
+                                >
+                                  {validCount}
+                                </span>{" "}
+                                / {count} xe
+                              </Text>
+                              <Text strong style={{ fontSize: 14 }}>
+                                TỔNG TIỀN LÔ:
+                              </Text>
+                            </Space>
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={1}>
+                            <Text
+                              strong
+                              style={{ color: "#10b981", fontSize: 16 }}
+                            >
+                              {total.toLocaleString()} đ
+                            </Text>
+                          </Table.Summary.Cell>
+                          <Table.Summary.Cell index={2} colSpan={2} />
+                        </Table.Summary.Row>
+                      </Table.Summary>
+                    );
+                  }}
                 />
                 <div style={{ marginTop: 32, textAlign: "right" }}>
                   <Space wrap className="mobile-stack">
@@ -987,6 +1058,27 @@ const PurchasePage = () => {
                             width: window.innerWidth < 768 ? "100%" : 120,
                           }}
                         />
+                        {canManageMoney && purchaseHistory.length > 0 && (
+                          <Button
+                            type="primary"
+                            size="small"
+                            style={{ background: '#10b981', borderColor: '#10b981' }}
+                            icon={<DollarSign size={14} />}
+                            onClick={() => {
+                                const totalDebt = purchaseHistory.reduce((sum, h) => 
+                                    sum + (Number(h.total_amount_vnd) - Number(h.paid_amount_vnd)), 0
+                                );
+                                paymentForm.setFieldsValue({
+                                    amount: totalDebt,
+                                    date: dayjs(),
+                                    notes: 'Thanh toán tất cả nợ còn lại'
+                                });
+                                setIsPayAllModalOpen(true);
+                            }}
+                          >
+                            TẤT CẢ NỢ
+                          </Button>
+                        )}
                         <Button
                           icon={<RotateCcw size={14} />}
                           onClick={() =>
@@ -1325,7 +1417,32 @@ const PurchasePage = () => {
             <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
           </Form.Item>
           <Form.Item
-            label="Số tiền trả (VNĐ)"
+            label={
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  width: "350px",
+                }}
+              >
+                <span>Số tiền trả (VNĐ)</span>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, height: "auto", color: "#10b981" }}
+                  onClick={() => {
+                    const remaining = Math.max(
+                      0,
+                      Number(selectedLot?.total_amount_vnd || 0) -
+                        Number(selectedLot?.paid_amount_vnd || 0),
+                    );
+                    paymentForm.setFieldsValue({ amount: remaining });
+                  }}
+                >
+                  Trả toàn bộ
+                </Button>
+              </div>
+            }
             name="amount"
             rules={[{ required: true }]}
           >
@@ -1347,7 +1464,69 @@ const PurchasePage = () => {
             size="large"
             style={{ background: "#10b981" }}
           >
-            XÁC NHẬN TRẢ TIỀN
+            XÁC NHẬN THANH TOÁN
+          </Button>
+        </Form>
+      </Modal>
+
+      {/* MODAL THANH TOÁN TẤT CẢ NỢ */}
+      <Modal
+        title={
+          <Space>
+            <DollarSign size={20} color="#10b981" />
+            <Text strong>THANH TOÁN TẤT CẢ NỢ - {suppliers.find(s => s.id === form.getFieldValue("supplier_id"))?.name}</Text>
+          </Space>
+        }
+        open={isPayAllModalOpen}
+        onCancel={() => setIsPayAllModalOpen(false)}
+        footer={null}
+        width={window.innerWidth < 768 ? "95%" : 450}
+        centered
+      >
+        <Form
+          form={paymentForm}
+          layout="vertical"
+          onFinish={handlePayAll}
+          initialValues={{ date: dayjs() }}
+        >
+          <div style={{ marginBottom: 20, padding: 16, background: 'rgba(16, 185, 129, 0.05)', borderRadius: 8 }}>
+             <Text type="secondary">Tổng nợ hiện tại (Tất cả các lô):</Text>
+             <Title level={3} style={{ margin: 0, color: '#10b981' }}>
+                {Number(purchaseHistory.reduce((sum, h) => sum + (Number(h.total_amount_vnd) - Number(h.paid_amount_vnd)), 0)).toLocaleString()} đ
+             </Title>
+          </div>
+          
+          <Form.Item
+            label="Ngày thanh toán"
+            name="date"
+            rules={[{ required: true }]}
+          >
+            <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" size="large" />
+          </Form.Item>
+          <Form.Item
+            label="Số tiền thanh toán gộp (VNĐ)"
+            name="amount"
+            rules={[{ required: true }]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              size="large"
+              autoFocus
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+            />
+          </Form.Item>
+          <Form.Item label="Ghi chú gộp" name="notes">
+            <Input.TextArea rows={2} placeholder="Nhập ghi chú cho đợt thanh toán gộp này..." />
+          </Form.Item>
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            loading={loading}
+            style={{ background: "#10b981", height: 45, fontWeight: 'bold' }}
+          >
+            XÁC NHẬN THANH TOÁN TẤT CẢ
           </Button>
         </Form>
       </Modal>

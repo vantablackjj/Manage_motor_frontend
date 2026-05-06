@@ -246,6 +246,7 @@ const MainLayout = ({ children }) => {
   const canManageSales = isAdmin || isManager || user.can_manage_sales === true || user.can_manage_sales === 1;
   const canManageSpareParts = isAdmin || isManager || user.can_manage_spare_parts === true || user.can_manage_spare_parts === 1;
   const canManageExpenses = isAdmin || user.can_manage_expenses === true || user.can_manage_expenses === 1;
+  const canManageDebt = isAdmin || user.can_manage_debt === true || user.can_manage_debt === 1;
 
   const menuItems = [
     isAdmin && {
@@ -266,7 +267,7 @@ const MainLayout = ({ children }) => {
           label: 'Giao dịch xe máy',
           children: [
             { key: '/retail', label: <Link to="/retail">Bán lẻ xe máy</Link> },
-            { key: '/wholesale', label: <Link to="/wholesale">Bán buôn & Thu nợ</Link> },
+            { key: '/wholesale', label: <Link to="/wholesale">{canManageDebt ? "Bán buôn & Thu nợ" : "Dữ liệu bán buôn"}</Link> },
             { key: '/purchase', label: <Link to="/purchase">Nhập xe mua & Trả tiền</Link> },
             { key: '/transfers', label: <Link to="/transfers">Chuyển kho chi nhánh</Link> },
           ]
@@ -290,16 +291,6 @@ const MainLayout = ({ children }) => {
             { key: '/report/warranty', label: <Link to="/report/warranty">Danh sách xe bảo hành</Link> },
             { key: '/vehicle-search', label: <Link to="/vehicle-search">Tìm xe theo yêu cầu</Link> },
           ]
-        },
-        canManageMaster && {
-          key: 'mc-master-data',
-          icon: <Layers size={16} />,
-          label: 'Danh mục xe máy',
-          children: [
-            { key: '/vehicle-colors', label: <Link to="/vehicle-colors">Đăng ký màu xe</Link> },
-            { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng (NCC)</Link> },
-            { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Danh mục khách buôn xe</Link> },
-          ]
         }
       ].filter(Boolean)
     },
@@ -319,7 +310,7 @@ const MainLayout = ({ children }) => {
             { key: '/part-wholesale', label: <Link to="/part-wholesale">Bán buôn phụ tùng</Link> },
             { key: '/part-import', label: <Link to="/part-import">Nhập mua phụ tùng</Link> },
             { key: '/part-transfer', label: <Link to="/part-transfer">Luân chuyển phụ tùng</Link> },
-            { 
+            canManageDebt && { 
               key: 'pts-debt-folder',
               label: 'Quản lý nợ phụ tùng',
               children: [
@@ -350,16 +341,6 @@ const MainLayout = ({ children }) => {
             { key: '/report/parts-usage', label: <Link to="/report/parts-usage">Chi tiết xuất phụ tùng</Link> },
             { key: '/part-inventory', label: <Link to="/part-inventory">Tồn kho phụ tùng</Link> },
           ]
-        },
-        canManageMaster && {
-          key: 'pts-master-data',
-          icon: <Layers size={16} />,
-          label: 'Danh mục phụ tùng',
-          children: [
-            { key: '/parts', label: <Link to="/parts">Đăng ký mã phụ tùng</Link> },
-            { key: '/part-wholesale-customers', label: <Link to="/part-wholesale-customers">Đăng ký khách sỉ PT</Link> },
-            { key: '/gifts', label: <Link to="/gifts"><Space><GiftIcon size={14} /> Quản lý quà tặng</Space></Link> },
-          ]
         }
       ].filter(Boolean)
     },
@@ -372,10 +353,43 @@ const MainLayout = ({ children }) => {
       children: [
         canManageExpenses && { key: '/expenses', icon: <Wallet size={16} />, label: <Link to="/expenses">Quản lý chi tiêu</Link> },
         isAdmin && { key: '/employees', icon: <Users size={16} />, label: <Link to="/employees">Quản lý nhân viên</Link> },
-        { key: '/vehicle-types', icon: <Layers size={16} />, label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
-        { key: '/mechanics', icon: <UserPlus size={16} />, label: <Link to="/mechanics">Danh sách thợ sửa</Link> },
-        { key: '/warehouses', icon: <ClipboardList size={16} />, label: <Link to="/warehouses">Quản lý kho hàng</Link> },
-        isAdmin && { key: '/system/backups', icon: <Database size={16} />, label: <Link to="/system/backups">Sao lưu & Phục hồi</Link> },
+        
+        canManageMaster && {
+          key: 'master-data-folder',
+          icon: <Database size={16} />,
+          label: 'KHU DANH MỤC',
+          children: [
+            {
+              key: 'mc-md',
+              label: 'Danh mục Xe máy',
+              children: [
+                { key: '/suppliers', label: <Link to="/suppliers">Nhập chủ hàng (NCC)</Link> },
+                { key: '/wholesale-customers', label: <Link to="/wholesale-customers">Danh mục khách buôn xe</Link> },
+                { key: '/vehicle-types', label: <Link to="/vehicle-types">Đăng ký loại xe</Link> },
+              ]
+            },
+            {
+              key: 'pts-md',
+              label: 'Danh mục Phụ tùng',
+              children: [
+                { key: '/parts', label: <Link to="/parts">Đăng ký mã phụ tùng</Link> },
+                { key: '/part-locations', label: <Link to="/part-locations">Sơ đồ vị trí kho</Link> },
+                { key: '/part-wholesale-customers', label: <Link to="/part-wholesale-customers">Đăng ký khách sỉ PT</Link> },
+                { key: '/gifts', label: <Link to="/gifts">Quản lý quà tặng</Link> },
+              ]
+            },
+            {
+              key: 'service-md',
+              label: 'Nhân sự & Kho',
+              children: [
+                { key: '/mechanics', label: <Link to="/mechanics">Danh sách thợ sửa</Link> },
+                { key: '/warehouses', label: <Link to="/warehouses">Quản lý kho hàng</Link> },
+              ]
+            }
+          ]
+        },
+
+        isAdmin && { key: '/system/backups', icon: <Archive size={16} />, label: <Link to="/system/backups">Sao lưu & Phục hồi</Link> },
       ].filter(Boolean)
     },
   ].filter(Boolean);

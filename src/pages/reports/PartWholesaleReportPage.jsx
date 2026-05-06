@@ -201,7 +201,38 @@ const PartWholesaleReportPage = () => {
                     </Col>
                 </Row>
             </Card>
-
+            <Row gutter={16} style={{ marginBottom: 24 }}>
+                <Col xs={24} md={8}>
+                    <Card className="glass-card" style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 13 }}>TỔNG GIÁ TRỊ XUẤT SỈ</Text>
+                            <Title level={3} style={{ margin: 0, color: '#10b981' }}>
+                                {sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0).toLocaleString()} đ
+                            </Title>
+                        </Space>
+                    </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                    <Card className="glass-card" style={{ background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 13 }}>ĐÃ THANH TOÁN (THU TIỀN)</Text>
+                            <Title level={3} style={{ margin: 0, color: '#3b82f6' }}>
+                                {sales.reduce((sum, s) => sum + Number(s.paid_amount || 0), 0).toLocaleString()} đ
+                            </Title>
+                        </Space>
+                    </Card>
+                </Col>
+                <Col xs={24} md={8}>
+                    <Card className="glass-card" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 13 }}>CÒN NỢ (CHƯA THU)</Text>
+                            <Title level={3} style={{ margin: 0, color: '#ef4444' }}>
+                                {sales.reduce((sum, s) => sum + (Number(s.total_amount || 0) - Number(s.paid_amount || 0)), 0).toLocaleString()} đ
+                            </Title>
+                        </Space>
+                    </Card>
+                </Col>
+            </Row>
             <Card className="glass-card" bodyStyle={{ padding: 0 }}>
                 <Table 
                     dataSource={sales} 

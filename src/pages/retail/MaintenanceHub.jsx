@@ -113,8 +113,13 @@ const MaintenanceBoard = ({
         if (isAdmin) {
           setWarehouses(allWh);
         } else {
-          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])];
-          const filtered = allWh.filter(w => allowedIds.includes(w.id));
+          const allowedIds = [
+            user.warehouse_id,
+            ...(user.accessible_warehouses
+              ? user.accessible_warehouses.split(",")
+              : []),
+          ];
+          const filtered = allWh.filter((w) => allowedIds.includes(w.id));
           setWarehouses(filtered);
           if (filtered.length > 0) setSelectedWarehouse(user.warehouse_id);
         }
@@ -167,7 +172,9 @@ const MaintenanceBoard = ({
           Quản lý và theo dõi trạng thái sửa chữa thời gian thực
         </Text>
         <Space wrap className="mobile-stack">
-          { (isAdmin || (user.accessible_warehouses && user.accessible_warehouses.length > 0)) ? (
+          {isAdmin ||
+          (user.accessible_warehouses &&
+            user.accessible_warehouses.length > 0) ? (
             <Select
               placeholder="Lọc theo kho/chi nhánh"
               style={{ width: 250 }}
@@ -291,7 +298,11 @@ const MaintenanceBoard = ({
                       <Text style={{ fontSize: 13 }}>
                         Sửa được:{" "}
                         <Text strong style={{ color: "#f59e0b" }}>
-                          {getDurationText(activeOrder.createdAt)}
+                          {getDurationText(
+                            activeOrder.received_at ||
+                            activeOrder.maintenance_date ||
+                            activeOrder.createdAt
+                          )}
                         </Text>
                       </Text>
                     </div>
@@ -538,52 +549,87 @@ const MaintenanceHub = () => {
     let updatedJobs = [...amberJobs];
     let changed = false;
 
-    // 1. Detect Oil Change
-    const oilChangeItem = items.find(item => 
-      (item.description || "").toLowerCase().includes("thay dầu") || 
-      (item.description || "").toLowerCase().includes("nhớt") ||
-      (item.description || "").toLowerCase().includes("thay dau")
-    );
+    // Helper: kiểm tra nội dung có liên quan đến thay dầu không (case-insensitive)
+    const isOilRelated = (text = "") => {
+      const lower = text.toLowerCase();
+      return lower.includes("thay dầu") || lower.includes("thay dau") || lower.includes("nhớt");
+    };
+
+    // 1. Detect Oil Change từ danh sách items
+    const oilChangeItem = items.find((item) => isOilRelated(item.description));
 
     if (oilChangeItem) {
       const nextKm = Number(kmReading) + 2000;
-      const existingIdx = updatedJobs.findIndex(j => j.content.includes("Thay dầu"));
+      // Tìm case-insensitive để tránh trùng "Thay Dầu" vs "Thay dầu"
+      const existingIdx = updatedJobs.findIndex((j) => isOilRelated(j.content));
       if (existingIdx > -1) {
+        // Đã có entry liên quan đến thay dầu → chỉ cập nhật km, GIỮ NGUYÊN date
         if (updatedJobs[existingIdx].km !== nextKm) {
-          updatedJobs[existingIdx] = { ...updatedJobs[existingIdx], km: nextKm, content: "Thay dầu máy (định kỳ)" };
+          updatedJobs[existingIdx] = {
+            ...updatedJobs[existingIdx],
+            km: nextKm,
+            content: updatedJobs[existingIdx].content || "Thay dầu máy (định kỳ)",
+          };
           changed = true;
         }
       } else {
-        // Find empty slot or add new
-        const emptyIdx = updatedJobs.findIndex(j => !j.content);
+        // Chưa có → tạo mới với km, date sẽ được rule-based bổ sung sau
+        const emptyIdx = updatedJobs.findIndex((j) => !j.content);
+        const newEntry = { content: "Thay dầu máy (định kỳ)", date: null, km: nextKm };
         if (emptyIdx > -1) {
-          updatedJobs[emptyIdx] = { content: "Thay dầu máy (định kỳ)", time: "", km: nextKm };
+          updatedJobs[emptyIdx] = newEntry;
         } else {
-          updatedJobs.push({ content: "Thay dầu máy (định kỳ)", time: "", km: nextKm });
+          updatedJobs.push(newEntry);
         }
         changed = true;
       }
     }
 
-    // 2. Dynamic Rules from Settings
-    maintenanceRules.forEach(rule => {
+    // 2. Dynamic Rules từ cài đặt hệ thống
+    maintenanceRules.forEach((rule) => {
       if (kmReading >= rule.min_km && kmReading <= rule.max_km) {
-        if (!updatedJobs.some(j => j.content.includes(rule.suggestion))) {
-          const emptyIdx = updatedJobs.findIndex(j => !j.content);
-          if (emptyIdx > -1) {
-            updatedJobs[emptyIdx] = { 
-              content: rule.suggestion, 
-              date: rule.time_gap_months ? dayjs().add(rule.time_gap_months, 'month') : null, 
-              km: "" 
-            };
+        const ruleDate = rule.time_gap_months
+          ? dayjs().add(rule.time_gap_months, "month")
+          : null;
+
+        if (isOilRelated(rule.suggestion)) {
+          // Nếu rule là liên quan đến thay dầu → gộp vào entry thay dầu hiện có (nếu có)
+          const oilIdx = updatedJobs.findIndex((j) => isOilRelated(j.content));
+          if (oilIdx > -1) {
+            // Chỉ cập nhật date nếu chưa có
+            if (!updatedJobs[oilIdx].date && ruleDate) {
+              updatedJobs[oilIdx] = {
+                ...updatedJobs[oilIdx],
+                date: ruleDate,
+              };
+              changed = true;
+            }
           } else {
-            updatedJobs.push({ 
-              content: rule.suggestion, 
-              date: rule.time_gap_months ? dayjs().add(rule.time_gap_months, 'month') : null, 
-              km: "" 
-            });
+            // Không có entry thay dầu nào → tạo mới từ rule
+            const emptyIdx = updatedJobs.findIndex((j) => !j.content);
+            const newEntry = { content: rule.suggestion, date: ruleDate, km: "" };
+            if (emptyIdx > -1) {
+              updatedJobs[emptyIdx] = newEntry;
+            } else {
+              updatedJobs.push(newEntry);
+            }
+            changed = true;
           }
-          changed = true;
+        } else {
+          // Rule không liên quan thay dầu → thêm bình thường nếu chưa có
+          const alreadyExists = updatedJobs.some((j) =>
+            j.content.toLowerCase().includes(rule.suggestion.toLowerCase()),
+          );
+          if (!alreadyExists) {
+            const emptyIdx = updatedJobs.findIndex((j) => !j.content);
+            const newEntry = { content: rule.suggestion, date: ruleDate, km: "" };
+            if (emptyIdx > -1) {
+              updatedJobs[emptyIdx] = newEntry;
+            } else {
+              updatedJobs.push(newEntry);
+            }
+            changed = true;
+          }
         }
       }
     });
@@ -595,10 +641,10 @@ const MaintenanceHub = () => {
 
   const fetchMaintenanceRules = async () => {
     try {
-      const res = await api.get('/maintenance-rules');
-      setMaintenanceRules(res.data.filter(r => r.is_active));
+      const res = await api.get("/maintenance-rules");
+      setMaintenanceRules(res.data.filter((r) => r.is_active));
     } catch (e) {
-      console.error('Lỗi khi tải quy tắc bảo trì:', e);
+      console.error("Lỗi khi tải quy tắc bảo trì:", e);
     }
   };
 
@@ -619,11 +665,16 @@ const MaintenanceHub = () => {
         if (isPowerUser) {
           setWarehouses(allWh);
         } else {
-          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])];
-          setWarehouses(allWh.filter(w => allowedIds.includes(w.id)));
+          const allowedIds = [
+            user.warehouse_id,
+            ...(user.accessible_warehouses
+              ? user.accessible_warehouses.split(",")
+              : []),
+          ];
+          setWarehouses(allWh.filter((w) => allowedIds.includes(w.id)));
         }
       } else {
-        setWarehouses(whRes.data.filter(w => w.id === user.warehouse_id));
+        setWarehouses(whRes.data.filter((w) => w.id === user.warehouse_id));
       }
       setMechanics(mechanicsRes.data.filter((m) => m.is_active));
       setLiftTables(liftRes.data);
@@ -693,6 +744,44 @@ const MaintenanceHub = () => {
       setLoading(false);
     }
   };
+
+  const [previousConsultation, setPreviousConsultation] = useState(null);
+
+  useEffect(() => {
+    if (vehicleFound && history.length > 0) {
+      const vData = vehicleFound.data;
+      const eng = vData?.engine_no || form.getFieldValue("engine_no");
+      const cha = vData?.chassis_no || form.getFieldValue("chassis_no");
+      const lic = vData?.license_plate || form.getFieldValue("license_plate");
+
+      const vHistory = history
+        .filter(
+          (h) =>
+            h.id !== id &&
+            h.status === "COMPLETED" &&
+            (eng
+              ? h.engine_no === eng
+              : cha
+                ? h.chassis_no === cha
+                : h.license_plate === lic),
+        )
+        .sort((a, b) =>
+          dayjs(b.maintenance_date).diff(dayjs(a.maintenance_date)),
+        );
+
+      if (vHistory.length > 0 && vHistory[0].consultation_notes) {
+        setPreviousConsultation({
+          notes: vHistory[0].consultation_notes,
+          date: vHistory[0].maintenance_date,
+          orderId: vHistory[0].id,
+        });
+      } else {
+        setPreviousConsultation(null);
+      }
+    } else {
+      setPreviousConsultation(null);
+    }
+  }, [vehicleFound, history, id]);
 
   useEffect(() => {
     fetchData();
@@ -786,6 +875,18 @@ const MaintenanceHub = () => {
                 >
                   Tồn: {stockInCurrent}
                 </Tag>
+                {currentWHInv?.location && (
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "var(--primary-color)",
+                      marginTop: 2,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Vị trí: {currentWHInv.location}
+                  </div>
+                )}
                 {stockInCurrent === 0 && totalOtherStock > 0 && (
                   <div
                     style={{
@@ -802,6 +903,7 @@ const MaintenanceHub = () => {
           ),
           part: p,
           stock: stockInCurrent,
+          maintenance_suggestion: p.maintenance_suggestion,
         };
       });
       setPartOptions(options);
@@ -972,9 +1074,15 @@ const MaintenanceHub = () => {
 
       const payload = {
         ...values,
-        maintenance_date: values.received_at ? values.received_at.toISOString() : mDate.toISOString(),
-        received_at: values.received_at ? values.received_at.toISOString() : null,
-        returned_at: values.returned_at ? values.returned_at.toISOString() : null,
+        maintenance_date: values.received_at
+          ? values.received_at.toISOString()
+          : mDate.toISOString(),
+        received_at: values.received_at
+          ? values.received_at.toISOString()
+          : null,
+        returned_at: values.returned_at
+          ? values.returned_at.toISOString()
+          : null,
         items,
         amber_jobs: JSON.stringify(amberJobs),
         paid_amount:
@@ -1008,12 +1116,18 @@ const MaintenanceHub = () => {
   const buildPrintHtml = (orderData, warehouseData, itemsData, amberJobs) => {
     const serviceItems = (itemsData || []).filter((i) => i.type === "SERVICE");
     const partItems = (itemsData || []).filter((i) => i.type === "PART");
-    const totalLabor = serviceItems.reduce((s, i) => s + Number(i.total_price || 0), 0);
-    const totalParts = partItems.reduce((s, i) => s + Number(i.total_price || 0), 0);
+    const totalLabor = serviceItems.reduce(
+      (s, i) => s + Number(i.total_price || 0),
+      0,
+    );
+    const totalParts = partItems.reduce(
+      (s, i) => s + Number(i.total_price || 0),
+      0,
+    );
     const grandTotal = totalLabor + totalParts;
     const vatPercent = orderData.vat_percent || 0;
     const vatAmount = (grandTotal * vatPercent) / 100;
-    const finalTotal = grandTotal + vatAmount;
+    const finalTotal = grandTotal;
 
     const fmt = (n) => Number(n || 0).toLocaleString("vi-VN");
     const fmtDate = (d) => {
@@ -1053,7 +1167,7 @@ const MaintenanceHub = () => {
       "Kiểm tra ngoại quan xe (trầy xước...)",
       "Khả năng vận hành và hoạt động động cơ xe",
       "Tốc độ cầm chừng",
-      "Chạy thử"
+      "Chạy thử",
     ];
 
     return `<!DOCTYPE html>
@@ -1105,11 +1219,15 @@ const MaintenanceHub = () => {
       <tr>
         <td rowspan="2">
           Loại xe: 
-          ${["Ga", "Số", "Côn tay", "Xe Điện", "PKL"].map((t) => {
-            const isElectric = !!orderData.battery_id;
-            const checked = isElectric ? t === "Xe Điện" : orderData.vehicle_type === t;
-            return `<span style="margin-right:6px"><input type="checkbox" ${checked ? "checked" : ""}> ${t}</span>`;
-          }).join("")}
+          ${["Ga", "Số", "Côn tay", "Xe Điện", "PKL"]
+            .map((t) => {
+              const isElectric = !!orderData.battery_id;
+              const checked = isElectric
+                ? t === "Xe Điện"
+                : orderData.vehicle_type === t;
+              return `<span style="margin-right:6px"><input type="checkbox" ${checked ? "checked" : ""}> ${t}</span>`;
+            })
+            .join("")}
         </td>
         <td>Số điện thoại: <strong>${orderData.customer_phone || ""}</strong></td>
         <td colspan="2">Thời gian nhận xe: <strong>${fmtDate(orderData.received_at)}</strong></td>
@@ -1129,7 +1247,7 @@ const MaintenanceHub = () => {
       </tr>
       <tr>
         <td style="height: 30px;">Yêu cầu của khách hàng: ${orderData.notes || ""}</td>
-        <td colspan="3">Tư vấn sửa chữa: ...</td>
+        <td colspan="3">Tư vấn sửa chữa: <strong>${orderData.consultation_notes || ""}</strong></td>
       </tr>
     </tbody>
   </table>
@@ -1164,17 +1282,11 @@ const MaintenanceHub = () => {
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="9" style="text-align:right; font-weight:bold; border: none;">Tổng cộng chưa VAT:</td>
+        <td colspan="9" style="text-align:right; font-weight:bold; border: none;">Tổng cộng:</td>
         <td style="text-align:right; font-weight:bold;">${fmt(totalParts)}</td>
         <td style="text-align:right; font-weight:bold;">${fmt(totalLabor)}</td>
-        <td style="text-align:right; font-weight:bold;">${fmt(grandTotal)}</td>
+        <td style="text-align:right; font-weight:bold;">${fmt(finalTotal)}</td>
       </tr>
-      ${vatPercent > 0 ? `
-      <tr>
-        <td colspan="11" style="text-align:right; border: none;">Thuế VAT (${vatPercent}%):</td>
-        <td style="text-align:right;">${fmt(vatAmount)}</td>
-      </tr>
-      ` : ""}
       <tr>
         <td colspan="11" style="text-align:right; font-weight:bold; font-size:11px; border: none;">TỔNG THANH TOÁN (ĐÃ CÓ VAT):</td>
         <td style="text-align:right; font-weight:bold; font-size:11px;">${fmt(finalTotal)}</td>
@@ -1202,14 +1314,18 @@ const MaintenanceHub = () => {
               <div style="width: 40px; border-right: 1px solid #000; text-align: center;">Xác nhận</div>
               <div style="width: 40px; text-align: center;">Thay dầu</div>
             </div>
-            ${checklist.map((item, i) => `
+            ${checklist
+              .map(
+                (item, i) => `
               <div style="display: flex; border-bottom: ${i === 10 ? "none" : "1px solid #000"};">
                 <div style="width: 20px; border-right: 1px solid #000; text-align: center;">${i + 1}</div>
                 <div style="flex: 1; border-right: 1px solid #000; padding-left: 2px;">${item}</div>
                 <div style="width: 40px; border-right: 1px solid #000;"></div>
                 <div style="width: 40px;"></div>
               </div>
-            `).join("")}
+            `,
+              )
+              .join("")}
           </div>
         </div>
         <div style="width: 180px;">
@@ -1223,15 +1339,23 @@ const MaintenanceHub = () => {
               </tr>
             </thead>
             <tbody>
-              ${[0, 1, 2, 3, 4].map((idx) => {
-                const job = (typeof amberJobs === 'string' ? JSON.parse(amberJobs) : amberJobs)?.[idx];
-                const dateText = job?.date ? dayjs(job.date).format("DD/MM/YYYY") : (job?.time || "");
-                return `<tr style="height: 15px;">
+              ${[0, 1, 2, 3, 4]
+                .map((idx) => {
+                  const job = (
+                    typeof amberJobs === "string"
+                      ? JSON.parse(amberJobs)
+                      : amberJobs
+                  )?.[idx];
+                  const dateText = job?.date
+                    ? dayjs(job.date).format("DD/MM/YYYY")
+                    : job?.time || "";
+                  return `<tr style="height: 15px;">
                   <td style="font-size: 8px; border: 1px solid #000;">${job?.content || ""}</td>
                   <td style="font-size: 8px; border: 1px solid #000; text-align: center;">${dateText}</td>
                   <td style="font-size: 8px; border: 1px solid #000; text-align: center;">${job?.km ? Number(job.km).toLocaleString() : ""}</td>
                 </tr>`;
-              }).join("")}
+                })
+                .join("")}
             </tbody>
           </table>
         </div>
@@ -1289,7 +1413,12 @@ const MaintenanceHub = () => {
 
     setTimeout(() => {
       hide();
-      const html = buildPrintHtml(orderData, warehouseData, itemsData, currentAmberJobs);
+      const html = buildPrintHtml(
+        orderData,
+        warehouseData,
+        itemsData,
+        currentAmberJobs,
+      );
       const win = window.open("", "_blank", "width=900,height=700");
       win.document.write(html);
       win.document.close();
@@ -1511,13 +1640,84 @@ const MaintenanceHub = () => {
                   </div>
                 )}
 
+                {previousConsultation && (
+                  <div style={{ marginBottom: 20 }}>
+                    <Card
+                      size="small"
+                      style={{
+                        background: "rgba(99, 102, 241, 0.08)",
+                        border: "1px solid rgba(99, 102, 241, 0.3)",
+                        borderRadius: "12px",
+                      }}
+                      styles={{ body: { padding: "12px" } }}
+                    >
+                      <Space align="start">
+                        <FileText
+                          size={20}
+                          style={{ color: "#6366f1", marginTop: 2 }}
+                        />
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 4,
+                            }}
+                          >
+                            <Text
+                              strong
+                              style={{ color: "#4338ca", fontSize: 13 }}
+                            >
+                              TƯ VẤN TỪ LẦN TRƯỚC (
+                              {dayjs(previousConsultation.date).format(
+                                "DD/MM/YYYY",
+                              )}
+                              ):
+                            </Text>
+                          </div>
+                          <Text
+                            style={{
+                              color: "#1e293b",
+                              fontSize: 14,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {previousConsultation.notes}
+                          </Text>
+                          <div style={{ marginTop: 8 }}>
+                            <Button
+                              size="small"
+                              type="link"
+                              style={{ padding: 0, fontSize: 11 }}
+                              onClick={() =>
+                                handleEditFromBoard(
+                                  previousConsultation.orderId,
+                                )
+                              }
+                            >
+                              Xem phiếu cũ &raquo;
+                            </Button>
+                          </div>
+                        </div>
+                      </Space>
+                    </Card>
+                  </div>
+                )}
+
                 <Row gutter={16}>
                   <Col span={6}>
-                    <Form.Item label="Loại xe" name="vehicle_type" initialValue="Số">
+                    <Form.Item
+                      label="Loại xe"
+                      name="vehicle_type"
+                      initialValue="Số"
+                    >
                       <Select size="large">
                         <Select.Option value="Số">Xe Số</Select.Option>
                         <Select.Option value="Ga">Xe Ga</Select.Option>
-                        <Select.Option value="Côn tay">Xe Côn tay</Select.Option>
+                        <Select.Option value="Côn tay">
+                          Xe Côn tay
+                        </Select.Option>
                         <Select.Option value="Xe Điện">Xe Điện</Select.Option>
                         <Select.Option value="PKL">Phân khối lớn</Select.Option>
                       </Select>
@@ -1562,7 +1762,13 @@ const MaintenanceHub = () => {
                   </Col>
                   <Col span={6}>
                     <Form.Item label="Sức khỏe PIN (SOH %)" name="battery_soh">
-                      <InputNumber style={{ width: "100%" }} min={0} max={100} placeholder="%" size="large" />
+                      <InputNumber
+                        style={{ width: "100%" }}
+                        min={0}
+                        max={100}
+                        placeholder="%"
+                        size="large"
+                      />
                     </Form.Item>
                   </Col>
                   <Col span={6}>
@@ -1578,13 +1784,27 @@ const MaintenanceHub = () => {
 
                 <Row gutter={16}>
                   <Col span={6}>
-                    <Form.Item label="Ngày nhận xe" name="received_at" rules={[{ required: true }]}>
-                      <DatePicker showTime style={{ width: "100%" }} format="DD/MM/YYYY HH:mm" size="large" />
+                    <Form.Item
+                      label="Ngày nhận xe"
+                      name="received_at"
+                      rules={[{ required: true }]}
+                    >
+                      <DatePicker
+                        showTime
+                        style={{ width: "100%" }}
+                        format="DD/MM/YYYY HH:mm"
+                        size="large"
+                      />
                     </Form.Item>
                   </Col>
                   <Col span={6}>
                     <Form.Item label="Ngày trả thực tế" name="returned_at">
-                      <DatePicker showTime style={{ width: "100%" }} format="DD/MM/YYYY HH:mm" size="large" />
+                      <DatePicker
+                        showTime
+                        style={{ width: "100%" }}
+                        format="DD/MM/YYYY HH:mm"
+                        size="large"
+                      />
                     </Form.Item>
                   </Col>
                   <Col span={6}>
@@ -1595,6 +1815,20 @@ const MaintenanceHub = () => {
                   <Col span={6}>
                     <Form.Item label="Điện thoại" name="customer_phone">
                       <Input placeholder="Số điện thoại..." size="large" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col span={24}>
+                    <Form.Item
+                      label="Địa chỉ khách hàng"
+                      name="customer_address"
+                    >
+                      <Input
+                        placeholder="Nhập địa chỉ khách hàng..."
+                        size="large"
+                      />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -1613,29 +1847,82 @@ const MaintenanceHub = () => {
                   </Col>
                   <Col span={6}>
                     <Form.Item label="Kiểm tra định kỳ" name="ktdk_type">
-                      <Select placeholder="Chọn lần KT..." size="large" allowClear onChange={(val) => {
-                          if (val) form.setFieldsValue({ notes: `KTDK lần ${val}` });
+                      <Select
+                        placeholder="Chọn lần KT..."
+                        size="large"
+                        allowClear
+                        onChange={(val) => {
+                          if (val)
+                            form.setFieldsValue({ notes: `KTDK lần ${val}` });
                           else form.setFieldsValue({ notes: "Kiểm tra xe" });
-                      }}>
-                        {[1, 2, 3, 4, 5, 6, 7].map(n => (
-                          <Select.Option key={n} value={n}>Lần {n}</Select.Option>
+                        }}
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                          <Select.Option key={n} value={n}>
+                            Lần {n}
+                          </Select.Option>
                         ))}
                       </Select>
                     </Form.Item>
                   </Col>
                   <Col span={12}>
-                    <Form.Item label="Yêu cầu của khách hàng" name="notes" initialValue="Kiểm tra xe">
-                      <Input placeholder="Ghi chú yêu cầu cụ thể..." size="large" />
+                    <Form.Item
+                      label="Yêu cầu của khách hàng"
+                      name="notes"
+                      initialValue="Kiểm tra xe"
+                    >
+                      <Input
+                        placeholder="Ghi chú yêu cầu cụ thể..."
+                        size="large"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col span={24}>
+                    <Form.Item
+                      label={
+                        <Text strong style={{ color: "#6366f1" }}>
+                          TƯ VẤN SỬA CHỮA / TÌNH TRẠNG XE
+                        </Text>
+                      }
+                      name="consultation_notes"
+                      tooltip="Nội dung tư vấn này sẽ hiển thị ở lần ghé tiếp theo của xe này."
+                    >
+                      <Input.TextArea
+                        rows={2}
+                        placeholder="VD: Má phanh sau mòn nhiều, khuyên khách thay ở lần sau. Bộ côn bắt đầu rung..."
+                        size="large"
+                        style={{ borderRadius: 12 }}
+                      />
                     </Form.Item>
                   </Col>
                 </Row>
 
                 <Row gutter={16}>
                   <Col span={12}>
-                    <Form.Item label="Kho xuất" name="warehouse_id" rules={[{ required: true }]}>
-                      <Select placeholder="Chọn kho" size="large" disabled={!(user.role === 'ADMIN' || user.role === 'MANAGER' || (user.accessible_warehouses && user.accessible_warehouses.length > 0))}>
+                    <Form.Item
+                      label="Kho xuất"
+                      name="warehouse_id"
+                      rules={[{ required: true }]}
+                    >
+                      <Select
+                        placeholder="Chọn kho"
+                        size="large"
+                        disabled={
+                          !(
+                            user.role === "ADMIN" ||
+                            user.role === "MANAGER" ||
+                            (user.accessible_warehouses &&
+                              user.accessible_warehouses.length > 0)
+                          )
+                        }
+                      >
                         {warehouses.map((w) => (
-                          <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>
+                          <Select.Option key={w.id} value={w.id}>
+                            {w.warehouse_name}
+                          </Select.Option>
                         ))}
                       </Select>
                     </Form.Item>
@@ -1643,14 +1930,26 @@ const MaintenanceHub = () => {
                   <Col span={12}>
                     <Form.Item label="Bàn nâng" name="lift_table_id">
                       <Select placeholder="Chọn bàn" allowClear size="large">
-                        {liftTables.filter(l => !selectedWarehouse || l.warehouse_id === selectedWarehouse).map((l) => {
-                          const isBusy = l.status === "BUSY" && l.id !== form.getFieldValue("lift_table_id");
-                          return (
-                            <Select.Option key={l.id} value={l.id} disabled={isBusy}>
-                              {l.name} {isBusy ? "(Đang bận)" : ""}
-                            </Select.Option>
-                          );
-                        })}
+                        {liftTables
+                          .filter(
+                            (l) =>
+                              !selectedWarehouse ||
+                              l.warehouse_id === selectedWarehouse,
+                          )
+                          .map((l) => {
+                            const isBusy =
+                              l.status === "BUSY" &&
+                              l.id !== form.getFieldValue("lift_table_id");
+                            return (
+                              <Select.Option
+                                key={l.id}
+                                value={l.id}
+                                disabled={isBusy}
+                              >
+                                {l.name} {isBusy ? "(Đang bận)" : ""}
+                              </Select.Option>
+                            );
+                          })}
                       </Select>
                     </Form.Item>
                   </Col>
@@ -1673,7 +1972,10 @@ const MaintenanceHub = () => {
                         header={
                           <Space>
                             <History size={14} style={{ color: "#6366f1" }} />
-                            <Text strong style={{ fontSize: 12, color: "#6366f1" }}>
+                            <Text
+                              strong
+                              style={{ fontSize: 12, color: "#6366f1" }}
+                            >
                               LỊCH SỬ SỬA CHỮA (
                               {
                                 history.filter(
@@ -1691,7 +1993,14 @@ const MaintenanceHub = () => {
                           </Space>
                         }
                       >
-                        <div style={{ maxHeight: 300, overflowY: "auto", paddingRight: 8, paddingTop: 8 }}>
+                        <div
+                          style={{
+                            maxHeight: 300,
+                            overflowY: "auto",
+                            paddingRight: 8,
+                            paddingTop: 8,
+                          }}
+                        >
                           <Timeline>
                             {history
                               .filter(
@@ -1720,27 +2029,58 @@ const MaintenanceHub = () => {
                                       background: "rgba(255,255,255,0.02)",
                                       padding: "10px",
                                       borderRadius: "8px",
-                                      border: "1px solid rgba(255,255,255,0.06)",
+                                      border:
+                                        "1px solid rgba(255,255,255,0.06)",
                                       marginBottom: 8,
                                     }}
                                   >
-                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        marginBottom: 4,
+                                      }}
+                                    >
                                       <Text strong style={{ fontSize: 12 }}>
-                                        {dayjs(h.maintenance_date).format("DD/MM/YY")}
+                                        {dayjs(h.maintenance_date).format(
+                                          "DD/MM/YY",
+                                        )}
                                       </Text>
-                                      <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>
+                                      <Tag
+                                        color="cyan"
+                                        style={{ fontSize: 10, margin: 0 }}
+                                      >
                                         {h.km_reading?.toLocaleString()} KM
                                       </Tag>
                                     </div>
-                                    <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 6 }}>
-                                      {h.MaintenanceItems?.map((i) => i.description).join(", ")}
+                                    <div
+                                      style={{
+                                        fontSize: 11,
+                                        opacity: 0.8,
+                                        marginBottom: 6,
+                                      }}
+                                    >
+                                      {h.MaintenanceItems?.map(
+                                        (i) => i.description,
+                                      ).join(", ")}
                                     </div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "flex-end",
+                                      }}
+                                    >
                                       <Button
                                         size="small"
                                         type="link"
-                                        style={{ fontSize: 10, height: 20, padding: 0 }}
-                                        onClick={() => handleEditFromBoard(h.id)}
+                                        style={{
+                                          fontSize: 10,
+                                          height: 20,
+                                          padding: 0,
+                                        }}
+                                        onClick={() =>
+                                          handleEditFromBoard(h.id)
+                                        }
                                       >
                                         Chi tiết &raquo;
                                       </Button>
@@ -1756,59 +2096,111 @@ const MaintenanceHub = () => {
 
                 {/* Smart Recommendation Alert */}
                 {(() => {
-                  const matched = (maintenanceRules || []).filter(r => kmReading >= r.min_km && kmReading <= r.max_km);
+                  const matched = (maintenanceRules || []).filter(
+                    (r) => kmReading >= r.min_km && kmReading <= r.max_km,
+                  );
                   if (matched.length === 0) return null;
-                  
+
                   return (
                     <div style={{ marginBottom: 20 }}>
-                      <Card 
-                        size="small" 
-                        style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)', border: '1px solid #f59e0b', borderRadius: '12px' }}
-                        styles={{ body: { padding: '16px' } }}
+                      <Card
+                        size="small"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                          border: "1px solid #f59e0b",
+                          borderRadius: "12px",
+                        }}
+                        styles={{ body: { padding: "16px" } }}
                       >
                         <Space align="start">
-                          <AlertCircle size={24} style={{ color: '#d97706', marginTop: 2 }} />
+                          <AlertCircle
+                            size={24}
+                            style={{ color: "#d97706", marginTop: 2 }}
+                          />
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <Text strong style={{ color: '#92400e', fontSize: 14 }}>
-                                GỢI Ý BẢO TRÌ THÔNG MINH CHO XE {Number(kmReading || 0).toLocaleString()} KM:
-                                </Text>
-                                <Button 
-                                    size="small" 
-                                    type="primary" 
-                                    icon={<PlusCircle size={14} />}
-                                    style={{ backgroundColor: '#d97706', borderColor: '#d97706', borderRadius: '6px', fontWeight: 'bold' }}
-                                    onClick={() => {
-                                        let updatedJobs = [...amberJobs];
-                                        matched.forEach(m => {
-                                        if (!updatedJobs.some(j => j.content === m.suggestion)) {
-                                            const emptyIdx = updatedJobs.findIndex(j => !j.content);
-                                            if (emptyIdx > -1) {
-                                            updatedJobs[emptyIdx] = { 
-                                                content: m.suggestion, 
-                                                date: m.time_gap_months ? dayjs().add(m.time_gap_months, 'month').toISOString() : null, 
-                                                km: "" 
-                                            };
-                                            } else {
-                                            updatedJobs.push({ 
-                                                content: m.suggestion, 
-                                                date: m.time_gap_months ? dayjs().add(m.time_gap_months, 'month').toISOString() : null, 
-                                                km: "" 
-                                            });
-                                            }
-                                        }
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <Text
+                                strong
+                                style={{ color: "#92400e", fontSize: 14 }}
+                              >
+                                GỢI Ý BẢO TRÌ THÔNG MINH CHO XE{" "}
+                                {Number(kmReading || 0).toLocaleString()} KM:
+                              </Text>
+                              <Button
+                                size="small"
+                                type="primary"
+                                icon={<PlusCircle size={14} />}
+                                style={{
+                                  backgroundColor: "#d97706",
+                                  borderColor: "#d97706",
+                                  borderRadius: "6px",
+                                  fontWeight: "bold",
+                                }}
+                                onClick={() => {
+                                  let updatedJobs = [...amberJobs];
+                                  matched.forEach((m) => {
+                                    if (
+                                      !updatedJobs.some(
+                                        (j) => j.content === m.suggestion,
+                                      )
+                                    ) {
+                                      const emptyIdx = updatedJobs.findIndex(
+                                        (j) => !j.content,
+                                      );
+                                      if (emptyIdx > -1) {
+                                        updatedJobs[emptyIdx] = {
+                                          content: m.suggestion,
+                                          date: m.time_gap_months
+                                            ? dayjs()
+                                                .add(m.time_gap_months, "month")
+                                                .toISOString()
+                                            : null,
+                                          km: "",
+                                        };
+                                      } else {
+                                        updatedJobs.push({
+                                          content: m.suggestion,
+                                          date: m.time_gap_months
+                                            ? dayjs()
+                                                .add(m.time_gap_months, "month")
+                                                .toISOString()
+                                            : null,
+                                          km: "",
                                         });
-                                        setAmberJobs(updatedJobs);
-                                        message.success('Đã tự động điền các hạng mục cần lưu ý!');
-                                    }}
-                                    >
-                                    ĐƯA VÀO PHIẾU NGAY
-                                </Button>
+                                      }
+                                    }
+                                  });
+                                  setAmberJobs(updatedJobs);
+                                  message.success(
+                                    "Đã tự động điền các hạng mục cần lưu ý!",
+                                  );
+                                }}
+                              >
+                                ĐƯA VÀO PHIẾU NGAY
+                              </Button>
                             </div>
                             <div>
                               {matched.map((m, i) => (
-                                <div key={i} style={{ fontSize: 13, color: '#b45309', marginBottom: 4 }}>
-                                  • {m.suggestion} {m.time_gap_months ? `(Gợi ý bảo trì sau ${m.time_gap_months} tháng)` : ''}
+                                <div
+                                  key={i}
+                                  style={{
+                                    fontSize: 13,
+                                    color: "#b45309",
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  • {m.suggestion}{" "}
+                                  {m.time_gap_months
+                                    ? `(Gợi ý bảo trì sau ${m.time_gap_months} tháng)`
+                                    : ""}
                                 </div>
                               ))}
                             </div>
@@ -1818,7 +2210,6 @@ const MaintenanceHub = () => {
                     </div>
                   );
                 })()}
-
 
                 {vehicleFound?.internal &&
                   vehicleFound.data?.gifts?.some(
@@ -1886,19 +2277,26 @@ const MaintenanceHub = () => {
                   }}
                 >
                   <Row gutter={12} align="middle" style={{ marginBottom: 10 }}>
-                    <Col span={14}><Text strong>TỔNG CỘNG CHƯA VAT:</Text></Col>
-                    <Col span={10} style={{ textAlign: 'right' }}>
+                    <Col span={14}>
+                      <Text strong>TỔNG CỘNG CHƯA VAT:</Text>
+                    </Col>
+                    <Col span={10} style={{ textAlign: "right" }}>
                       <Text strong style={{ fontSize: 16 }}>
-                        {items.reduce((s, i) => s + Number(i.total_price || 0), 0).toLocaleString()} đ
+                        {items
+                          .reduce((s, i) => s + Number(i.total_price || 0), 0)
+                          .toLocaleString()}{" "}
+                        đ
                       </Text>
                     </Col>
                   </Row>
-                  
+
                   <Row gutter={12} align="middle" style={{ marginBottom: 10 }}>
-                    <Col span={14}><Text strong>VAT (%):</Text></Col>
+                    <Col span={14}>
+                      <Text strong>VAT (%):</Text>
+                    </Col>
                     <Col span={10}>
                       <Form.Item name="vat_percent" noStyle initialValue={0}>
-                        <Select size="small" style={{ width: '100%' }}>
+                        <Select size="small" style={{ width: "100%" }}>
                           <Select.Option value={0}>0%</Select.Option>
                           <Select.Option value={8}>8%</Select.Option>
                           <Select.Option value={10}>10%</Select.Option>
@@ -1907,24 +2305,44 @@ const MaintenanceHub = () => {
                     </Col>
                   </Row>
 
-                  <Form.Item shouldUpdate={(prev, curr) => prev.vat_percent !== curr.vat_percent}>
+                  <Form.Item
+                    shouldUpdate={(prev, curr) =>
+                      prev.vat_percent !== curr.vat_percent
+                    }
+                  >
                     {() => {
-                      const vatP = form.getFieldValue('vat_percent') || 0;
-                      const subtotal = items.reduce((s, i) => s + Number(i.total_price || 0), 0);
+                      const vatP = form.getFieldValue("vat_percent") || 0;
+                      const subtotal = items.reduce(
+                        (s, i) => s + Number(i.total_price || 0),
+                        0,
+                      );
                       const vatAmt = (subtotal * vatP) / 100;
                       return (
                         <>
-                          <Row gutter={12} align="middle" style={{ marginBottom: 10 }}>
-                            <Col span={14}><Text>Tiền thuế VAT:</Text></Col>
-                            <Col span={10} style={{ textAlign: 'right' }}>
+                          <Row
+                            gutter={12}
+                            align="middle"
+                            style={{ marginBottom: 10 }}
+                          >
+                            <Col span={14}>
+                              <Text>Tiền thuế VAT:</Text>
+                            </Col>
+                            <Col span={10} style={{ textAlign: "right" }}>
                               <Text>{vatAmt.toLocaleString()} đ</Text>
                             </Col>
                           </Row>
-                          <Divider style={{ margin: '8px 0' }} />
+                          <Divider style={{ margin: "8px 0" }} />
                           <Row gutter={12} align="middle">
-                            <Col span={14}><Title level={4} style={{ margin: 0 }}>TỔNG THANH TOÁN:</Title></Col>
-                            <Col span={10} style={{ textAlign: 'right' }}>
-                              <Title level={4} style={{ margin: 0, color: '#ef4444' }}>
+                            <Col span={14}>
+                              <Title level={4} style={{ margin: 0 }}>
+                                TỔNG THANH TOÁN:
+                              </Title>
+                            </Col>
+                            <Col span={10} style={{ textAlign: "right" }}>
+                              <Title
+                                level={4}
+                                style={{ margin: 0, color: "#ef4444" }}
+                              >
                                 {(subtotal + vatAmt).toLocaleString()} đ
                               </Title>
                             </Col>
@@ -2262,7 +2680,17 @@ const MaintenanceHub = () => {
                           <Input placeholder="Tên công việc..." />
                         </AutoComplete>
                       ) : (
-                        <Text strong>{t}</Text>
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{t}</Text>
+                          {r.Part?.maintenance_suggestion && (
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 11, color: "#6366f1" }}
+                            >
+                              💡 {r.Part.maintenance_suggestion}
+                            </Text>
+                          )}
+                        </Space>
                       ),
                   },
                   {
@@ -2556,8 +2984,13 @@ const MaintenanceHub = () => {
               }
               style={{ marginTop: 24 }}
             >
-              <Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-                Các hạng mục cần lưu ý cho khách hàng ở lần ghé tiếp theo. Hệ thống sẽ tự động gợi ý nếu phát hiện thay dầu hoặc mốc Km đặc biệt.
+              <Text
+                type="secondary"
+                style={{ display: "block", marginBottom: 12 }}
+              >
+                Các hạng mục cần lưu ý cho khách hàng ở lần ghé tiếp theo. Hệ
+                thống sẽ tự động gợi ý nếu phát hiện thay dầu hoặc mốc Km đặc
+                biệt.
               </Text>
               <Table
                 dataSource={amberJobs}
@@ -2635,7 +3068,10 @@ const MaintenanceHub = () => {
                 block
                 icon={<PlusCircle size={16} />}
                 onClick={() =>
-                  setAmberJobs([...amberJobs, { content: "", date: null, km: "" }])
+                  setAmberJobs([
+                    ...amberJobs,
+                    { content: "", date: null, km: "" },
+                  ])
                 }
                 style={{ marginTop: 12 }}
               >
@@ -2962,19 +3398,28 @@ const MaintenanceHub = () => {
                         >
                           Nội dung sửa chữa:
                         </Text>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        <div
+                          style={{ display: "flex", flexWrap: "wrap", gap: 4 }}
+                        >
                           {h.MaintenanceItems?.map((i, iIdx) => (
                             <Tag
                               key={iIdx}
                               color={i.type === "PART" ? "blue" : "orange"}
                               style={{ fontSize: 11 }}
                             >
-                              {i.description || (i.type === "PART" ? `Phụ tùng #${i.part_id}` : "Dịch vụ")}
+                              {i.description ||
+                                (i.type === "PART"
+                                  ? `Phụ tùng #${i.part_id}`
+                                  : "Dịch vụ")}
                               {i.quantity > 1 ? ` x${i.quantity}` : ""}
                             </Tag>
                           ))}
-                          {(!h.MaintenanceItems || h.MaintenanceItems.length === 0) && (
-                            <Text type="secondary" style={{ fontSize: 11, fontStyle: "italic" }}>
+                          {(!h.MaintenanceItems ||
+                            h.MaintenanceItems.length === 0) && (
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 11, fontStyle: "italic" }}
+                            >
                               Không có chi tiết
                             </Text>
                           )}
@@ -2995,11 +3440,21 @@ const MaintenanceHub = () => {
                         </Text>
                         <Space>
                           {h.notes && (
-                            <Text style={{ fontSize: 11, fontStyle: "italic", color: "#a78bfa" }}>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontStyle: "italic",
+                                color: "#a78bfa",
+                              }}
+                            >
                               📝 {h.notes}
                             </Text>
                           )}
-                          <Button size="small" icon={<Printer size={12} />} onClick={() => handlePrint(h)}>
+                          <Button
+                            size="small"
+                            icon={<Printer size={12} />}
+                            onClick={() => handlePrint(h)}
+                          >
                             In phiếu
                           </Button>
                           <Button
@@ -3019,7 +3474,11 @@ const MaintenanceHub = () => {
                               title="Xóa phiếu DỊCH VỤ này? Tồn kho phụ tùng sẽ được hoàn lại."
                               onConfirm={() => handleDeleteOrder(h.id)}
                             >
-                              <Button size="small" danger icon={<Trash2 size={12} />} />
+                              <Button
+                                size="small"
+                                danger
+                                icon={<Trash2 size={12} />}
+                              />
                             </Popconfirm>
                           )}
                         </Space>

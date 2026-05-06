@@ -315,6 +315,49 @@ const PartPurchasesReportPage = () => {
           </Col>
         </Row>
       </Card>
+      
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+          <Col xs={24} md={6}>
+              <Card className="glass-card" style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                  <Space direction="vertical" size={0}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>TỔNG GIÁ TRỊ NHẬP KHO</Text>
+                      <Title level={4} style={{ margin: 0, color: '#10b981' }}>
+                          {purchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0).toLocaleString()} đ
+                      </Title>
+                  </Space>
+              </Card>
+          </Col>
+          <Col xs={24} md={6}>
+              <Card className="glass-card" style={{ background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+                  <Space direction="vertical" size={0}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>ĐÃ THANH TOÁN (CHI TIỀN)</Text>
+                      <Title level={4} style={{ margin: 0, color: '#3b82f6' }}>
+                          {purchases.reduce((sum, p) => sum + Number(p.paid_amount || 0), 0).toLocaleString()} đ
+                      </Title>
+                  </Space>
+              </Card>
+          </Col>
+          <Col xs={24} md={6}>
+              <Card className="glass-card" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                  <Space direction="vertical" size={0}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>CÒN NỢ NCC (CHƯA CHI)</Text>
+                      <Title level={4} style={{ margin: 0, color: '#ef4444' }}>
+                          {purchases.reduce((sum, p) => sum + (Number(p.total_amount || 0) - Number(p.paid_amount || 0)), 0).toLocaleString()} đ
+                      </Title>
+                  </Space>
+              </Card>
+          </Col>
+          <Col xs={24} md={6}>
+              <Card className="glass-card" style={{ background: 'rgba(100, 116, 139, 0.05)', border: '1px solid rgba(100, 116, 139, 0.1)' }}>
+                  <Space direction="vertical" size={0}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>TỔNG SỐ HÓA ĐƠN</Text>
+                      <Title level={4} style={{ margin: 0, color: '#64748b' }}>
+                          {purchases.length} hóa đơn
+                      </Title>
+                  </Space>
+              </Card>
+          </Col>
+      </Row>
 
       <Card className="glass-card" styles={{ body: { padding: '10px 24px 24px' } }}>
         <Tabs 
@@ -323,7 +366,15 @@ const PartPurchasesReportPage = () => {
             items={[
                 {
                     key: '1',
-                    label: <Space><LayoutList size={16} />Nhật ký hóa đơn</Space>,
+                    label: (
+                        <Space>
+                            <LayoutList size={16} />
+                            Nhật ký hóa đơn
+                            <Tag color="green" style={{ marginLeft: 8 }}>
+                                Tổng: {purchases.reduce((sum, p) => sum + Number(p.total_amount || 0), 0).toLocaleString()} đ
+                            </Tag>
+                        </Space>
+                    ),
                     children: (
                         <Table 
                             dataSource={purchases} 
@@ -389,6 +440,7 @@ const PartPurchasesReportPage = () => {
                     { title: 'Mã phụ tùng', dataIndex: ['Part', 'code'], key: 'code', render: v => <Text strong>{v}</Text> },
                     { title: 'Tên phụ tùng', dataIndex: ['Part', 'name'], key: 'name' },
                     { title: 'Số lượng', dataIndex: 'quantity', key: 'qty', align: 'right', render: (v, r) => <Text strong>{v} {r.unit}</Text> },
+                    { title: 'Vị trí', dataIndex: 'location', key: 'location', render: v => v || '-' },
                     { title: 'Đơn giá (DNP)', dataIndex: 'unit_price', key: 'price', align: 'right', render: v => Number(v).toLocaleString() },
                     { title: 'Thành tiền', dataIndex: 'total_price', key: 'total', align: 'right', render: v => <Text strong>{Number(v).toLocaleString()} đ</Text> }
                 ]}

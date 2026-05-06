@@ -448,7 +448,6 @@ const RetailSalePage = () => {
   <div class="row" style="margin-top:2px"><span class="lbl">Xe bao gồm :</span><span class="val">${sale.sale_type === "Đăng ký" ? "Đăng ký xe" : "Hồ sơ xe"}</span></div>
   <div class="row">
     <div class="col"><span class="lbl">Loại xe :</span><span class="val">${vehicle.VehicleType?.name || "................"}</span></div>
-    <div class="col"><span class="lbl">Màu :</span><span class="val">${vehicle.VehicleColor?.color_name || "................"}</span></div>
   </div>
   <div class="row">
     <div class="col"><span class="lbl">Số máy :</span><span class="val">${formatSN(sale.engine_no)}</span></div>
@@ -769,9 +768,6 @@ const RetailSalePage = () => {
               selectedVehicle && (
                 <div style={{ textAlign: "right" }}>
                   <Tag color="blue">{selectedVehicle.VehicleType?.name}</Tag>
-                  <Tag color="purple">
-                    {selectedVehicle.VehicleColor?.color_name}
-                  </Tag>
                 </div>
               )
             }
@@ -1280,7 +1276,9 @@ const RetailSalePage = () => {
                 style={{ marginTop: 16 }}
               >
                 {/* Hidden field to register gifts in the form */}
-                <Form.Item name="gifts" hidden><Input /></Form.Item>
+                <Form.Item name="gifts" hidden>
+                  <Input />
+                </Form.Item>
 
                 <div className="gift-selector-container">
                   <Form.Item
@@ -1603,7 +1601,42 @@ const RetailSalePage = () => {
               <Col xs={12} sm={8}>
                 <Form.Item
                   name="amount"
-                  label="Số tiền thu"
+                  label={
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        width: "200px",
+                      }}
+                    >
+                      <span>Số tiền thu</span>
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{
+                          padding: 0,
+                          height: "auto",
+                          color: "var(--primary-color)",
+                        }}
+                        onClick={() => {
+                          const price = Number(
+                            selectedSale?.sale_price ||
+                              selectedSale?.total_price ||
+                              0,
+                          );
+                          const paid = Number(selectedSale?.paid_amount || 0);
+                          const loan = selectedSale?.is_disbursed
+                            ? Number(selectedSale?.loan_amount || 0)
+                            : 0;
+                          paymentForm.setFieldsValue({
+                            amount: Math.max(0, price - paid - loan),
+                          });
+                        }}
+                      >
+                        Thu toàn bộ
+                      </Button>
+                    </div>
+                  }
                   rules={[{ required: true }]}
                 >
                   <InputNumber

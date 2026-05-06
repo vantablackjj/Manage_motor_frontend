@@ -147,7 +147,16 @@ const PartPage = () => {
             </Space>
         )
     },
-    { title: 'Tên phụ tùng', dataIndex: 'name', key: 'name' },
+    { title: 'Tên phụ tùng', dataIndex: 'name', key: 'name', render: (t, r) => (
+        <Space direction="vertical" size={0}>
+            <Text>{t}</Text>
+            {r.maintenance_suggestion && (
+                <Text type="secondary" style={{ fontSize: '11px', color: '#6366f1' }}>
+                    💡 {r.maintenance_suggestion}
+                </Text>
+            )}
+        </Space>
+    ) },
     { 
         title: 'Đơn vị/Quy đổi', 
         key: 'unit_info',
@@ -361,6 +370,14 @@ const PartPage = () => {
 
           <Form.Item label="Mô tả" name="description">
             <Input.TextArea rows={2} placeholder="Thông tin chi tiết về linh kiện..." />
+          </Form.Item>
+
+          <Form.Item 
+            label={<Text strong style={{ color: '#6366f1' }}>GỢI Ý BẢO TRÌ MẶC ĐỊNH</Text>} 
+            name="maintenance_suggestion"
+            tooltip="Nội dung này sẽ hiển thị khi thợ chọn phụ tùng này trong phiếu bảo trì."
+          >
+            <Input.TextArea rows={2} placeholder="VD: Khuyên khách kiểm tra định kỳ mỗi 8,000km hoặc 6 tháng..." />
           </Form.Item>
         </Form>
       </Modal>

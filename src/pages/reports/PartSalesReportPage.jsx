@@ -3,7 +3,7 @@ import {
   Table, Card, Typography, Row, Col, DatePicker, 
   Select, Button, Space, message, Input, Tag, Modal
 } from 'antd';
-import { Search, Printer, Download, LayoutList, Eye } from 'lucide-react';
+import { Search, Printer, Download, LayoutList, Eye, Box, ShoppingCart, TrendingUp, TrendingDown, Users } from 'lucide-react';
 import api from '../../utils/api';
 import dayjs from 'dayjs';
 import { exportToExcel } from '../../utils/excelExport';
@@ -16,6 +16,7 @@ const { RangePicker } = DatePicker;
 const PartSalesReportPage = () => {
     const [loading, setLoading] = useState(false);
     const [sales, setSales] = useState([]);
+    const [expenses, setExpenses] = useState([]);
     const [filters, setFilters] = useState({
         from_date: dayjs().startOf('month').format('YYYY-MM-DD'),
         to_date: dayjs().format('YYYY-MM-DD'),
@@ -44,8 +45,19 @@ const PartSalesReportPage = () => {
     const fetchReport = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/reports/parts/sales', { params: filters });
-            setSales(res.data);
+            const [salesRes, expenseRes] = await Promise.all([
+                api.get('/reports/parts/sales', { params: filters }),
+                api.get('/expenses', { 
+                    params: { 
+                        from_date: filters.from_date, 
+                        to_date: filters.to_date, 
+                        category: 'Chi phụ tùng',
+                        warehouse_id: filters.warehouse_id 
+                    } 
+                })
+            ]);
+            setSales(salesRes.data);
+            setExpenses(expenseRes.data);
         } catch (e) {
             message.error('Lỗi tải báo cáo: ' + e.message);
         } finally {
@@ -171,15 +183,58 @@ const PartSalesReportPage = () => {
         exportToExcel(exportData, `NhatKyBanPhuTung_${dayjs().format('YYYYMMDD')}`);
     };
 
+    const stats = {
+        totalParts: sales.reduce((sum, s) => sum + (s.PartSaleItems?.reduce((iSum, i) => iSum + Number(i.quantity), 0) || 0), 0),
+        totalVisits: sales.length,
+        totalIncome: sales.reduce((sum, s) => sum + Number(s.total_amount || 0), 0),
+        totalExpense: expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0)
+    };
+
     return (
         <div className="page-container">
             <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <Title level={2} className="gradient-text" style={{ margin: 0 }}>NHẬT KÝ BÁN LẺ PHỤ TÙNG</Title>
-                    <Text type="secondary">Xem lịch sử và in lại hóa đơn bán lẻ phụ tùng</Text>
+                    <Text type="secondary">Xem lịch sử và in lại hóa đơn lẻ, phiếu dịch vụ sửa chữa</Text>
                 </div>
                 <Button icon={<Download size={16} />} onClick={handleExport}>Xuất Excel</Button>
             </div>
+
+            {/* Summary Cards */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} md={6}>
+                    <Card className="stat-card" style={{ borderLeft: "4px solid #3b82f6" }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 12 }}><Box size={14} /> TỔNG PHỤ TÙNG BÁN</Text>
+                            <Title level={4} style={{ margin: 0 }}>{stats.totalParts.toLocaleString()} <small style={{ fontWeight: 400, fontSize: 12 }}>món</small></Title>
+                        </Space>
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card className="stat-card" style={{ borderLeft: "4px solid #10b981" }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 12 }}><Users size={14} /> LƯỢT KHÁCH VÀO XƯỞNG</Text>
+                            <Title level={4} style={{ margin: 0, color: '#10b981' }}>{stats.totalVisits.toLocaleString()} <small style={{ fontWeight: 400, fontSize: 12 }}>lượt</small></Title>
+                        </Space>
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card className="stat-card" style={{ borderLeft: "4px solid #ec4899" }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 12 }}><TrendingUp size={14} /> TỔNG THU (REVENUE)</Text>
+                            <Title level={4} style={{ margin: 0, color: '#ec4899' }}>{stats.totalIncome.toLocaleString()} đ</Title>
+                        </Space>
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card className="stat-card" style={{ borderLeft: "4px solid #f59e0b" }}>
+                        <Space direction="vertical" size={0}>
+                            <Text type="secondary" style={{ fontSize: 12 }}><TrendingDown size={14} /> CHI PHÍ (CHỈ PHỤ TÙNG)</Text>
+                            <Title level={4} style={{ margin: 0, color: '#f59e0b' }}>{stats.totalExpense.toLocaleString()} đ</Title>
+                        </Space>
+                    </Card>
+                </Col>
+            </Row>
 
             <Card className="glass-card" style={{ marginBottom: 24 }}>
                 <Row gutter={[16, 16]} align="bottom">

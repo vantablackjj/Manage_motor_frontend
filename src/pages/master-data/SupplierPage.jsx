@@ -60,6 +60,7 @@ const SupplierPage = () => {
       'Tên nhà cung cấp': s.name,
       'Địa chỉ': s.address,
       'Kiểu thanh toán': s.payment_type,
+      'Phân loại': s.type === 'VEHICLE' ? 'Xe máy' : (s.type === 'PART' ? 'Phụ tùng' : 'Cả hai'),
       'Ghi chú': s.notes || ''
     }));
 
@@ -108,12 +109,12 @@ const SupplierPage = () => {
     { title: 'Tên nhà cung cấp', dataIndex: 'name', key: 'name' },
     { title: 'Địa chỉ', dataIndex: 'address', key: 'address' },
     { 
-      title: 'Kiểu thanh toán', 
-      dataIndex: 'payment_type', 
-      key: 'payment_type',
+      title: 'Phân loại', 
+      dataIndex: 'type', 
+      key: 'type',
       render: (val) => (
-        <Tag color={val === 'Trả gộp' ? 'blue' : 'purple'}>
-          {val}
+        <Tag color={val === 'VEHICLE' ? 'blue' : (val === 'PART' ? 'purple' : 'gold')}>
+          {val === 'VEHICLE' ? 'Xe máy' : (val === 'PART' ? 'Phụ tùng' : 'Cả hai')}
         </Tag>
       )
     },
@@ -184,7 +185,7 @@ const SupplierPage = () => {
             form={form}
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{ payment_type: 'Trả gộp' }}
+            initialValues={{ payment_type: 'Trả gộp', type: 'BOTH' }}
           >
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={10}>
@@ -205,11 +206,20 @@ const SupplierPage = () => {
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={6}>
+              <Col xs={24} sm={4}>
                 <Form.Item label="Kiểu thanh toán" name="payment_type" rules={[{ required: true }]}>
                   <Select size="large">
                     <Option value="Trả gộp">Trả gộp</Option>
                     <Option value="Trả theo lô">Trả theo lô</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={4}>
+                <Form.Item label="Phân loại" name="type" rules={[{ required: true }]}>
+                  <Select size="large">
+                    <Option value="VEHICLE">Xe máy</Option>
+                    <Option value="PART">Phụ tùng</Option>
+                    <Option value="BOTH">Cả hai</Option>
                   </Select>
                 </Form.Item>
               </Col>

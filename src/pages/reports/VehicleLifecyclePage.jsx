@@ -110,8 +110,10 @@ const VehicleLifecyclePage = () => {
   const [selectedBatchInfo, setSelectedBatchInfo] = useState(null);
 
   // Payment States (copied from RetailSaleReportPage & WholesaleSalePage)
-  const [retailPaymentModalVisible, setRetailPaymentModalVisible] = useState(false);
-  const [wholesalePaymentModalVisible, setWholesalePaymentModalVisible] = useState(false);
+  const [retailPaymentModalVisible, setRetailPaymentModalVisible] =
+    useState(false);
+  const [wholesalePaymentModalVisible, setWholesalePaymentModalVisible] =
+    useState(false);
   const [selectedSaleForPayment, setSelectedSaleForPayment] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -259,6 +261,7 @@ const VehicleLifecyclePage = () => {
       "Nhà cung cấp": v.supplier_name,
       "Người Nhập": v.importer_name,
       "Loại Xe": v.type_name,
+      Màu: v.color_name || "-",
       "Số Máy": v.engine_no,
       "Số Khung": v.chassis_no,
       "Kênh Bán": v.sale_channel || "-",
@@ -419,13 +422,17 @@ const VehicleLifecyclePage = () => {
 
       // Sắp xếp dữ liệu ngay khi nhận từ API: Mới nhất lên đầu (Descending)
       const sortedData = [...data].sort((a, b) => {
-        const dateA = isPurchaseOnly ? (a.import_date || a.sale_date) : (a.sale_date || a.import_date);
-        const dateB = isPurchaseOnly ? (b.import_date || b.sale_date) : (b.sale_date || b.import_date);
-        
+        const dateA = isPurchaseOnly
+          ? a.import_date || a.sale_date
+          : a.sale_date || a.import_date;
+        const dateB = isPurchaseOnly
+          ? b.import_date || b.sale_date
+          : b.sale_date || b.import_date;
+
         if (!dateA && !dateB) return 0;
         if (!dateA) return 1;
         if (!dateB) return -1;
-        
+
         return dayjs(dateB).unix() - dayjs(dateA).unix();
       });
 
@@ -458,7 +465,7 @@ const VehicleLifecyclePage = () => {
     }
   };
 
-const getTimelineIcon = (type) => {
+  const getTimelineIcon = (type) => {
     switch (type) {
       case "PURCHASE":
         return <PlusCircle size={18} color="#10b981" />;
@@ -477,43 +484,47 @@ const getTimelineIcon = (type) => {
   const processGroupedData = () => {
     if (!results || results.length === 0) return [];
 
-    // Lấy giá trị bộ lọc từ form
     const vals = form.getFieldsValue();
-    const isSpecificSearch = vals.customer_name || vals.supplier_id || vals.engine_no || vals.chassis_no || vals.created_by;
-
-    // Nếu tra cứu theo người (khách hàng/nhà cung cấp/nhân viên) hoặc theo số máy/khung cụ thể,
-    // hoặc không phải chế độ bán buôn/nhập hàng, thì hiển thị chi tiết lẻ luôn theo yêu cầu
-    if (isSpecificSearch || (!isWholesaleOnly && !isPurchaseOnly)) return results;
+    // Chỉ bỏ qua gộp nếu tra cứu chính xác theo Số máy / Số khung
+    const isPreciseSearch = vals.engine_no || vals.chassis_no;
+    if (isPreciseSearch) return results;
 
     const groups = {};
     const others = [];
 
     results.forEach(v => {
-      // Logic gộp mới: Nếu là bán sỉ, gộp theo Ngày + Tên khách hàng
-      const key = isWholesaleOnly 
-        ? (v.customer_name && v.customer_name !== 'N/A' ? `${dayjs(v.sale_date).format('YYYY-MM-DD')}_${v.customer_name}` : v.wholesale_sale_id)
-        : (isPurchaseOnly ? v.purchase_id : null);
+      // Logic gộp: Nếu là hàng bán sỉ hoặc nhập theo lô thì mới gộp
+      const hasLot = v.wholesale_sale_id || v.purchase_id;
+      const isWholesaleItem = !!v.wholesale_sale_id;
+      const isPurchaseItem = !!v.purchase_id && !v.sale_date; // Chỉ gộp nhập hàng nếu chưa bán (hoặc tùy logix)
       
-      if (!key) {
-        others.push({ ...v, key: v.id });
-        return;
-      }
+      // Tuy nhiên khách muốn gộp theo Ngày + Khách/NCC
+      const dateKey = dayjs(v.sale_date || v.import_date).format('YYYY-MM-DD');
+      const partnerId = v.customer_id || v.supplier_id;
+      const partnerName = v.customer_name || v.supplier_name;
 
-      if (!groups[key]) {
-        groups[key] = {
-          id: key,
-          key: `group-${key}`,
-          isGroup: true,
-          sale_date: v.sale_date,
-          import_date: v.import_date,
-          supplier_name: v.supplier_name,
-          customer_name: v.customer_name,
-          sale_channel: v.sale_channel,
-          type_name: `LÔ HÀNG (${(isWholesaleOnly && v.customer_name && v.customer_name !== 'N/A') ? v.customer_name : (v.supplier_name || v.customer_name)})`,
-          children: []
-        };
+      // Chỉ gộp nếu có Lô và có Đối tác + Ngày
+      if (hasLot && (partnerId || partnerName) && dateKey) {
+        const key = `${partnerId || partnerName}_${dateKey}`;
+        
+        if (!groups[key]) {
+          groups[key] = {
+            id: v.wholesale_sale_id || v.purchase_id || key,
+            key: `group-${key}`,
+            isGroup: true,
+            sale_date: v.sale_date,
+            import_date: v.import_date,
+            supplier_name: v.supplier_name,
+            customer_name: v.customer_name,
+            sale_channel: v.sale_channel,
+            type_name: `LÔ HÀNG (${v.customer_name && v.customer_name !== 'N/A' ? v.customer_name : (v.supplier_name || 'N/A')})`,
+            children: []
+          };
+        }
+        groups[key].children.push({ ...v, key: v.id });
+      } else {
+        others.push({ ...v, key: v.id });
       }
-      groups[key].children.push({ ...v, key: v.id });
     });
 
     // Tính toán tổng cho mỗi nhóm
@@ -522,14 +533,16 @@ const getTimelineIcon = (type) => {
         const total_price = g.children.reduce((sum, item) => sum + Number(item.sale_price || 0), 0);
         const purchase_total = g.children.reduce((sum, item) => sum + Number(item.purchase_price || 0), 0);
         
+        // Kiểm tra xem đây là lô nhập hay lô bán để hiển thị giá phù hợp
+        const isWholesaleGroup = g.children.some(x => !!x.wholesale_sale_id);
+
         return {
             ...g,
             engine_no: <Tag color="blue" style={{ fontWeight: 'bold' }}>LÔ GIAO DỊCH: {count} XE</Tag>,
             chassis_no: 'Click để xem danh sách',
-            sale_price: isWholesaleOnly ? total_price : (isPurchaseOnly ? purchase_total : 0),
+            sale_price: isWholesaleGroup ? total_price : purchase_total,
             purchase_price: purchase_total,
             count,
-            // Xóa children để Ant Design Table không hiện dấu (+)
             batch_items: g.children,
             children: undefined 
         };
@@ -540,84 +553,100 @@ const getTimelineIcon = (type) => {
 
   const handleOpenPaymentModal = async (record) => {
     try {
-        setPaymentLoading(true);
-        setSelectedSaleForPayment(record);
-        setPaymentHistory([]);
-        
-        if (record.isGroup || record.sale_channel === 'Bán Sỉ (Lô)') {
-            // WHOLESALE
-            const saleId = record.isGroup ? record.id : record.wholesale_sale_id;
-            const res = await api.get(`/wholesale-sales/${saleId}/details`);
-            // The API returns { vehicles: [], payments: [] }
-            setPaymentHistory(res.data.payments || []);
-            setWholesalePaymentModalVisible(true);
-            
-            paymentForm.setFieldsValue({
-                payment_date: dayjs(),
-                amount: Math.max(0, Number(record.sale_price || 0) - Number(record.paid_amount_vnd || 0)),
-                payment_method: 'Tiền mặt'
-            });
-        } else {
-            // RETAIL
-            const saleId = record.retail_sale_id || record.id;
-            const res = await api.get(`/retail-sales/${saleId}/payments`);
-            setPaymentHistory(res.data);
-            setRetailPaymentModalVisible(true);
-            
-            const price = Number(record.sale_price || 0);
-            const paid = Number(record.paid_amount || 0);
-            const isDisbursed = record.is_disbursed === true || record.is_disbursed === 1;
-            const loan = isDisbursed ? Number(record.loan_amount || 0) : 0;
-            
-            paymentForm.setFieldsValue({
-                payment_date: dayjs(),
-                amount: Math.max(0, price - paid - loan),
-                payment_method: 'Tiền mặt'
-            });
-        }
+      setPaymentLoading(true);
+      setSelectedSaleForPayment(record);
+      setPaymentHistory([]);
+
+      if (record.isGroup || record.sale_channel === "Bán Sỉ (Lô)") {
+        // WHOLESALE
+        const saleId = record.isGroup ? record.id : record.wholesale_sale_id;
+        const res = await api.get(`/wholesale-sales/${saleId}/details`);
+        // The API returns { vehicles: [], payments: [] }
+        setPaymentHistory(res.data.payments || []);
+        setWholesalePaymentModalVisible(true);
+
+        paymentForm.setFieldsValue({
+          payment_date: dayjs(),
+          amount: Math.max(
+            0,
+            Number(record.sale_price || 0) -
+              Number(record.paid_amount_vnd || 0),
+          ),
+          payment_method: "Tiền mặt",
+        });
+      } else {
+        // RETAIL
+        const saleId = record.retail_sale_id || record.id;
+        const res = await api.get(`/retail-sales/${saleId}/payments`);
+        setPaymentHistory(res.data);
+        setRetailPaymentModalVisible(true);
+
+        const price = Number(record.sale_price || 0);
+        const paid = Number(record.paid_amount || 0);
+        const isDisbursed =
+          record.is_disbursed === true || record.is_disbursed === 1;
+        const loan = isDisbursed ? Number(record.loan_amount || 0) : 0;
+
+        paymentForm.setFieldsValue({
+          payment_date: dayjs(),
+          amount: Math.max(0, price - paid - loan),
+          payment_method: "Tiền mặt",
+        });
+      }
     } catch (error) {
-        message.error("Không thể tải lịch sử thanh toán: " + error.message);
+      message.error("Không thể tải lịch sử thanh toán: " + error.message);
     } finally {
-        setPaymentLoading(false);
+      setPaymentLoading(false);
     }
   };
 
   const onAddPayment = async (values) => {
     try {
       setPaymentLoading(true);
-      const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
-      
+      const isWholesale =
+        selectedSaleForPayment.isGroup ||
+        selectedSaleForPayment.sale_channel === "Bán Sỉ (Lô)";
+
       if (isWholesale) {
-          const saleId = selectedSaleForPayment.isGroup ? selectedSaleForPayment.id : selectedSaleForPayment.wholesale_sale_id;
-          await api.post('/wholesale-sales/payment', {
-            wholesale_sale_id: saleId,
-            amount_paid_vnd: values.amount,
-            payment_date: values.payment_date.format('YYYY-MM-DD'),
-            notes: values.notes
-          });
-          message.success('Đã ghi nhận tiền trả từ khách buôn!');
-          
-          // Refresh Full Data
-          const res = await api.get(`/wholesale-sales/${saleId}/details`);
-          setPaymentHistory(res.data.payments || []);
-          setSelectedSaleForPayment(prev => ({ ...prev, ...res.data })); // Update paid_amount_vnd
+        const saleId = selectedSaleForPayment.isGroup
+          ? selectedSaleForPayment.id
+          : selectedSaleForPayment.wholesale_sale_id;
+        await api.post("/wholesale-sales/payment", {
+          wholesale_sale_id: saleId,
+          amount_paid_vnd: values.amount,
+          payment_date: values.payment_date.format("YYYY-MM-DD"),
+          notes: values.notes,
+        });
+        message.success("Đã ghi nhận tiền trả từ khách buôn!");
+
+        // Refresh Full Data
+        const res = await api.get(`/wholesale-sales/${saleId}/details`);
+        setPaymentHistory(res.data.payments || []);
+        setSelectedSaleForPayment((prev) => ({ ...prev, ...res.data })); // Update paid_amount_vnd
       } else {
-          const saleId = selectedSaleForPayment.retail_sale_id || selectedSaleForPayment.id;
-          await api.post("/retail-payments", {
-            ...values,
-            retail_sale_id: saleId,
-            payment_date: values.payment_date.format('YYYY-MM-DD'),
-          });
-          message.success("Đã thêm khoản thanh toán bán lẻ!");
-          
-          // Refresh Payments and calculate new total for UI
-          const res = await api.get(`/retail-sales/${saleId}/payments`);
-          setPaymentHistory(res.data);
-          
-          const newTotalPaid = res.data.reduce((sum, p) => sum + Number(p.amount), 0);
-          setSelectedSaleForPayment(prev => ({ ...prev, paid_amount: newTotalPaid }));
+        const saleId =
+          selectedSaleForPayment.retail_sale_id || selectedSaleForPayment.id;
+        await api.post("/retail-payments", {
+          ...values,
+          retail_sale_id: saleId,
+          payment_date: values.payment_date.format("YYYY-MM-DD"),
+        });
+        message.success("Đã thêm khoản thanh toán bán lẻ!");
+
+        // Refresh Payments and calculate new total for UI
+        const res = await api.get(`/retail-sales/${saleId}/payments`);
+        setPaymentHistory(res.data);
+
+        const newTotalPaid = res.data.reduce(
+          (sum, p) => sum + Number(p.amount),
+          0,
+        );
+        setSelectedSaleForPayment((prev) => ({
+          ...prev,
+          paid_amount: newTotalPaid,
+        }));
       }
-      
+
       paymentForm.resetFields(["amount", "notes"]);
       handleSearch(form.getFieldsValue()); // Refresh main table to update debt numbers
     } catch (error) {
@@ -630,23 +659,35 @@ const getTimelineIcon = (type) => {
   const handleDeletePayment = async (id) => {
     try {
       setPaymentLoading(true);
-      const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
-      
+      const isWholesale =
+        selectedSaleForPayment.isGroup ||
+        selectedSaleForPayment.sale_channel === "Bán Sỉ (Lô)";
+
       if (isWholesale) {
-          await api.delete(`/wholesale-payments/${id}`);
-          const saleId = selectedSaleForPayment.isGroup ? selectedSaleForPayment.id : selectedSaleForPayment.wholesale_sale_id;
-          const res = await api.get(`/wholesale-sales/${saleId}/details`);
-          setPaymentHistory(res.data.payments || []);
-          setSelectedSaleForPayment(prev => ({ ...prev, ...res.data }));
+        await api.delete(`/wholesale-payments/${id}`);
+        const saleId = selectedSaleForPayment.isGroup
+          ? selectedSaleForPayment.id
+          : selectedSaleForPayment.wholesale_sale_id;
+        const res = await api.get(`/wholesale-sales/${saleId}/details`);
+        setPaymentHistory(res.data.payments || []);
+        setSelectedSaleForPayment((prev) => ({ ...prev, ...res.data }));
       } else {
-          await api.delete(`/retail-payments/${id}`);
-          const res = await api.get(`/retail-sales/${selectedSaleForPayment.id}/payments`);
-          setPaymentHistory(res.data);
-          
-          const newTotalPaid = res.data.reduce((sum, p) => sum + Number(p.amount), 0);
-          setSelectedSaleForPayment(prev => ({ ...prev, paid_amount: newTotalPaid }));
+        await api.delete(`/retail-payments/${id}`);
+        const res = await api.get(
+          `/retail-sales/${selectedSaleForPayment.id}/payments`,
+        );
+        setPaymentHistory(res.data);
+
+        const newTotalPaid = res.data.reduce(
+          (sum, p) => sum + Number(p.amount),
+          0,
+        );
+        setSelectedSaleForPayment((prev) => ({
+          ...prev,
+          paid_amount: newTotalPaid,
+        }));
       }
-      
+
       message.success("Đã xóa khoản thanh toán");
       handleSearch(form.getFieldsValue());
     } catch (error) {
@@ -664,16 +705,21 @@ const getTimelineIcon = (type) => {
 
   const handlePrintBatch = (record) => {
     if (!record || !record.batch_items) return;
-    
+
     const items = record.batch_items;
-    const warehouse = warehouses.find(w => w.id === (items[0]?.warehouse_id || record.warehouse_id)) || {};
+    const warehouse =
+      warehouses.find(
+        (w) => w.id === (items[0]?.warehouse_id || record.warehouse_id),
+      ) || {};
     const date = dayjs(record.sale_date || record.import_date);
 
     // Fix redundant "HEAD" text
-    const rawWhName = (warehouse.warehouse_name || 'HỆ THỐNG').toUpperCase();
-    const displayWhName = `HEAD ${rawWhName.replace(/^(HEAD\s*)+/i, '').trim()}`;
+    const rawWhName = (warehouse.warehouse_name || "HỆ THỐNG").toUpperCase();
+    const displayWhName = `HEAD ${rawWhName.replace(/^(HEAD\s*)+/i, "").trim()}`;
 
-    const title = isWholesaleOnly ? "PHIẾU XUẤT KHO LÔ HÀNG" : "PHIẾU NHẬP KHO LÔ HÀNG";
+    const title = isWholesaleOnly
+      ? "PHIẾU XUẤT KHO LÔ HÀNG"
+      : "PHIẾU NHẬP KHO LÔ HÀNG";
     const partnerLabel = isWholesaleOnly ? "Khách hàng" : "Nhà cung cấp";
     const priceLabel = isWholesaleOnly ? "Giá bán" : "Giá nhập";
 
@@ -709,19 +755,19 @@ const getTimelineIcon = (type) => {
         <div class="header">
           <div class="logo-side">
             ${displayWhName}
-            <div style="font-weight: normal; font-size: 10pt;">${warehouse.address || ''}</div>
+            <div style="font-weight: normal; font-size: 10pt;">${warehouse.address || ""}</div>
           </div>
           <div style="text-align: right; font-weight: bold;">
-            Ngày: ${date.format('DD/MM/YYYY')}
+            Ngày: ${date.format("DD/MM/YYYY")}
           </div>
         </div>
         
         <div class="title">${title}</div>
         
         <div class="info-sec">
-          <div class="info-item"><span class="info-label">${partnerLabel}:</span> <span class="info-value">${(isWholesaleOnly && record.customer_name && record.customer_name !== 'N/A') ? record.customer_name : (record.supplier_name || record.customer_name || 'N/A')}</span></div>
+          <div class="info-item"><span class="info-label">${partnerLabel}:</span> <span class="info-value">${isWholesaleOnly && record.customer_name && record.customer_name !== "N/A" ? record.customer_name : record.supplier_name || record.customer_name || "N/A"}</span></div>
           <div class="info-item"><span class="info-label">Mã giao dịch:</span> <span class="info-value">${record.id}</span></div>
-          <div class="info-item" style="width: 100%; margin-top: 2px;"><span class="info-label">Ghi chú:</span> <span>${record.notes || ''}</span></div>
+          <div class="info-item" style="width: 100%; margin-top: 2px;"><span class="info-label">Ghi chú:</span> <span>${record.notes || ""}</span></div>
         </div>
         
         <table>
@@ -732,20 +778,24 @@ const getTimelineIcon = (type) => {
               <th style="width: 100px;">Số Máy</th>
               <th style="width: 150px;">Số Khung</th>
               <th style="text-align: right; width: 90px;">${priceLabel}</th>
-              ${!isWholesaleOnly ? '<th style="width: 60px;">Kiểm tra</th>' : ''}
+              ${!isWholesaleOnly ? '<th style="width: 60px;">Kiểm tra</th>' : ""}
             </tr>
           </thead>
           <tbody>
-            ${items.map((v, i) => `
+            ${items
+              .map(
+                (v, i) => `
               <tr>
                 <td style="text-align: center;">${i + 1}</td>
-                <td>${v.type_name} (${v.color_name})</td>
+                <td>${v.type_name}</td>
                 <td style="text-align: center;"><b>${v.engine_no}</b></td>
                 <td style="text-align: center;"><b>${v.chassis_no}</b></td>
-                <td style="text-align: right;"><b>${Number(isWholesaleOnly ? (v.sale_price || v.purchase_price) : v.purchase_price).toLocaleString()}</b></td>
-                ${!isWholesaleOnly ? '<td></td>' : ''}
+                <td style="text-align: right;"><b>${Number(isWholesaleOnly ? v.sale_price || v.purchase_price : v.purchase_price).toLocaleString()}</b></td>
+                ${!isWholesaleOnly ? "<td></td>" : ""}
               </tr>
-            `).join('')}
+            `,
+              )
+              .join("")}
           </tbody>
         </table>
         
@@ -773,190 +823,283 @@ const getTimelineIcon = (type) => {
       </html>
     `;
 
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open("", "_blank");
     printWindow.document.write(html);
     printWindow.document.close();
   };
 
   const columns = [
-    { 
-        title: 'Trạng thái',
-        width: 100,
-        render: (_, record) => {
-            if (record.isGroup) return <Tag color="processing" icon={<Box size={12} />}>GIAO DỊCH LÔ</Tag>;
-            return record.sale_date ? <Tag color="warning">Đã bán</Tag> : <Tag color="success">Trong kho</Tag>;
-        }
-    },
-    { 
-        title: 'Ngày', 
-        sorter: (a, b) => {
-            const dateA = isPurchaseOnly ? (a.import_date || a.sale_date) : (a.sale_date || a.import_date);
-            const dateB = isPurchaseOnly ? (b.import_date || b.sale_date) : (b.sale_date || b.import_date);
-            return dayjs(dateA || 0).unix() - dayjs(dateB || 0).unix();
-        },
-        render: (_, record) => {
-            const hasError = record.import_date && record.sale_date && dayjs(record.import_date).isAfter(dayjs(record.sale_date));
-            const date = isPurchaseOnly ? (record.import_date || record.sale_date) : (record.sale_date || record.import_date);
-            const dayjsDate = dayjs(date);
-            const isValidDate = date && dayjsDate.isValid() && dayjsDate.year() >= 2010;
-            
-            return (
-                <Space>
-                    {isValidDate ? dayjsDate.format('DD/MM/YYYY') : 'N/A'}
-                    {hasError && (
-                        <Tooltip title={`Lỗi logic: Ngày nhập (${dayjs(record.import_date).format('DD/MM/YYYY')}) sau ngày bán!`}>
-                            <AlertCircle size={14} color="#ef4444" />
-                        </Tooltip>
-                    )}
-                </Space>
-            );
-        }
-    },
-    { 
-        title: isPurchaseOnly ? 'Chủ hàng (Nhà CC)' : 'Chủ hàng / Khách hàng', 
-        width: 180,
-        ellipsis: true, 
-        render: (text, record) => {
-            if (record.isGroup) {
-                if (isWholesaleOnly && record.customer_name && record.customer_name !== 'N/A') return record.customer_name;
-                return record.supplier_name || record.customer_name;
-            }
-            
-            // Nếu là trang Mua xe, ưu tiên hiện Chủ hàng (Người bán cho mình)
-            if (isPurchaseOnly) {
-                return <Text strong>{record.supplier_name}</Text>;
-            }
-            // Các trang khác (Bán lẻ/Bán sỉ) hiện tên Khách hàng
-            if (record.customer_name && record.customer_name !== 'N/A') return record.customer_name;
-            return record.supplier_name;
-        }
-    },
-    { title: 'Người thực hiện', dataIndex: 'importer_name', width: 150 },
-    { 
-        title: 'Thông tin xe / Lô', 
-        dataIndex: 'type_name',
-        render: (text, record) => (
-            <div>
-                {record.isGroup ? <span style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>{text}</span> : text}
-                {!record.isGroup && record.color_name && (
-                    <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>
-                        Màu: <Tag color="purple" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{record.color_name}</Tag>
-                    </div>
-                )}
-            </div>
-        )
-    },
-    { title: 'Số Máy', dataIndex: 'engine_no', className: 'strong-text' },
-    { title: 'Số Khung', dataIndex: 'chassis_no', className: 'strong-text' },
-    { 
-        title: 'Kênh Bán', 
-        dataIndex: 'sale_channel',
-        render: c => c ? <Tag color={c === 'Bán Lẻ' ? 'gold' : c === 'Bán Sỉ (Lô)' ? 'purple' : 'default'}>{c}</Tag> : '-'
-    },
-    { 
-        title: 'Thành tiền / Giá xe', 
-        render: (_, record) => {
-            // Nếu là xem lô nhập (isPurchaseOnly), ưu tiên hiện Giá Nhập (purchase_price)
-            // Nếu là xem lô bán (isWholesaleOnly/isRetailOnly), ưu tiên hiện Giá Bán (sale_price)
-            const showPurchasePrice = isPurchaseOnly;
-            // Nếu là trang Bán Lẻ, chỉ hiện sale_price. Nếu là trang tra cứu chung, ưu tiên sale_price cho xe đã bán.
-            const primaryPrice = showPurchasePrice ? record.purchase_price : (record.sale_channel === 'Bán Lẻ' ? record.sale_price : (record.sale_price || record.purchase_price));
-            const secondaryPrice = showPurchasePrice ? record.sale_price : null;
-
-            if (record.isGroup) {
-                return (
-                    <div>
-                        <div style={{ fontSize: 13, fontWeight: 'bold', color: showPurchasePrice ? '#3b82f6' : '#10b981' }}>
-                            {Number(primaryPrice).toLocaleString()} đ
-                        </div>
-                        <Text type="secondary" style={{ fontSize: 10 }}>Tổng cộng {record.count} xe</Text>
-                    </div>
-                );
-            }
-
-            return (
-                <div style={{ fontSize: 13 }}>
-                    <div style={{ fontWeight: 'bold' }}>{Number(primaryPrice).toLocaleString()} đ</div>
-                    {Number(record.purchase_price) === 0 && (
-                        <Tag color="warning" style={{ fontSize: 9, padding: '0 4px', marginTop: 2 }}>XE MƯỢN</Tag>
-                    )}
-                    {Number(record.sale_price) === 0 && record.sale_date && (
-                        <Tag color="error" style={{ fontSize: 9, padding: '0 4px', marginTop: 2 }}>TRẢ XE</Tag>
-                    )}
-                    {secondaryPrice && record.sale_date && (
-                        <Text type="warning" style={{ fontSize: 10 }}>Bán: {Number(secondaryPrice).toLocaleString()} đ</Text>
-                    )}
-                    {showPurchasePrice && !record.sale_date && (
-                        <Tag color="success" style={{ fontSize: 9, padding: '0 4px', marginTop: 2 }}>Giá gốc</Tag>
-                    )}
-                </div>
-            );
-        }
+    {
+      title: "Trạng thái",
+      width: 100,
+      render: (_, record) => {
+        if (record.isGroup)
+          return (
+            <Tag color="processing" icon={<Box size={12} />}>
+              GIAO DỊCH LÔ
+            </Tag>
+          );
+        return record.sale_date ? (
+          <Tag color="warning">Đã bán</Tag>
+        ) : (
+          <Tag color="success">Trong kho</Tag>
+        );
+      },
     },
     {
-        title: 'Thao tác',
-        fixed: 'right',
-        width: 100,
-        render: (_, record) => (
-            <Space>
-                {record.isGroup ? (
-                    <Button 
-                        type="primary" 
-                        ghost
-                        icon={<Printer size={16} />} 
-                        onClick={(e) => { e.stopPropagation(); handlePrintBatch(record); }}
-                        title="In phiếu lô hàng"
-                    />
-                ) : (
-                    <>
-                        {isAdmin && (
-                            <Button 
-                                type="default" 
-                                shape="circle"
-                                icon={<Edit2 size={16} />} 
-                                onClick={(e) => handleEditClick(record, e)}
-                                title="Sửa dữ liệu sai"
-                            />
-                        )}
-                        <Button 
-                            type="primary" 
-                            shape="circle"
-                            icon={<History size={16} />} 
-                            onClick={(e) => { e.stopPropagation(); showLifecycle(record.id); }}
-                            title="Xem vòng đời"
-                        />
-                        {record.sale_date && (
-                             <Button 
-                                type="text" 
-                                icon={<Banknote size={18} />} 
-                                onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(record); }}
-                                title="Lịch sử & Thu tiền"
-                                style={{ color: '#10b981' }}
-                            />
-                        )}
-                    </>
-                )}
-                {record.isGroup && record.sale_date && (
-                     <Button 
-                        type="text" 
-                        icon={<Banknote size={18} />} 
-                        onClick={(e) => { e.stopPropagation(); handleOpenPaymentModal(record); }}
-                        title="Lịch sử & Thu tiền nợ lô"
-                        style={{ color: '#10b981' }}
-                    />
-                )}
-            </Space>
-        )
-    }
+      title: "Ngày",
+      sorter: (a, b) => {
+        const dateA = isPurchaseOnly
+          ? a.import_date || a.sale_date
+          : a.sale_date || a.import_date;
+        const dateB = isPurchaseOnly
+          ? b.import_date || b.sale_date
+          : b.sale_date || b.import_date;
+        return dayjs(dateA || 0).unix() - dayjs(dateB || 0).unix();
+      },
+      render: (_, record) => {
+        const hasError =
+          record.import_date &&
+          record.sale_date &&
+          dayjs(record.import_date).isAfter(dayjs(record.sale_date));
+        const date = isPurchaseOnly
+          ? record.import_date || record.sale_date
+          : record.sale_date || record.import_date;
+        const dayjsDate = dayjs(date);
+        const isValidDate =
+          date && dayjsDate.isValid() && dayjsDate.year() >= 2010;
+
+        return (
+          <Space>
+            {isValidDate ? dayjsDate.format("DD/MM/YYYY") : "N/A"}
+            {hasError && (
+              <Tooltip
+                title={`Lỗi logic: Ngày nhập (${dayjs(record.import_date).format("DD/MM/YYYY")}) sau ngày bán!`}
+              >
+                <AlertCircle size={14} color="#ef4444" />
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: isPurchaseOnly ? "Chủ hàng (Nhà CC)" : "Chủ hàng / Khách hàng",
+      width: 180,
+      ellipsis: true,
+      render: (text, record) => {
+        if (record.isGroup) {
+          if (
+            isWholesaleOnly &&
+            record.customer_name &&
+            record.customer_name !== "N/A"
+          )
+            return record.customer_name;
+          return record.supplier_name || record.customer_name;
+        }
+
+        // Nếu là trang Mua xe, ưu tiên hiện Chủ hàng (Người bán cho mình)
+        if (isPurchaseOnly) {
+          return <Text strong>{record.supplier_name}</Text>;
+        }
+        // Các trang khác (Bán lẻ/Bán sỉ) hiện tên Khách hàng
+        if (record.customer_name && record.customer_name !== "N/A")
+          return record.customer_name;
+        return record.supplier_name;
+      },
+    },
+    { title: "Người thực hiện", dataIndex: "importer_name", width: 150 },
+    {
+      title: "Thông tin xe / Lô",
+      dataIndex: "type_name",
+      render: (text, record) => (
+        <div>
+          {record.isGroup ? (
+            <span style={{ color: "var(--primary-color)", fontWeight: "bold" }}>
+              {text}
+            </span>
+          ) : (
+            text
+          )}
+        </div>
+      ),
+    },
+    {
+      title: "Màu",
+      dataIndex: "color_name",
+      render: (text, record) =>
+        !record.isGroup && <Tag color="blue">{text || "-"}</Tag>,
+    },
+    { title: "Số Máy", dataIndex: "engine_no", className: "strong-text" },
+    { title: "Số Khung", dataIndex: "chassis_no", className: "strong-text" },
+    {
+      title: "Kênh Bán",
+      dataIndex: "sale_channel",
+      render: (c) =>
+        c ? (
+          <Tag
+            color={
+              c === "Bán Lẻ"
+                ? "gold"
+                : c === "Bán Sỉ (Lô)"
+                  ? "purple"
+                  : "default"
+            }
+          >
+            {c}
+          </Tag>
+        ) : (
+          "-"
+        ),
+    },
+    {
+      title: "Thành tiền / Giá xe",
+      render: (_, record) => {
+        // Nếu là xem lô nhập (isPurchaseOnly), ưu tiên hiện Giá Nhập (purchase_price)
+        // Nếu là xem lô bán (isWholesaleOnly/isRetailOnly), ưu tiên hiện Giá Bán (sale_price)
+        const showPurchasePrice = isPurchaseOnly;
+        // Nếu là trang Bán Lẻ, chỉ hiện sale_price. Nếu là trang tra cứu chung, ưu tiên sale_price cho xe đã bán.
+        const primaryPrice = showPurchasePrice
+          ? record.purchase_price
+          : record.sale_channel === "Bán Lẻ"
+            ? record.sale_price
+            : record.sale_price || record.purchase_price;
+        const secondaryPrice = showPurchasePrice ? record.sale_price : null;
+
+        if (record.isGroup) {
+          return (
+            <div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: "bold",
+                  color: showPurchasePrice ? "#3b82f6" : "#10b981",
+                }}
+              >
+                {Number(primaryPrice).toLocaleString()} đ
+              </div>
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                Tổng cộng {record.count} xe
+              </Text>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ fontWeight: "bold" }}>
+              {Number(primaryPrice).toLocaleString()} đ
+            </div>
+            {Number(record.purchase_price) === 0 && (
+              <Tag
+                color="warning"
+                style={{ fontSize: 9, padding: "0 4px", marginTop: 2 }}
+              >
+                XE MƯỢN
+              </Tag>
+            )}
+            {Number(record.sale_price) === 0 && record.sale_date && (
+              <Tag
+                color="error"
+                style={{ fontSize: 9, padding: "0 4px", marginTop: 2 }}
+              >
+                TRẢ XE
+              </Tag>
+            )}
+            {secondaryPrice && record.sale_date && (
+              <Text type="warning" style={{ fontSize: 10 }}>
+                Bán: {Number(secondaryPrice).toLocaleString()} đ
+              </Text>
+            )}
+            {showPurchasePrice && !record.sale_date && (
+              <Tag
+                color="success"
+                style={{ fontSize: 9, padding: "0 4px", marginTop: 2 }}
+              >
+                Giá gốc
+              </Tag>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: "Thao tác",
+      fixed: "right",
+      width: 100,
+      render: (_, record) => (
+        <Space>
+          {record.isGroup ? (
+            <Button
+              type="primary"
+              ghost
+              icon={<Printer size={16} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrintBatch(record);
+              }}
+              title="In phiếu lô hàng"
+            />
+          ) : (
+            <>
+              {isAdmin && (
+                <Button
+                  type="default"
+                  shape="circle"
+                  icon={<Edit2 size={16} />}
+                  onClick={(e) => handleEditClick(record, e)}
+                  title="Sửa dữ liệu sai"
+                />
+              )}
+              <Button
+                type="primary"
+                shape="circle"
+                icon={<History size={16} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  showLifecycle(record.id);
+                }}
+                title="Xem vòng đời"
+              />
+              {record.sale_date && (
+                <Button
+                  type="text"
+                  icon={<Banknote size={18} />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenPaymentModal(record);
+                  }}
+                  title="Lịch sử & Thu tiền"
+                  style={{ color: "#10b981" }}
+                />
+              )}
+            </>
+          )}
+          {record.isGroup && record.sale_date && (
+            <Button
+              type="text"
+              icon={<Banknote size={18} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenPaymentModal(record);
+              }}
+              title="Lịch sử & Thu tiền nợ lô"
+              style={{ color: "#10b981" }}
+            />
+          )}
+        </Space>
+      ),
+    },
   ];
 
   // Tính toán tóm tắt cho Cards
   const stats = {
-      total: results.length,
-      sold: results.filter(v => v.sale_date).length,
-      soldRetail: results.filter(v => v.sale_channel === 'Bán Lẻ').length,
-      soldWholesale: results.filter(v => v.sale_channel === 'Bán Sỉ (Lô)').length,
-      inStock: results.filter(v => !v.sale_date).length
+    total: results.length,
+    sold: results.filter((v) => v.sale_date).length,
+    soldRetail: results.filter((v) => v.sale_channel === "Bán Lẻ").length,
+    soldWholesale: results.filter((v) => v.sale_channel === "Bán Sỉ (Lô)")
+      .length,
+    inStock: results.filter((v) => !v.sale_date).length,
   };
 
   return (
@@ -1009,7 +1152,8 @@ const getTimelineIcon = (type) => {
             <Statistic
               title={
                 <Space>
-                  <Box size={14} /> {isPurchaseOnly ? "Tổng xe trong lô" : "Tổng số xe tìm thấy"}
+                  <Box size={14} />{" "}
+                  {isPurchaseOnly ? "Tổng xe trong lô" : "Tổng số xe tìm thấy"}
                 </Space>
               }
               value={stats.total}
@@ -1191,23 +1335,34 @@ const getTimelineIcon = (type) => {
                   <Col span={8}>
                     <Form.Item label="Trạng thái tồn kho" name="status">
                       <Select placeholder="Tất cả trạng thái" allowClear>
-                        <Select.Option value="In Stock">Trong kho (Chưa bán)</Select.Option>
+                        <Select.Option value="In Stock">
+                          Trong kho (Chưa bán)
+                        </Select.Option>
                         <Select.Option value="Sold">Đã bán</Select.Option>
-                        <Select.Option value="Transferring">Đang chuyển kho</Select.Option>
+                        <Select.Option value="Transferring">
+                          Đang chuyển kho
+                        </Select.Option>
                       </Select>
                     </Form.Item>
                   </Col>
 
                   <Col span={8}>
-                    <Form.Item label="Kênh Bán (Đầu ra)" name="sale_channel_filter">
+                    <Form.Item
+                      label="Kênh Bán (Đầu ra)"
+                      name="sale_channel_filter"
+                    >
                       <Select placeholder="Tất cả kênh bán" allowClear>
-                        <Select.Option value="RETAIL">Bán Lẻ (Khách lẻ)</Select.Option>
-                        <Select.Option value="WHOLESALE">Bán Sỉ (Đại lý/Lô)</Select.Option>
+                        <Select.Option value="RETAIL">
+                          Bán Lẻ (Khách lẻ)
+                        </Select.Option>
+                        <Select.Option value="WHOLESALE">
+                          Bán Sỉ (Đại lý/Lô)
+                        </Select.Option>
                       </Select>
                     </Form.Item>
                   </Col>
 
-                   <Col span={12}>
+                  <Col span={12}>
                     <Form.Item label="Số Máy (Engine No)" name="engine_no">
                       <AutoComplete
                         options={options}
@@ -1362,102 +1517,122 @@ const getTimelineIcon = (type) => {
       </Card>
 
       <Card className="glass-card table-card">
-         <Table 
-            columns={columns} 
-            dataSource={processGroupedData()} 
-            loading={loading}
-            rowKey="key"
-            scroll={{ x: 1300 }}
-            pagination={{ pageSize: 10, showSizeChanger: true }}
-            onRow={(record) => ({
-                onClick: () => {
-                    if (record.isGroup) {
-                        showBatchDetail(record);
-                    } else {
-                        showLifecycle(record.id);
-                    }
-                },
-                style: { cursor: 'pointer' }
-            })}
-            rowClassName={(record) => {
-                if (record.isGroup) return 'group-row';
-                return record.sale_date ? 'sold-row' : 'instock-row';
-            }}
-         />
+        <Table
+          columns={columns}
+          dataSource={processGroupedData()}
+          loading={loading}
+          rowKey="key"
+          scroll={{ x: 1300 }}
+          pagination={{ pageSize: 10, showSizeChanger: true }}
+          onRow={(record) => ({
+            onClick: () => {
+              if (record.isGroup) {
+                showBatchDetail(record);
+              } else {
+                showLifecycle(record.id);
+              }
+            },
+            style: { cursor: "pointer" },
+          })}
+          rowClassName={(record) => {
+            if (record.isGroup) return "group-row";
+            return record.sale_date ? "sold-row" : "instock-row";
+          }}
+        />
       </Card>
 
       {/* Modal Chi tiết Lô hàng */}
       <Modal
         title={
-            <Space>
-                <Box size={20} color="var(--primary-color)" />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <Text strong>CHI TIẾT LÔ HÀNG</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        {isPurchaseOnly ? selectedBatchInfo?.supplier_name : (selectedBatchInfo?.customer_name || selectedBatchInfo?.supplier_name)}
-                    </Text>
-                </div>
-            </Space>
+          <Space>
+            <Box size={20} color="var(--primary-color)" />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <Text strong>CHI TIẾT LÔ HÀNG</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {isPurchaseOnly
+                  ? selectedBatchInfo?.supplier_name
+                  : selectedBatchInfo?.customer_name ||
+                    selectedBatchInfo?.supplier_name}
+              </Text>
+            </div>
+          </Space>
         }
         open={batchVisible}
         onCancel={() => setBatchVisible(false)}
-        footer={[<Button key="close" onClick={() => setBatchVisible(false)}>Đóng</Button>]}
+        footer={[
+          <Button key="close" onClick={() => setBatchVisible(false)}>
+            Đóng
+          </Button>,
+        ]}
         width={1000}
         className="glass-modal"
       >
-          <Table 
-            dataSource={selectedBatchData}
-            rowKey="id"
-            pagination={false}
-            scroll={{ y: 400 }}
-            rowClassName={(r) => r.sale_date ? 'sold-row' : 'instock-row'}
-            columns={[
-                { 
-                    title: 'Trạng thái', 
-                    dataIndex: 'sale_channel',
-                    width: 120,
-                    render: (c, r) => (
-                        <Tag color={r.sale_date ? 'warning' : 'success'}>
-                            {c === 'Chưa bán' ? 'Tồn kho' : c}
-                        </Tag>
-                    )
-                },
-                { title: 'Loại xe', dataIndex: 'type_name' },
-                { title: 'Số Máy', dataIndex: 'engine_no', className: 'strong-text' },
-                { title: 'Số Khung', dataIndex: 'chassis_no', className: 'strong-text' },
-                { 
-                    title: 'Giá tiền', 
-                    render: (r) => (
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)' }}>
-                                Nhập: {Number(r.purchase_price || 0).toLocaleString()} đ
-                            </div>
-                            {r.sale_date && (
-                                <div style={{ fontWeight: 'bold', color: '#f59e0b' }}>
-                                    Bán: {Number(r.sale_price || 0).toLocaleString()} đ
-                                </div>
-                            )}
-                            {!r.sale_date && (
-                                <div style={{ fontWeight: 'bold', color: '#10b981' }}>
-                                    Gốc: {Number(r.purchase_price || 0).toLocaleString()} đ
-                                </div>
-                            )}
-                        </div>
-                    )
-                },
-                {
-                    title: 'Thao tác',
-                    width: 70,
-                    render: (r) => (
-                        <Button 
-                            icon={<History size={16} />} 
-                            type="text" 
-                            onClick={() => showLifecycle(r.id)}
-                        />
-                    )
-                }
-            ]}
-          />
+        <Table
+          dataSource={selectedBatchData}
+          rowKey="id"
+          pagination={false}
+          scroll={{ y: 400 }}
+          rowClassName={(r) => (r.sale_date ? "sold-row" : "instock-row")}
+          columns={[
+            {
+              title: "Trạng thái",
+              dataIndex: "sale_channel",
+              width: 120,
+              render: (c, r) => (
+                <Tag color={r.sale_date ? "warning" : "success"}>
+                  {c === "Chưa bán" ? "Tồn kho" : c}
+                </Tag>
+              ),
+            },
+            { title: "Loại xe", dataIndex: "type_name" },
+            {
+              title: "Màu",
+              dataIndex: "color_name",
+              render: (c) => <Tag color="blue">{c || "-"}</Tag>,
+            },
+            {
+              title: "Số Máy",
+              dataIndex: "engine_no",
+              className: "strong-text",
+            },
+            {
+              title: "Số Khung",
+              dataIndex: "chassis_no",
+              className: "strong-text",
+            },
+            {
+              title: "Giá tiền",
+              render: (r) => (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <div style={{ fontSize: 11, color: "rgba(0,0,0,0.45)" }}>
+                    Nhập: {Number(r.purchase_price || 0).toLocaleString()} đ
+                  </div>
+                  {r.sale_date && (
+                    <div style={{ fontWeight: "bold", color: "#f59e0b" }}>
+                      Bán: {Number(r.sale_price || 0).toLocaleString()} đ
+                    </div>
+                  )}
+                  {!r.sale_date && (
+                    <div style={{ fontWeight: "bold", color: "#10b981" }}>
+                      Gốc: {Number(r.purchase_price || 0).toLocaleString()} đ
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+            {
+              title: "Thao tác",
+              width: 70,
+              render: (r) => (
+                <Button
+                  icon={<History size={16} />}
+                  type="text"
+                  onClick={() => showLifecycle(r.id)}
+                />
+              ),
+            },
+          ]}
+        />
       </Modal>
 
       {/* Modal Sửa dữ liệu sai (Chỉ Admin) */}
@@ -1574,9 +1749,9 @@ const getTimelineIcon = (type) => {
                   <Title level={4} style={{ margin: 0 }}>
                     {detailData.vehicle.VehicleType?.name}
                   </Title>
-                  <Text type="secondary">
-                    {detailData.vehicle.VehicleColor?.color_name}
-                  </Text>
+                  <Tag color="purple">
+                    {detailData.vehicle.VehicleColor?.color_name || "N/A"}
+                  </Tag>
                 </div>
               </div>
               <Divider style={{ margin: "12px 0" }} />
@@ -1626,9 +1801,15 @@ const getTimelineIcon = (type) => {
                       <Space>
                         <Text strong>{item.title}</Text>
                         {/* Cảnh báo lỗi logic ngày tháng */}
-                        {detailData.vehicle.Purchase?.purchase_date && item.type !== 'PURCHASE' && dayjs(detailData.vehicle.Purchase.purchase_date).isAfter(dayjs(item.date)) && (
-                            <Tag color="error" icon={<AlertCircle size={12} />}>Lỗi: Trước ngày nhập</Tag>
-                        )}
+                        {detailData.vehicle.Purchase?.purchase_date &&
+                          item.type !== "PURCHASE" &&
+                          dayjs(
+                            detailData.vehicle.Purchase.purchase_date,
+                          ).isAfter(dayjs(item.date)) && (
+                            <Tag color="error" icon={<AlertCircle size={12} />}>
+                              Lỗi: Trước ngày nhập
+                            </Tag>
+                          )}
                       </Space>
                     </div>
                     <Paragraph
@@ -1702,120 +1883,278 @@ const getTimelineIcon = (type) => {
       <Modal
         title={
           <Space>
-            <Banknote size={18} /> Thu tiền {selectedSaleForPayment?.sale_channel === 'Bán Sỉ (Lô)' ? 'Khách buôn' : 'Khách lẻ'}: {selectedSaleForPayment?.customer_name}
+            <Banknote size={18} /> Thu tiền{" "}
+            {selectedSaleForPayment?.sale_channel === "Bán Sỉ (Lô)"
+              ? "Khách buôn"
+              : "Khách lẻ"}
+            : {selectedSaleForPayment?.customer_name}
           </Space>
         }
         open={retailPaymentModalVisible || wholesalePaymentModalVisible}
-        onCancel={() => { setRetailPaymentModalVisible(false); setWholesalePaymentModalVisible(false); }}
+        onCancel={() => {
+          setRetailPaymentModalVisible(false);
+          setWholesalePaymentModalVisible(false);
+        }}
         footer={null}
         width={700}
         className="glass-modal"
       >
         {selectedSaleForPayment && (
           <div style={{ marginBottom: 20 }}>
-             <Row gutter={16}>
-                <Col span={12}>
-                    <Card size="small" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                        <div style={{ fontSize: 12, opacity: 0.6 }}>Tổng giá bán:</div>
-                        <div style={{ fontSize: 18, fontWeight: 'bold', color: 'var(--primary-color)' }}>{Number(selectedSaleForPayment.sale_price || 0).toLocaleString()} đ</div>
-                    </Card>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Card
+                  size="small"
+                  style={{ background: "rgba(255,255,255,0.02)" }}
+                >
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>
+                    Tổng giá bán:
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "bold",
+                      color: "var(--primary-color)",
+                    }}
+                  >
+                    {Number(
+                      selectedSaleForPayment.sale_price || 0,
+                    ).toLocaleString()}{" "}
+                    đ
+                  </div>
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card
+                  size="small"
+                  style={{ background: "rgba(255,255,255,0.02)" }}
+                >
+                  <div
+                    style={{ fontSize: 12, opacity: 0.6, textAlign: "right" }}
+                  >
+                    Đã trả:
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "bold",
+                      color: "#10b981",
+                      textAlign: "right",
+                    }}
+                  >
+                    {(() => {
+                      const isWholesale =
+                        selectedSaleForPayment.isGroup ||
+                        selectedSaleForPayment.sale_channel === "Bán Sỉ (Lô)";
+                      let totalPaidFromHistory = 0;
+
+                      if (paymentHistory && paymentHistory.length > 0) {
+                        totalPaidFromHistory = paymentHistory.reduce(
+                          (sum, p) =>
+                            sum +
+                            Number(
+                              isWholesale
+                                ? p.amount_paid_vnd || 0
+                                : p.amount || 0,
+                            ),
+                          0,
+                        );
+                      } else {
+                        // Sử dụng dữ liệu đã được Backend tính toán sẵn (paid_amount)
+                        totalPaidFromHistory = Number(
+                          selectedSaleForPayment.paid_amount || 0,
+                        );
+                      }
+
+                      if (isWholesale)
+                        return totalPaidFromHistory.toLocaleString();
+
+                      // For Retail: Cộng thêm tiền giải ngân nếu đã chốt
+                      const isDisbursed =
+                        selectedSaleForPayment.is_disbursed === true ||
+                        selectedSaleForPayment.is_disbursed === 1;
+                      const loan = isDisbursed
+                        ? Number(selectedSaleForPayment.loan_amount || 0)
+                        : 0;
+                      return (totalPaidFromHistory + loan).toLocaleString();
+                    })()}{" "}
+                    đ
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+
+            <Divider orientation="left" plain>
+              <span style={{ fontSize: 12, opacity: 0.7, fontWeight: "bold" }}>
+                THÊM KHOẢN THU (KHÁCH TRẢ THÊM)
+              </span>
+            </Divider>
+
+            <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    label="Ngày thu"
+                    name="payment_date"
+                    rules={[{ required: true }]}
+                  >
+                    <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                  </Form.Item>
                 </Col>
-                <Col span={12}>
-                    <Card size="small" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                        <div style={{ fontSize: 12, opacity: 0.6, textAlign: 'right' }}>Đã trả:</div>
-                        <div style={{ fontSize: 18, fontWeight: 'bold', color: '#10b981', textAlign: 'right' }}>
-                            {(() => {
-                                const isWholesale = selectedSaleForPayment.isGroup || selectedSaleForPayment.sale_channel === 'Bán Sỉ (Lô)';
-                                let totalPaidFromHistory = 0;
-                                
-                                if (paymentHistory && paymentHistory.length > 0) {
-                                    totalPaidFromHistory = paymentHistory.reduce((sum, p) => 
-                                        sum + Number(isWholesale ? (p.amount_paid_vnd || 0) : (p.amount || 0)), 0
-                                    );
-                                } else {
-                                    // Sử dụng dữ liệu đã được Backend tính toán sẵn (paid_amount)
-                                    totalPaidFromHistory = Number(selectedSaleForPayment.paid_amount || 0);
-                                }
-
-                                if (isWholesale) return totalPaidFromHistory.toLocaleString();
-
-                                // For Retail: Cộng thêm tiền giải ngân nếu đã chốt
-                                const isDisbursed = selectedSaleForPayment.is_disbursed === true || selectedSaleForPayment.is_disbursed === 1;
-                                const loan = isDisbursed ? Number(selectedSaleForPayment.loan_amount || 0) : 0;
-                                return (totalPaidFromHistory + loan).toLocaleString();
-                            })()} đ
-                        </div>
-                    </Card>
-                </Col>
-             </Row>
-
-             <Divider orientation="left" plain><span style={{ fontSize: 12, opacity: 0.7, fontWeight: 'bold' }}>THÊM KHOẢN THU (KHÁCH TRẢ THÊM)</span></Divider>
-
-             <Form form={paymentForm} layout="vertical" onFinish={onAddPayment}>
-                <Row gutter={16}>
-                    <Col span={8}>
-                        <Form.Item label="Ngày thu" name="payment_date" rules={[{required: true}]}>
-                            <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
-                        </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                        <Form.Item label="Số tiền thu" name="amount" rules={[{required: true}]}>
-                            <InputNumber 
-                                style={{ width: '100%' }} 
-                                formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                parser={v => v.replace(/\$\s?|(,*)/g, '')}
-                            />
-                        </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                        <Form.Item label="Hình thức" name="payment_method">
-                            <Select>
-                                <Select.Option value="Tiền mặt">Tiền mặt</Select.Option>
-                                <Select.Option value="Chuyển khoản">Chuyển khoản</Select.Option>
-                            </Select>
-                        </Form.Item>
-                    </Col>
-                </Row>
-                <Form.Item label="Ghi chú" name="notes">
-                    <Input placeholder="Nhập ghi chú..." />
-                </Form.Item>
-                <Button type="primary" icon={<Save size={16} />} block htmlType="submit" loading={paymentLoading}>
-                    XÁC NHẬN THU TIỀN
-                </Button>
-             </Form>
-
-             <Divider orientation="left" plain><span style={{ fontSize: 12, opacity: 0.7, fontWeight: 'bold' }}>CHI TIẾT CÁC LẦN TRẢ TIỀN</span></Divider>
-             
-             <Table 
-                dataSource={paymentHistory}
-                pagination={false}
-                size="small"
-                rowKey="id"
-                loading={paymentLoading}
-                columns={[
-                    { title: 'NGÀY', dataIndex: 'payment_date', render: d => dayjs(d).format('DD/MM/YYYY') },
-                    { 
-                        title: 'SỐ TIỀN', 
-                        dataIndex: wholesalePaymentModalVisible ? 'amount_paid_vnd' : 'amount', 
-                        render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text> 
-                    },
-                    { title: 'HÌNH THỨC', dataIndex: 'payment_method', render: v => v || 'Tiền mặt' },
-                    { title: 'GHI CHÚ', dataIndex: 'notes' },
-                    { 
-                        title: '', 
-                        render: (_, record) => (
-                            <Popconfirm title="Xóa khoản thu này?" onConfirm={() => handleDeletePayment(record.id)}>
-                                <Button 
-                                    type="text" 
-                                    danger 
-                                    icon={<Trash2 size={14} />} 
-                                    size="small" 
-                                />
-                            </Popconfirm>
-                        ) 
+                <Col span={8}>
+                  <Form.Item
+                    label={
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          width: "180px",
+                        }}
+                      >
+                        <span>Số tiền thu</span>
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{
+                            padding: 0,
+                            height: "auto",
+                            color: "#10b981",
+                          }}
+                          onClick={() => {
+                            const isWholesale =
+                              selectedSaleForPayment.isGroup ||
+                              selectedSaleForPayment.sale_channel ===
+                                "Bán Sỉ (Lô)";
+                            let totalPaidFromHistory = 0;
+                            if (paymentHistory && paymentHistory.length > 0) {
+                              totalPaidFromHistory = paymentHistory.reduce(
+                                (sum, p) =>
+                                  sum +
+                                  Number(
+                                    isWholesale
+                                      ? p.amount_paid_vnd || 0
+                                      : p.amount || 0,
+                                  ),
+                                0,
+                              );
+                            } else {
+                              totalPaidFromHistory = Number(
+                                selectedSaleForPayment.paid_amount || 0,
+                              );
+                            }
+                            const isDisbursed =
+                              selectedSaleForPayment.is_disbursed === true ||
+                              selectedSaleForPayment.is_disbursed === 1;
+                            const loan =
+                              !isWholesale && isDisbursed
+                                ? Number(
+                                    selectedSaleForPayment.loan_amount || 0,
+                                  )
+                                : 0;
+                            const price = Number(
+                              selectedSaleForPayment.sale_price || 0,
+                            );
+                            const remaining = Math.max(
+                              0,
+                              price - totalPaidFromHistory - loan,
+                            );
+                            paymentForm.setFieldsValue({ amount: remaining });
+                          }}
+                        >
+                          Thu toàn bộ
+                        </Button>
+                      </div>
                     }
-                ]}
-             />
+                    name="amount"
+                    rules={[{ required: true }]}
+                  >
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Hình thức" name="payment_method">
+                    <Select>
+                      <Select.Option value="Tiền mặt">Tiền mặt</Select.Option>
+                      <Select.Option value="Chuyển khoản">
+                        Chuyển khoản
+                      </Select.Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item label="Ghi chú" name="notes">
+                <Input placeholder="Nhập ghi chú..." />
+              </Form.Item>
+              <Button
+                type="primary"
+                icon={<Save size={16} />}
+                block
+                htmlType="submit"
+                loading={paymentLoading}
+              >
+                XÁC NHẬN THU TIỀN
+              </Button>
+            </Form>
+
+            <Divider orientation="left" plain>
+              <span style={{ fontSize: 12, opacity: 0.7, fontWeight: "bold" }}>
+                CHI TIẾT CÁC LẦN TRẢ TIỀN
+              </span>
+            </Divider>
+
+            <Table
+              dataSource={paymentHistory}
+              pagination={false}
+              size="small"
+              rowKey="id"
+              loading={paymentLoading}
+              columns={[
+                {
+                  title: "NGÀY",
+                  dataIndex: "payment_date",
+                  render: (d) => dayjs(d).format("DD/MM/YYYY"),
+                },
+                {
+                  title: "SỐ TIỀN",
+                  dataIndex: wholesalePaymentModalVisible
+                    ? "amount_paid_vnd"
+                    : "amount",
+                  render: (v) => (
+                    <Text strong style={{ color: "#10b981" }}>
+                      {Number(v).toLocaleString()} đ
+                    </Text>
+                  ),
+                },
+                {
+                  title: "HÌNH THỨC",
+                  dataIndex: "payment_method",
+                  render: (v) => v || "Tiền mặt",
+                },
+                { title: "GHI CHÚ", dataIndex: "notes" },
+                {
+                  title: "",
+                  render: (_, record) => (
+                    <Popconfirm
+                      title="Xóa khoản thu này?"
+                      onConfirm={() => handleDeletePayment(record.id)}
+                    >
+                      <Button
+                        type="text"
+                        danger
+                        icon={<Trash2 size={14} />}
+                        size="small"
+                      />
+                    </Popconfirm>
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
       </Modal>

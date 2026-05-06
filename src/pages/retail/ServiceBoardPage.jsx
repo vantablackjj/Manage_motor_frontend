@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
 import { Row, Col, Card, Tag, Typography, Button, Space, message, Select, Badge, Empty } from 'antd';
 import { LayoutGrid, Wrench, User, Bike, Clock, PlusCircle, Expand } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +13,26 @@ const ServiceBoardPage = () => {
     const [warehouses, setWarehouses] = useState([]);
     const [selectedWarehouse, setSelectedWarehouse] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [now, setNow] = useState(dayjs());
+
+    // Cập nhật đồng hồ mỗi giây
+    useEffect(() => {
+        const tick = setInterval(() => setNow(dayjs()), 1000);
+        return () => clearInterval(tick);
+    }, []);
+
+    const getDurationText = (startTime) => {
+        if (!startTime) return '...';
+        let diffInSeconds = Math.floor((now.valueOf() - dayjs(startTime).valueOf()) / 1000);
+        if (diffInSeconds < 0) diffInSeconds = 0;
+        if (diffInSeconds < 60) return `${diffInSeconds} giây`;
+        const diffInMinutes = Math.floor(diffInSeconds / 60);
+        const hours = Math.floor(diffInMinutes / 60);
+        const minutes = diffInMinutes % 60;
+        const seconds = diffInSeconds % 60;
+        if (hours > 0) return `${hours} giờ ${minutes} phút ${seconds} giây`;
+        return `${minutes} phút ${seconds} giây`;
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -119,8 +140,12 @@ const ServiceBoardPage = () => {
                                             <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}>
                                                 <Clock size={14} style={{ marginRight: 8, opacity: 0.7 }} />
                                                 <Text style={{ fontSize: 13 }}>
-                                                    Sửa được: <Text strong color="warning">
-                                                        {activeOrder.createdAt ? dayjs(activeOrder.createdAt).fromNow(true) : '...'}
+                                                     Sửa được: <Text strong style={{ color: '#f59e0b' }}>
+                                                        {getDurationText(
+                                                            activeOrder.received_at ||
+                                                            activeOrder.maintenance_date ||
+                                                            activeOrder.createdAt
+                                                        )}
                                                     </Text>
                                                 </Text>
                                             </div>

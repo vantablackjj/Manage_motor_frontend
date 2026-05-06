@@ -66,7 +66,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
     }
 
     // Require warehouse selection for types that need it
-    const warehouseRequiredTypes = ['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases'];
+    const warehouseRequiredTypes = ['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases', 'part_locations'];
     if (warehouseRequiredTypes.includes(type) && !selectedWarehouseId) {
       message.warning('Vui lòng chọn kho trước khi tải lên!');
       return;
@@ -130,6 +130,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
     part_retail_sales: ['Ngày bán', 'Tên khách', 'Số điện thoại', 'Mã PT', 'Số lượng', 'Đơn giá', 'Đã trả', 'VAT (%)', 'Tên kho'],
     part_wholesale_sales: ['Ngày bán', 'Mã khách hàng', 'Mã PT', 'Số lượng', 'Giá sỉ', 'Đã trả', 'VAT (%)', 'Tên kho'],
     part_purchases: ['SỐ PO', 'SỐ HOÁ ĐƠN HVN', 'MÃ PHỤ TÙNG', 'TÊN PHỤ TÙNG', 'SỐ LƯỢNG', 'DNP', 'THÀNH TIỀN CHƯA VAT', 'VAT', 'VAT THÀNH TIỀN', 'NGÀY NHẬP', 'TÊN KHO', 'TÊN NCC'],
+    part_locations: ['Mã phụ tùng', 'Vị trí', 'Tên kho'],
     maintenance: ['Ngày bảo trì', 'Tên khách', 'Số điện thoại', 'Biển số', 'Số máy', 'Loại dịch vụ', 'Mã phụ tùng', 'Số lượng', 'Đơn giá', 'Tổng tiền', 'Đã trả', 'Tên kho']
 
   };
@@ -214,7 +215,7 @@ const ImportExcelModal = ({ visible, onCancel, onSuccess, type, title, extraData
                         File của bạn cần có các cột tiêu đề sau (chính xác tên):
                     </Text>
                     <Space>
-                        {(['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases', 'maintenance'].includes(type)) && (
+                        {(['retail_sales', 'wholesale_sales', 'part_inventory', 'part_purchases', 'purchases', 'maintenance', 'part_locations'].includes(type)) && (
                             <Select
                                 placeholder="Lọc xe theo kho..."
                                 style={{ width: 170 }}

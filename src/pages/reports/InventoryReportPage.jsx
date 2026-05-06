@@ -260,7 +260,7 @@ const InventoryReportPage = () => {
     { title: 'Tên Kho', dataIndex: ['Warehouse', 'warehouse_name'], key: 'warehouse', render: v => <Tag color="blue">{v || 'N/A'}</Tag>, responsive: ['md'] },
     { title: 'Chủ Hàng', dataIndex: ['Purchase', 'Supplier', 'name'], key: 'supplier', render: v => <Text type="secondary">{v || 'N/A'}</Text> },
     { title: 'Loại Xe', dataIndex: ['VehicleType', 'name'], key: 'type', render: v => <Text strong>{v}</Text> },
-    { title: 'Màu Xe', dataIndex: ['VehicleColor', 'color_name'], key: 'color' },
+    { title: 'Màu Xe', dataIndex: ['VehicleColor', 'color_name'], key: 'color', render: v => <Tag color="purple">{v || 'N/A'}</Tag> },
     { title: 'Số Máy', dataIndex: 'engine_no', key: 'engine', render: v => <Text code>{v}</Text> },
     { title: 'Số Khung', dataIndex: 'chassis_no', key: 'chassis', render: v => <Text code>{v}</Text> },
     { 
@@ -470,7 +470,31 @@ const InventoryReportPage = () => {
           <Col xs={24} md={1}>
              <Filter size={20} opacity={0.5} />
           </Col>
-          <Col xs={24} md={7}>
+          <Col xs={24} md={5}>
+            <Select 
+              allowClear={true} 
+              style={{ width: '100%' }} 
+              placeholder="Chọn loại xe" 
+              size="large"
+              value={filters.type_id}
+              onChange={v => handleFilterChange('type_id', v)}
+            >
+              {options.types.map(t => <Option key={t.id} value={t.id}>{t.name}</Option>)}
+            </Select>
+          </Col>
+          <Col xs={24} md={5}>
+            <Select 
+              allowClear={true} 
+              style={{ width: '100%' }} 
+              placeholder="Chọn màu xe" 
+              size="large"
+              value={filters.color_id}
+              onChange={v => handleFilterChange('color_id', v)}
+            >
+              {options.colors?.map(c => <Option key={c.id} value={c.id}>{c.color_name}</Option>)}
+            </Select>
+          </Col>
+          <Col xs={24} md={isPowerUser ? 12 : 23}>
             <Select 
               allowClear={true} 
               style={{ width: '100%' }} 
@@ -480,30 +504,6 @@ const InventoryReportPage = () => {
               onChange={v => handleFilterChange('warehouse_id', v)}
             >
               {options.warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
-            </Select>
-          </Col>
-          <Col xs={24} md={isPowerUser ? 8 : 11}>
-            <Select 
-              allowClear 
-              showSearch 
-              style={{ width: '100%' }} 
-              placeholder="--- Tất cả loại xe ---" 
-              size="large"
-              onChange={v => handleFilterChange('type_id', v)}
-            >
-                {options.types.map(t => <Option key={t.id} value={t.id}>{t.name}</Option>)}
-            </Select>
-          </Col>
-          <Col xs={24} md={isPowerUser ? 8 : 12}>
-            <Select 
-              allowClear 
-              showSearch 
-              style={{ width: '100%' }} 
-              placeholder="--- Tất cả màu xe ---" 
-              size="large"
-              onChange={v => handleFilterChange('color_id', v)}
-            >
-                {options.colors.map(c => <Option key={c.id} value={c.id}>{c.color_name}</Option>)}
             </Select>
           </Col>
         </Row>

@@ -41,6 +41,7 @@ import PartWholesaleReportPage from './pages/reports/PartWholesaleReportPage';
 import MaintenanceReportPage from './pages/reports/MaintenanceReportPage';
 import BackupPage from './pages/system/BackupPage';
 import MaintenanceRulePage from './pages/master-data/MaintenanceRulePage';
+import PartLocationPage from './pages/inventory/PartLocationPage';
 
 
 
@@ -126,7 +127,6 @@ function App() {
                     <Route path="/vehicle-types" element={<VehicleTypePage />} />
                     <Route path="/suppliers" element={<SupplierPage />} />
                     <Route path="/wholesale-customers" element={<WholesaleCustomerPage />} />
-                    <Route path="/vehicle-colors" element={<VehicleColorPage />} />
                     <Route 
                       path="/warehouses" 
                       element={<WarehousePage />} 
@@ -159,6 +159,7 @@ function App() {
                     <Route path="/part-wholesale-customers" element={<PartWholesaleCustomerPage />} />
                     <Route path="/part-import" element={<PartImportPage />} />
                     <Route path="/part-inventory" element={<PartInventoryPage />} />
+                    <Route path="/part-locations" element={<PartLocationPage />} />
                     {/* BÀO TRÌ & DỊCH VỤ HỢP NHẤT */}
                     <Route path="/maintenance-hub" element={<MaintenanceHub />} />
                     <Route path="/maintenance-rules" element={<MaintenanceRulePage />} />

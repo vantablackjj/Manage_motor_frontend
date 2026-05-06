@@ -66,6 +66,8 @@ const TransferPage = () => {
   const [paymentForm] = Form.useForm();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = user.role === 'ADMIN';
+  const isManager = user.role === 'MANAGER';
+  const canApproveTransfer = isAdmin || isManager || user.can_approve_transfer === true || user.can_approve_transfer === 1;
 
   useEffect(() => {
     fetchWarehouses();
@@ -85,8 +87,10 @@ const TransferPage = () => {
         if (isAdmin) {
           setWarehouses(allWh);
         } else {
-          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])];
-          setWarehouses(allWh.filter(w => allowedIds.includes(w.id)));
+          const allowedIds = [user.warehouse_id, ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])]
+            .filter(Boolean)
+            .map(id => String(id).trim());
+          setWarehouses(allWh.filter(w => allowedIds.includes(String(w.id))));
         }
       } else {
         setWarehouses(res.data);
@@ -292,7 +296,6 @@ const TransferPage = () => {
             <tr>
                 <th style="width: 40px">STT</th>
                 <th>Loại xe</th>
-                <th>Màu xe</th>
                 <th>Số Máy</th>
                 <th>Số Khung</th>
                 <th style="width: 100px">Kiểm tra</th>
@@ -303,7 +306,6 @@ const TransferPage = () => {
                 <tr>
                     <td class="center">${i + 1}</td>
                     <td>${v.VehicleType?.name || 'N/A'}</td>
-                    <td>${v.VehicleColor?.color_name || 'N/A'}</td>
                     <td>${v.engine_no}</td>
                     <td>${v.chassis_no}</td>
                     <td></td>
@@ -361,7 +363,6 @@ const TransferPage = () => {
 
   const vehicleColumns = [
     { title: 'Loại xe', key: 'type', render: (_, r) => r.VehicleType?.name || 'N/A' },
-    { title: 'Màu', key: 'color', render: (_, r) => <Tag color="blue">{r.VehicleColor?.color_name || 'N/A'}</Tag> },
     { title: 'Số Máy', dataIndex: 'engine_no', render: v => <Text code>{v}</Text> },
     { title: 'Số Khung', dataIndex: 'chassis_no', render: v => <Text code>{v}</Text> },
     { title: 'Giá (đ)', dataIndex: 'price_vnd', render: v => Number(v).toLocaleString() }
@@ -370,8 +371,7 @@ const TransferPage = () => {
   const filteredVehicles = availableVehicles.filter(v => 
     v.engine_no?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
     v.chassis_no?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
-    v.VehicleType?.name?.toLowerCase().includes(vehicleSearchText.toLowerCase()) ||
-    v.VehicleColor?.color_name?.toLowerCase().includes(vehicleSearchText.toLowerCase())
+    v.VehicleType?.name?.toLowerCase().includes(vehicleSearchText.toLowerCase())
   );
 
   const filteredHistory = transfers.filter(t => 
@@ -637,8 +637,8 @@ const TransferPage = () => {
                   {/* PRINT ANYTIME */}
                   <Button icon={<Printer size={16} />} onClick={() => handlePrintTransfer(detailData)}>IN PHIẾU KIỂM</Button>
 
-                  {/* ADMIN APPROVE */}
-                  {isAdmin && detailData.transfer.status === 'PENDING_ADMIN' && (
+                  {/* ADMIN OR HEADQUARTERS APPROVE */}
+                  {canApproveTransfer && detailData.transfer.status === 'PENDING_ADMIN' && (
                     <Button type="primary" icon={<ShieldCheck size={18} />} style={{ background: '#10b981', height: 45 }} block onClick={() => handleApprove(detailData.transfer.id)}>XÁC NHẬN DUYỆT PHIẾU</Button>
                   )}
 

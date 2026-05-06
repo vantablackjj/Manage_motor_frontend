@@ -304,7 +304,7 @@ const RetailSaleReportPage = () => {
       render: (_, r) => r.Vehicle?.VehicleType?.name || "N/A",
     },
     {
-      title: "Màu xe",
+      title: "Màu",
       width: 120,
       render: (_, r) => (
         <Tag color="purple">{r.Vehicle?.VehicleColor?.color_name || "N/A"}</Tag>
@@ -796,49 +796,53 @@ const RetailSaleReportPage = () => {
             >
               <thead>
                 <tr>
-                  {[
-                    "Mũ bảo hiểm",
-                    "Áo mưa",
-                    "Phiếu thay dầu",
-                    "Thẻ bảo dưỡng xe cũ",
-                    "Bảo hiểm đi đường",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "8px",
-                        border: "1px solid #f0f0f0",
-                        background: "#fafafa",
-                        fontSize: 12,
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {Object.keys(summary.total_gifts || {}).length > 0 ? (
+                    Object.keys(summary.total_gifts).map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "8px",
+                          border: "1px solid #f0f0f0",
+                          background: "#fafafa",
+                          fontSize: 12,
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))
+                  ) : (
+                    ["Mũ bảo hiểm", "Áo mưa", "Phiếu thay dầu", "Thẻ bảo dưỡng", "Bảo hiểm"].map((h) => (
+                      <th key={h} style={{ padding: "8px", border: "1px solid #f0f0f0", background: "#fafafa", fontSize: 12 }}>
+                        {h}
+                      </th>
+                    ))
+                  )}
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  {[
-                    "Mũ bảo hiểm",
-                    "Áo mưa",
-                    "Phiếu thay dầu",
-                    "Thẻ bảo dưỡng xe cũ",
-                    "Bảo hiểm đi đường",
-                  ].map((h) => (
-                    <td
-                      key={h}
-                      style={{
-                        padding: "12px",
-                        border: "1px solid #f0f0f0",
-                        fontSize: 16,
-                        fontWeight: "bold",
-                        color: "var(--primary-color)",
-                      }}
-                    >
-                      {summary.total_gifts[h] || 0}
-                    </td>
-                  ))}
+                  {Object.keys(summary.total_gifts || {}).length > 0 ? (
+                    Object.keys(summary.total_gifts).map((h) => (
+                      <td
+                        key={h}
+                        style={{
+                          padding: "12px",
+                          border: "1px solid #f0f0f0",
+                          fontSize: 16,
+                          fontWeight: "bold",
+                          color: "var(--primary-color)",
+                        }}
+                      >
+                        {summary.total_gifts[h] || 0}
+                      </td>
+                    ))
+                  ) : (
+                    [1, 2, 3, 4, 5].map((i) => (
+                      <td key={i} style={{ padding: "12px", border: "1px solid #f0f0f0", fontSize: 16, fontWeight: "bold", color: "#ccc" }}>
+                        0
+                      </td>
+                    ))
+                  )}
                 </tr>
               </tbody>
             </table>

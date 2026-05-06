@@ -82,7 +82,6 @@ const WholesaleCustomerAudit = () => {
             'Loại Xe': v.type_name,
             'Số Máy': v.engine_no,
             'Số Khung': v.chassis_no,
-            'Màu Xe': v.color_name,
             'Giá Bán Ước Tính': (Number(v.sale_price_lot) / (Number(v.lot_vehicles_count) || 1))
         }));
 
@@ -191,7 +190,6 @@ const WholesaleCustomerAudit = () => {
     { title: 'Loại Xe', dataIndex: 'type_name' },
     { title: 'Số Máy', dataIndex: 'engine_no', className: 'strong-text' },
     { title: 'Số Khung', dataIndex: 'chassis_no', className: 'strong-text' },
-    { title: 'Màu Xe', dataIndex: 'color_name' },
     { 
       title: 'Giá Bán (VNĐ)', 
       render: (_, r) => {

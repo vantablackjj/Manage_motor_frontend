@@ -72,12 +72,38 @@ const WholesaleSalePage = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("1");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isPayAllModalOpen, setIsPayAllModalOpen] = useState(false);
   const [importVisible, setImportVisible] = useState(false);
+  const [expandedDateKeys, setExpandedDateKeys] = useState([]);
 
   // Search states
   const [historySearchTerm, setHistorySearchTerm] = useState("");
   const [detailSearchTerm, setDetailSearchTerm] = useState("");
   const [searchBy, setSearchBy] = useState("all"); // 'all', 'engine', 'chassis'
+
+  // Group saleHistory by date
+  const groupedHistory = React.useMemo(() => {
+    const map = {};
+    saleHistory.forEach((h) => {
+      const dateKey = dayjs(h.sale_date).format("YYYY-MM-DD");
+      if (!map[dateKey]) {
+        map[dateKey] = {
+          key: dateKey,
+          sale_date: h.sale_date,
+          total_amount_vnd: 0,
+          paid_amount_vnd: 0,
+          lots: [],
+        };
+      }
+      map[dateKey].total_amount_vnd += Number(h.total_amount_vnd || 0);
+      map[dateKey].paid_amount_vnd += Number(h.paid_amount_vnd || 0);
+      map[dateKey].lots.push(h);
+    });
+    // Sort by date descending
+    return Object.values(map).sort((a, b) =>
+      dayjs(b.sale_date).diff(dayjs(a.sale_date))
+    );
+  }, [saleHistory]);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = user.role === "ADMIN";
@@ -93,11 +119,13 @@ const WholesaleSalePage = () => {
     ...(user.accessible_warehouses
       ? user.accessible_warehouses.split(",")
       : []),
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((id) => String(id).trim());
 
   const filteredWarehouses = isPowerUser
     ? warehouses
-    : warehouses.filter((w) => allowedWarehouseIds.includes(w.id));
+    : warehouses.filter((w) => allowedWarehouseIds.includes(String(w.id)));
 
   const showWarehouseSelector = isPowerUser || allowedWarehouseIds.length > 1;
   const canDelete =
@@ -221,7 +249,6 @@ const WholesaleSalePage = () => {
           newData[index].chassis_no = vehicle.id; // Map id to value for bind
           newData[index].cost_price = vehicle.price_vnd;
           newData[index].type_name = vehicle.VehicleType?.type_name;
-          newData[index].color_name = vehicle.VehicleColor?.color_name;
         }
       } else {
         newData[index][field] = value;
@@ -301,13 +328,38 @@ const WholesaleSalePage = () => {
         payment_date: values.date.format("YYYY-MM-DD"),
         notes: values.notes,
       });
-      message.success("Đã ghi nhận tiền trả từ khách buôn!");
+      message.success("Đã ghi nhận thanh toán!");
       setIsPaymentModalOpen(false);
       paymentForm.resetFields();
       loadSaleDetails(selectedSale);
-      handleSearchHistory(form.getFieldValue("customer_id"));
+      if (form.getFieldValue("customer_id"))
+        handleSearchHistory(form.getFieldValue("customer_id"));
     } catch (error) {
       message.error(error.message);
+    }
+  };
+
+  const handlePayAll = async (values) => {
+    try {
+      setLoading(true);
+      await api.post("/wholesale-sales/pay-all", {
+        customer_id: form.getFieldValue("customer_id"),
+        amount_paid_vnd: values.amount,
+        payment_date: values.date.format("YYYY-MM-DD"),
+        notes: values.notes,
+      });
+      message.success("Đã thu nợ gộp cho khách hàng!");
+      setIsPayAllModalOpen(false);
+      paymentForm.resetFields();
+      handleSearchHistory(form.getFieldValue("customer_id"));
+      if (selectedSale) {
+          const updatedSale = saleHistory.find(h => h.id === selectedSale.id);
+          if (updatedSale) loadSaleDetails(updatedSale);
+      }
+    } catch (error) {
+      message.error(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -513,7 +565,6 @@ const WholesaleSalePage = () => {
               <th style="width: 30px;">STT</th>
               <th style="width: 80px;">Ngày bán</th>
               <th style="width: 200px;">Loại xe</th>
-              <th style="width: 70px;">Màu xe</th>
               <th style="width: 100px;">Số Máy</th>
               <th>Số Khung</th>
               <th style="text-align: right; width: 100px;">Đơn giá</th>
@@ -527,7 +578,6 @@ const WholesaleSalePage = () => {
                 <td style="text-align: center;">${i + 1}</td>
                 <td style="text-align: center;">${date.format("DD/MM/YYYY")}</td>
                 <td>${v.VehicleType?.name || v.Type?.name || "N/A"}</td>
-                <td style="text-align: center;">${v.VehicleColor?.color_name || v.Color?.color_name || "N/A"}</td>
                 <td><b>${v.engine_no}</b></td>
                 <td><b>${v.chassis_no}</b></td>
                 <td style="text-align: right;"><b>${Number(v.wholesale_price_vnd).toLocaleString()}</b></td>
@@ -633,10 +683,6 @@ const WholesaleSalePage = () => {
           <div style={{ fontSize: 11, lineHeight: 1.2 }}>
             <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
               {record.type_name}
-            </Tag>
-            <br />
-            <Tag color="purple" style={{ fontSize: 10, margin: "2px 0 0 0" }}>
-              {record.color_name}
             </Tag>
           </div>
         ) : null,
@@ -843,7 +889,9 @@ const WholesaleSalePage = () => {
                   summary={(pageData) => {
                     let total = 0;
                     let count = pageData.length;
-                    let selectedCount = pageData.filter(i => i.vehicle_id).length;
+                    let selectedCount = pageData.filter(
+                      (i) => i.vehicle_id,
+                    ).length;
 
                     pageData.forEach(({ sale_price }) => {
                       total += Number(sale_price) || 0;
@@ -859,7 +907,9 @@ const WholesaleSalePage = () => {
                             <Space size={24} style={{ marginRight: 16 }}>
                               <Text strong style={{ fontSize: 15 }}>
                                 SỐ LƯỢNG:{" "}
-                                <span style={{ color: "#3b82f6", fontSize: 18 }}>
+                                <span
+                                  style={{ color: "#3b82f6", fontSize: 18 }}
+                                >
                                   {selectedCount}
                                 </span>{" "}
                                 / {count} xe
@@ -974,6 +1024,7 @@ const WholesaleSalePage = () => {
                         padding: "8px 16px",
                         background: "rgba(255,255,255,0.02)",
                         borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        display: "flex", gap: 8, alignItems: 'center'
                       }}
                     >
                       <Input
@@ -982,26 +1033,106 @@ const WholesaleSalePage = () => {
                         value={historySearchTerm}
                         onChange={(e) => setHistorySearchTerm(e.target.value)}
                         allowClear
+                        style={{ flex: 1 }}
                       />
+                      {canManageMoney && saleHistory.length > 0 && (
+                        <Button
+                          type="primary"
+                          size="small"
+                          style={{ background: '#10b981', borderColor: '#10b981' }}
+                          icon={<DollarSign size={14} />}
+                          onClick={() => {
+                              const totalDebt = saleHistory.reduce((sum, h) => 
+                                  sum + (Number(h.total_amount_vnd) - Number(h.paid_amount_vnd)), 0
+                              );
+                              paymentForm.setFieldsValue({
+                                  amount: totalDebt,
+                                  date: dayjs(),
+                                  notes: 'Thu nợ tất cả đơn còn lại'
+                              });
+                              setIsPayAllModalOpen(true);
+                          }}
+                        >
+                          TẤT CẢ NỢ
+                        </Button>
+                      )}
                     </div>
                     <Table
-                      dataSource={saleHistory.filter((h) => {
+                      dataSource={groupedHistory.filter((g) => {
                         const term = historySearchTerm.toLowerCase();
                         return (
-                          dayjs(h.sale_date)
+                          dayjs(g.sale_date)
                             .format("DD/MM/YYYY")
                             .includes(term) ||
-                          (h.notes && h.notes.toLowerCase().includes(term))
+                          g.lots.some(
+                            (h) => h.notes && h.notes.toLowerCase().includes(term)
+                          )
                         );
                       })}
                       size="small"
-                      rowKey="id"
+                      rowKey="key"
                       scroll={{ x: "max-content" }}
+                      expandable={{
+                        expandedRowKeys: expandedDateKeys,
+                        onExpandedRowsChange: setExpandedDateKeys,
+                        expandedRowRender: (group) => (
+                          <Table
+                            dataSource={group.lots}
+                            rowKey="id"
+                            size="small"
+                            pagination={false}
+                            showHeader={false}
+                            style={{ margin: "4px 0" }}
+                            columns={[
+                              {
+                                dataIndex: "notes",
+                                render: (v) => (
+                                  <span style={{ fontSize: 11, color: "#888" }}>
+                                    {v || `Lô #${group.lots.indexOf(group.lots.find(l => l.notes === v)) + 1}`}
+                                  </span>
+                                ),
+                              },
+                              {
+                                render: (_, r) => (
+                                  <b>{Number(r.total_amount_vnd).toLocaleString()}</b>
+                                ),
+                              },
+                              {
+                                render: (_, r) => {
+                                  const debt = Number(r.total_amount_vnd) - Number(r.paid_amount_vnd);
+                                  return <Tag color="volcano">{debt.toLocaleString()}</Tag>;
+                                },
+                              },
+                              {
+                                render: (_, r) => (
+                                  <Space>
+                                    <Button size="small" onClick={() => loadSaleDetails(r)}>Chi tiết</Button>
+                                    <Button
+                                      size="small"
+                                      icon={<Printer size={14} />}
+                                      onClick={(e) => { e.stopPropagation(); handlePrintLot(r); }}
+                                    />
+                                    {canDelete && (
+                                      <Button
+                                        size="small"
+                                        danger
+                                        icon={<Trash2 size={14} />}
+                                        onClick={() => handleDeleteSale(r)}
+                                      />
+                                    )}
+                                  </Space>
+                                ),
+                              },
+                            ]}
+                          />
+                        ),
+                        rowExpandable: (group) => group.lots.length > 1,
+                      }}
                       columns={[
                         {
                           title: "Ngày Bán",
                           dataIndex: "sale_date",
-                          render: (d) => dayjs(d).format("DD/MM/YYYY"),
+                          render: (d) => <b>{dayjs(d).format("DD/MM/YYYY")}</b>,
                         },
                         {
                           title: "Tổng Tiền",
@@ -1011,44 +1142,48 @@ const WholesaleSalePage = () => {
                         },
                         {
                           title: "Còn Nợ",
-                          render: (_, r) => (
-                            <Tag color="volcano">
-                              {(
-                                Number(r.total_amount_vnd) -
-                                Number(r.paid_amount_vnd)
-                              ).toLocaleString()}
-                            </Tag>
-                          ),
+                          render: (_, r) => {
+                            const debt = Number(r.total_amount_vnd) - Number(r.paid_amount_vnd);
+                            return <Tag color={debt > 0 ? "volcano" : "green"}>{debt.toLocaleString()}</Tag>;
+                          },
                         },
                         {
                           title: "",
-                          render: (_, r) => (
-                            <Space>
-                              <Button
-                                size="small"
-                                onClick={() => loadSaleDetails(r)}
+                          render: (_, r) => {
+                            // If only 1 lot → direct actions; if >1 → just show expand hint
+                            if (r.lots.length === 1) {
+                              const lot = r.lots[0];
+                              return (
+                                <Space>
+                                  <Button size="small" onClick={() => loadSaleDetails(lot)}>Chi tiết</Button>
+                                  <Button
+                                    size="small"
+                                    icon={<Printer size={14} />}
+                                    onClick={(e) => { e.stopPropagation(); handlePrintLot(lot); }}
+                                  />
+                                  {canDelete && (
+                                    <Button
+                                      size="small"
+                                      danger
+                                      icon={<Trash2 size={14} />}
+                                      onClick={() => handleDeleteSale(lot)}
+                                    />
+                                  )}
+                                </Space>
+                              );
+                            }
+                            return (
+                              <Tag color="blue" style={{ cursor: "pointer" }}
+                                onClick={() => setExpandedDateKeys(prev =>
+                                  prev.includes(r.key)
+                                    ? prev.filter(k => k !== r.key)
+                                    : [...prev, r.key]
+                                )}
                               >
-                                Chi tiết
-                              </Button>
-                              <Button
-                                size="small"
-                                icon={<Printer size={14} />}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Find the details if they match, otherwise the print template will rely on basic lot info
-                                  handlePrintLot(r);
-                                }}
-                              />
-                              {canDelete && (
-                                <Button
-                                  size="small"
-                                  danger
-                                  icon={<Trash2 size={14} />}
-                                  onClick={() => handleDeleteSale(r)}
-                                />
-                              )}
-                            </Space>
-                          ),
+                                {r.lots.length} lô
+                              </Tag>
+                            );
+                          },
                         },
                       ]}
                     />
@@ -1342,7 +1477,36 @@ const WholesaleSalePage = () => {
             />
           </Form.Item>
           <Form.Item
-            label="Số tiền VNĐ"
+            label={
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  width: "350px",
+                }}
+              >
+                <span>Số tiền VNĐ</span>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{
+                    padding: 0,
+                    height: "auto",
+                    color: "var(--primary-color)",
+                  }}
+                  onClick={() => {
+                    const remaining = Math.max(
+                      0,
+                      Number(selectedSale?.total_amount_vnd || 0) -
+                        Number(selectedSale?.paid_amount_vnd || 0),
+                    );
+                    paymentForm.setFieldsValue({ amount: remaining });
+                  }}
+                >
+                  Thu toàn bộ
+                </Button>
+              </div>
+            }
             name="amount"
             rules={[{ required: true }]}
           >
@@ -1364,7 +1528,69 @@ const WholesaleSalePage = () => {
             size="large"
             style={{ background: "#10b981" }}
           >
-            XÁC NHẬN THU NỢ
+            XÁC NHẬN THU TIỀN
+          </Button>
+        </Form>
+      </Modal>
+
+      {/* MODAL THU TẤT CẢ NỢ CỦA KHÁCH */}
+      <Modal
+        title={
+          <Space>
+            <DollarSign size={20} color="#10b981" />
+            <Text strong>THU TẤT CẢ NỢ - {customers.find(c => c.id === form.getFieldValue("customer_id"))?.name}</Text>
+          </Space>
+        }
+        open={isPayAllModalOpen}
+        onCancel={() => setIsPayAllModalOpen(false)}
+        footer={null}
+        width={window.innerWidth < 768 ? "95%" : 450}
+        centered
+      >
+        <Form
+          form={paymentForm}
+          layout="vertical"
+          onFinish={handlePayAll}
+          initialValues={{ date: dayjs() }}
+        >
+          <div style={{ marginBottom: 20, padding: 16, background: 'rgba(16, 185, 129, 0.05)', borderRadius: 8 }}>
+             <Text type="secondary">Tổng nợ hiện tại (Tất cả đơn hàng):</Text>
+             <Title level={3} style={{ margin: 0, color: '#10b981' }}>
+                {Number(saleHistory.reduce((sum, h) => sum + (Number(h.total_amount_vnd) - Number(h.paid_amount_vnd)), 0)).toLocaleString()} đ
+             </Title>
+          </div>
+          
+          <Form.Item
+            label="Ngày thu tiền"
+            name="date"
+            rules={[{ required: true }]}
+          >
+            <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" size="large" />
+          </Form.Item>
+          <Form.Item
+            label="Số tiền thu gộp (VNĐ)"
+            name="amount"
+            rules={[{ required: true }]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              size="large"
+              autoFocus
+              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(v) => v.replace(/\$\s?|(,*)/g, "")}
+            />
+          </Form.Item>
+          <Form.Item label="Ghi chú gộp" name="notes">
+            <Input.TextArea rows={2} placeholder="Nhập ghi chú cho đợt thu nợ gộp này..." />
+          </Form.Item>
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            loading={loading}
+            style={{ background: "#10b981", height: 45, fontWeight: 'bold' }}
+          >
+            XÁC NHẬN THU TẤT CẢ NỢ
           </Button>
         </Form>
       </Modal>
