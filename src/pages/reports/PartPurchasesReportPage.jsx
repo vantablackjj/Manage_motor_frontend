@@ -13,7 +13,9 @@ import {
   DatePicker,
   Modal,
   message,
-  Tabs
+  Tabs,
+  Popconfirm,
+  Checkbox
 } from 'antd';
 import { 
   Search, 
@@ -23,7 +25,8 @@ import {
   FileText,
   LayoutList,
   BarChart3,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 import PrintPartPurchase from '../../components/PrintPartPurchase';
 import { printReceipt } from '../../utils/printHelper';
@@ -104,6 +107,19 @@ const PartPurchasesReportPage = () => {
     fetchReport();
   };
 
+  const handleDelete = async (id, force = false) => {
+    setLoading(true);
+    try {
+        await api.delete(`/part-purchase/${id}${force ? '?force=true' : ''}`);
+        message.success('Đã xóa phiếu nhập và cập nhật tồn kho!');
+        fetchReport();
+    } catch (error) {
+        message.error(error.response?.data?.message || 'Lỗi khi xóa phiếu nhập');
+    } finally {
+        setLoading(false);
+    }
+  };
+
   const handleExport = () => {
     if (activeTab === '1') {
         if (!purchases || purchases.length === 0) return message.warning('Không có dữ liệu để xuất!');
@@ -144,15 +160,26 @@ const PartPurchasesReportPage = () => {
         title: 'Ngày Nhập', 
         dataIndex: 'purchase_date', 
         key: 'date', 
+        sorter: (a, b) => dayjs(a.purchase_date).unix() - dayjs(b.purchase_date).unix(),
         render: v => dayjs(v).format('DD/MM/YYYY') 
     },
-    { title: 'Hóa Đơn / PO', key: 'invoice', render: (_, r) => (
-        <Space direction="vertical" size={0}>
-            <Text strong>{r.invoice_no}</Text>
-            {r.po_number && <Text type="secondary" style={{ fontSize: 11 }}>PO: {r.po_number}</Text>}
-        </Space>
-    )},
-    { title: 'Nhà Cung Cấp', dataIndex: ['Supplier', 'name'], key: 'supplier' },
+    { 
+        title: 'Hóa Đơn / PO', 
+        key: 'invoice', 
+        sorter: (a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''),
+        render: (_, r) => (
+            <Space direction="vertical" size={0}>
+                <Text strong>{r.invoice_no}</Text>
+                {r.po_number && <Text type="secondary" style={{ fontSize: 11 }}>PO: {r.po_number}</Text>}
+            </Space>
+        )
+    },
+    { 
+        title: 'Nhà Cung Cấp', 
+        dataIndex: ['Supplier', 'name'], 
+        key: 'supplier',
+        sorter: (a, b) => (a.Supplier?.name || '').localeCompare(b.Supplier?.name || '')
+    },
     { 
         title: 'Chi Tiết Linh Kiện', 
         key: 'items', 
@@ -175,27 +202,71 @@ const PartPurchasesReportPage = () => {
         dataIndex: 'total_amount', 
         key: 'total', 
         align: 'right',
+        sorter: (a, b) => Number(a.total_amount || 0) - Number(b.total_amount || 0),
         render: v => <Text strong style={{ color: '#10b981' }}>{Number(v || 0).toLocaleString()} đ</Text>
     },
-    { title: 'Kho', dataIndex: ['Warehouse', 'warehouse_name'], key: 'warehouse' },
+    { 
+        title: 'Kho', 
+        dataIndex: ['Warehouse', 'warehouse_name'], 
+        key: 'warehouse',
+        sorter: (a, b) => (a.Warehouse?.warehouse_name || '').localeCompare(b.Warehouse?.warehouse_name || '')
+    },
     {
         title: 'Tác vụ',
         key: 'action',
         fixed: 'right',
-        width: 80,
+        width: 120,
         render: (_, r) => (
-            <Button 
-                icon={<Printer size={16} />} 
-                onClick={() => handlePrint(r)}
-                title="In lại phiếu nhập"
-            />
+            <Space>
+                <Button 
+                    icon={<Printer size={16} />} 
+                    onClick={() => handlePrint(r)}
+                    title="In lại phiếu nhập"
+                />
+                {(isAdmin || isPowerUser) && (
+                    <Popconfirm
+                        title="Xóa phiếu nhập này?"
+                        description={
+                            <div style={{ marginTop: 8 }}>
+                                <Text size="small">Tồn kho sẽ được trừ lại tương ứng.</Text>
+                                <br />
+                                <Checkbox id={`force-${r.id}`} style={{ marginTop: 8 }}>
+                                    <Text type="danger" strong>Ép buộc xóa</Text> (nếu hàng đã bán)
+                                </Checkbox>
+                            </div>
+                        }
+                        onConfirm={() => {
+                            const force = document.getElementById(`force-${r.id}`)?.checked;
+                            handleDelete(r.id, force);
+                        }}
+                        okText="Xóa"
+                        cancelText="Hủy"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<Trash2 size={16} />} title="Xóa phiếu nhập" />
+                    </Popconfirm>
+                )}
+            </Space>
         )
     }
   ];
 
   const summaryColumns = [
-    { title: 'Mã Phụ Tùng', dataIndex: 'code', key: 'code', fixed: 'left', width: 150 },
-    { title: 'Tên Phụ Tùng', dataIndex: 'name', key: 'name', width: 250 },
+    { 
+        title: 'Mã Phụ Tùng', 
+        dataIndex: 'code', 
+        key: 'code', 
+        fixed: 'left', 
+        width: 150,
+        sorter: (a, b) => (a.code || '').localeCompare(b.code || '')
+    },
+    { 
+        title: 'Tên Phụ Tùng', 
+        dataIndex: 'name', 
+        key: 'name', 
+        width: 250,
+        sorter: (a, b) => (a.name || '').localeCompare(b.name || '')
+    },
     { title: 'Đơn vị', dataIndex: 'unit', key: 'unit', align: 'center', width: 100 },
     { 
         title: 'Tổng Nhập', 
@@ -203,6 +274,7 @@ const PartPurchasesReportPage = () => {
         key: 'total_qty', 
         align: 'right', 
         width: 120,
+        sorter: (a, b) => Number(a.total_qty) - Number(b.total_qty),
         render: v => <Text strong>{v.toLocaleString()}</Text>
     },
     { 
@@ -211,6 +283,7 @@ const PartPurchasesReportPage = () => {
         key: 'total_amount', 
         align: 'right', 
         width: 150,
+        sorter: (a, b) => Number(a.total_amount) - Number(b.total_amount),
         render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text>
     },
     { 
@@ -219,6 +292,7 @@ const PartPurchasesReportPage = () => {
         key: 'purchase_count', 
         align: 'center', 
         width: 120,
+        sorter: (a, b) => Number(a.purchase_count) - Number(b.purchase_count),
         render: v => <Tag color="blue">{v} lần</Tag>
     }
   ];
@@ -406,11 +480,11 @@ const PartPurchasesReportPage = () => {
 
       <Modal
         title={
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '95%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '95%', flexWrap: 'wrap', gap: '10px' }}>
                 <Title level={4} style={{ margin: 0 }}>CHI TIẾT HÓA ĐƠN: {selectedPurchase?.invoice_no}</Title>
                 <Input 
                     placeholder="Tìm mã hoặc tên trong hóa đơn..." 
-                    style={{ width: 300 }} 
+                    style={{ width: '100%', minWidth: 200, maxWidth: 300 }} 
                     prefix={<Search size={16} />}
                     allowClear
                     onChange={e => setItemSearch(e.target.value)}

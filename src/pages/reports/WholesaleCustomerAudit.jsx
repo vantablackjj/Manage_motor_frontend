@@ -82,7 +82,7 @@ const WholesaleCustomerAudit = () => {
             'Loại Xe': v.type_name,
             'Số Máy': v.engine_no,
             'Số Khung': v.chassis_no,
-            'Giá Bán Ước Tính': (Number(v.sale_price_lot) / (Number(v.lot_vehicles_count) || 1))
+            'Giá Bán': Number(v.wholesale_price_vnd) || (Number(v.sale_price_lot) / (Number(v.lot_vehicles_count) || 1))
         }));
 
         exportToExcel(exportData, `DoiSoat_${customerName}_${dayjs().format('YYYYMMDD_HHmm')}`);
@@ -215,7 +215,7 @@ const WholesaleCustomerAudit = () => {
 
   return (
     <div style={{ padding: '0 5px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header">
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
             {mode === 'OVERVIEW' ? 'TỔNG HỢP ĐỐI SOÁT KHÁCH BUÔN' : 'CHI TIẾT ĐỐI SOÁT KHÁCH BUÔN'}
         </Title>

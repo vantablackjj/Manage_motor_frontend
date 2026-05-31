@@ -18,7 +18,8 @@ import {
   AutoComplete,
   Tag,
   Modal,
-  Tabs
+  Tabs,
+  Checkbox
 } from 'antd';
 import { PlusCircle, Search, Trash2, Save, RotateCcw, Box, User, Receipt, Calculator, ChevronRight, FileStack, Printer, Plus, History, Eye } from 'lucide-react';
 import PrintPartPurchase from '../../components/PrintPartPurchase';
@@ -293,9 +294,9 @@ const PartImportPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, force = false) => {
     try {
-        await api.delete(`/part-purchase/${id}`);
+        await api.delete(`/part-purchase/${id}${force ? '?force=true' : ''}`);
         message.success("Đã xóa đơn nhập phụ tùng và cập nhật lại tồn kho!");
         fetchHistory();
         fetchData(); // Refresh parts list to get latest inventory
@@ -343,8 +344,30 @@ const PartImportPage = () => {
                 <Button size="small" type="primary" ghost icon={<Printer size={14} />} onClick={() => { setSelectedPurchaseDetail(r); setTimeout(() => printReceipt('print-part-purchase-receipt'), 300); }} />
                 <Button size="small" icon={<Save size={14} />} onClick={() => handleEdit(r)} title="Sửa phiếu nhập" />
                 {canDelete && (
-                    <Popconfirm title="Xóa phiếu nhập PT này?" description="Hành động này sẽ TRỪ LẠI số lượng trong tồn kho. Bạn chắc chứ?" onConfirm={() => handleDelete(r.id)} okText="Xác nhận xóa" cancelText="Hủy">
-                        <Button size="small" danger icon={<Trash2 size={14} />} />
+                    <Popconfirm 
+                        title="Xóa phiếu nhập PT này?" 
+                        description={
+                            <div style={{ marginTop: 8 }}>
+                                <Text size="small">Tồn kho sẽ được trừ lại tương ứng.</Text>
+                                {isPowerUser && (
+                                    <>
+                                        <br />
+                                        <Checkbox id={`force-hist-${r.id}`} style={{ marginTop: 8 }}>
+                                            <Text type="danger" strong>Ép buộc xóa</Text> (nếu hàng đã bán)
+                                        </Checkbox>
+                                    </>
+                                )}
+                            </div>
+                        } 
+                        onConfirm={() => {
+                            const force = document.getElementById(`force-hist-${r.id}`)?.checked;
+                            handleDelete(r.id, force);
+                        }} 
+                        okText="Xác nhận xóa" 
+                        cancelText="Hủy"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button size="small" danger icon={<Trash2 size={14} />} title="Xóa phiếu nhập" />
                     </Popconfirm>
                 )}
             </Space>

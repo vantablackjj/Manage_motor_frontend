@@ -10,7 +10,9 @@ import {
   Tabs, 
   message,
   Empty,
-  Tooltip
+  Tooltip,
+  Select,
+  DatePicker
 } from 'antd';
 import { 
   Bell, 
@@ -22,7 +24,9 @@ import {
   ShoppingBag,
   Truck,
   PlusSquare,
-  AlertCircle
+  AlertCircle,
+  Filter,
+  Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -35,23 +39,32 @@ const NotificationPage = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
+  const [total, setTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [typeFilter, setTypeFilter] = useState(null);
+  const [dateRange, setDateRange] = useState([]);
 
   useEffect(() => {
     fetchNotifications();
-  }, [activeTab]);
+  }, [activeTab, currentPage, pageSize, typeFilter, dateRange]);
 
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      let url = '/notifications';
-      if (activeTab === 'unread') {
-        url += '?is_read=false';
-      } else if (activeTab === 'read') {
-        url += '?is_read=true';
+      let url = `/notifications?limit=${pageSize}&offset=${(currentPage - 1) * pageSize}`;
+      
+      if (activeTab === 'unread') url += '&is_read=false';
+      else if (activeTab === 'read') url += '&is_read=true';
+      
+      if (typeFilter) url += `&type=${typeFilter}`;
+      if (dateRange && dateRange.length === 2) {
+        url += `&from_date=${dateRange[0].format('YYYY-MM-DD')}&to_date=${dateRange[1].format('YYYY-MM-DD')}`;
       }
       
       const res = await api.get(url);
       setNotifications(res.data.list || []);
+      setTotal(res.data.count || 0);
     } catch (e) {
       message.error('Lỗi tải thông báo');
     } finally {
@@ -86,8 +99,13 @@ const NotificationPage = () => {
     switch (type) {
       case 'RETAIL_SALE': return <ShoppingBag size={20} color="#10b981" />;
       case 'WHOLESALE_SALE': return <ShoppingBag size={20} color="#3b82f6" />;
+      case 'PART_RETAIL': return <ShoppingBag size={20} color="#10b981" />;
+      case 'PART_WHOLESALE': return <ShoppingBag size={20} color="#3b82f6" />;
+      case 'PART_SALE_UPDATE': return <AlertCircle size={20} color="#ef4444" />;
       case 'PURCHASE': return <PlusSquare size={20} color="#f59e0b" />;
-      case 'TRANSFER': return <Truck size={20} color="#8b5cf6" />;
+      case 'PART_PURCHASE': return <PlusSquare size={20} color="#f59e0b" />;
+      case 'TRANSFER_REQUEST': return <Truck size={20} color="#8b5cf6" />;
+      case 'LOW_STOCK': return <AlertCircle size={20} color="#ef4444" />;
       default: return <AlertCircle size={20} color="#6b7280" />;
     }
   };
@@ -103,11 +121,11 @@ const NotificationPage = () => {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header">
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
           <Space><Bell /> TRUNG TÂM THÔNG BÁO</Space>
         </Title>
-        <Space>
+        <Space wrap>
            <Button icon={<RefreshCw size={16} />} onClick={fetchNotifications} loading={loading}>Làm mới</Button>
            <Button type="primary" icon={<CheckCircle size={16} />} onClick={handleAllRead}>Đọc tất cả</Button>
         </Space>
@@ -116,7 +134,10 @@ const NotificationPage = () => {
       <Card className="glass-card">
         <Tabs 
           activeKey={activeTab} 
-          onChange={setActiveTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            setCurrentPage(1);
+          }}
           items={[
             { key: 'all', label: 'Tất cả' },
             { key: 'unread', label: 'Chưa đọc' },
@@ -124,13 +145,73 @@ const NotificationPage = () => {
           ]}
         />
 
+        <div style={{ marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Space>
+             <Filter size={16} color="var(--primary-color)" />
+             <Text strong>Bộ lọc:</Text>
+          </Space>
+          
+          <Select
+            placeholder="Loại thông báo"
+            allowClear
+            style={{ width: 180 }}
+            onChange={(val) => {
+                setTypeFilter(val);
+                setCurrentPage(1);
+            }}
+          >
+            <Select.Option value="RETAIL_SALE">Bán lẻ xe</Select.Option>
+            <Select.Option value="WHOLESALE_SALE">Bán sỉ xe</Select.Option>
+            <Select.Option value="PART_RETAIL">Bán lẻ phụ tùng</Select.Option>
+            <Select.Option value="PART_WHOLESALE">Bán buôn phụ tùng</Select.Option>
+            <Select.Option value="PART_SALE_UPDATE">Sửa phiếu phụ tùng</Select.Option>
+            <Select.Option value="PURCHASE">Nhập xe</Select.Option>
+            <Select.Option value="PART_PURCHASE">Nhập phụ tùng</Select.Option>
+            <Select.Option value="TRANSFER_REQUEST">Yêu cầu chuyển kho</Select.Option>
+            <Select.Option value="LOW_STOCK">Cảnh báo tồn kho</Select.Option>
+            <Select.Option value="EXPENSE">Chi phí</Select.Option>
+          </Select>
+
+          <DatePicker.RangePicker 
+            style={{ width: 280 }}
+            onChange={(dates) => {
+                setDateRange(dates || []);
+                setCurrentPage(1);
+            }}
+            placeholder={['Từ ngày', 'Đến ngày']}
+          />
+
+          <Button 
+            type="text" 
+            onClick={() => {
+                setTypeFilter(null);
+                setDateRange([]);
+                setCurrentPage(1);
+            }}
+          >
+            Xóa lọc
+          </Button>
+        </div>
+
         <List
           loading={loading}
           dataSource={notifications}
+          pagination={{
+            current: currentPage,
+            pageSize: pageSize,
+            total: total,
+            onChange: (page, size) => {
+                setCurrentPage(page);
+                setPageSize(size);
+            },
+            showSizeChanger: true,
+            pageSizeOptions: ['20', '50', '100'],
+            style: { marginTop: 20, textAlign: 'center' }
+          }}
           locale={{ 
             emptyText: (
               <div style={{ padding: '60px 0', opacity: 0.4 }}>
-                <Empty description="Bạn chưa có thông báo nào" />
+                <Empty description={typeFilter || dateRange.length ? "Không tìm thấy thông báo khớp với bộ lọc" : "Bạn chưa có thông báo nào"} />
               </div>
             ) 
           }}
@@ -161,52 +242,57 @@ const NotificationPage = () => {
                 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="noti-header-row">
-                <Title level={5} className="noti-title-text" style={{ margin: 0, color: item.is_read ? '#64748b' : '#0f172a', letterSpacing: '0.3px', fontWeight: 'bold' }}>
-                  {item.title}
-                </Title>
-              </div>
-              <div 
-                className="noti-badge" 
-                style={{ 
-                  background: item.is_read ? '#f1f1f7' : 'var(--primary-color)',
-                  color: item.is_read ? '#64748b' : 'white'
-                }}
-              >
-                {item.is_read ? 'Đã đọc' : 'Mới'}
-              </div>
-            </div>
-            <div className="noti-content-body">
-              <Text className="noti-message-text" style={{ display: 'block', margin: '8px 0 16px 0', fontSize: 13, color: item.is_read ? '#64748b' : '#334155', lineHeight: 1.6, fontWeight: 500 }}>
-                {item.message}
-              </Text>
+                    <Title 
+                      level={5} 
+                      className="noti-title-text" 
+                      style={{ margin: 0, color: item.is_read ? '#64748b' : '#0f172a', letterSpacing: '0.3px', fontWeight: 'bold' }}
+                    >
+                      {item.title}
+                    </Title>
+                    <div 
+                      className="noti-badge" 
+                      style={{ 
+                        background: item.is_read ? '#f1f1f7' : 'var(--primary-color)',
+                        color: item.is_read ? '#64748b' : 'white'
+                      }}
+                    >
+                      {item.is_read ? 'Đã đọc' : 'Mới'}
+                    </div>
+                  </div>
                   
-                  <div className="noti-footer-row">
-                    <Space size="middle" wrap>
-                        <Tag 
-                          style={{ margin: 0, borderRadius: 6, border: 'none', padding: '2px 8px' }} 
-                          color={item.type === 'RETAIL_SALE' ? 'green' : item.type === 'WHOLESALE_SALE' ? 'blue' : item.type === 'PURCHASE' ? 'orange' : 'purple'}
-                        >
-                            {item.type}
-                        </Tag>
-                        {item.Warehouse && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                             <MailOpen size={14} opacity={0.4} />
-                             <Text style={{ fontSize: 11, opacity: 0.6 }}>{item.Warehouse.warehouse_name}</Text>
-                          </div>
-                        )}
-                    </Space>
+                  <div className="noti-content-body">
+                    <Text className="noti-message-text" style={{ display: 'block', margin: '8px 0 16px 0', fontSize: 13, color: item.is_read ? '#64748b' : '#334155', lineHeight: 1.6, fontWeight: 500 }}>
+                      {item.message}
+                    </Text>
                     
-                    {item.link && (
-                        <Button 
-                          type="primary" 
-                          size="small" 
-                          ghost 
-                          icon={<ArrowRight size={14} />} 
-                          style={{ borderRadius: 6, fontSize: 11, height: 28 }}
-                        >
-                            Xử lý ngay
-                        </Button>
-                    )}
+                    <div className="noti-footer-row">
+                      <Space size="middle" wrap>
+                          <Tag 
+                            style={{ margin: 0, borderRadius: 6, border: 'none', padding: '2px 8px' }} 
+                            color={item.type === 'RETAIL_SALE' ? 'green' : item.type === 'WHOLESALE_SALE' ? 'blue' : item.type === 'PURCHASE' ? 'orange' : 'purple'}
+                          >
+                              {item.type}
+                          </Tag>
+                          {item.Warehouse && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                               <MailOpen size={14} opacity={0.4} />
+                               <Text style={{ fontSize: 11, opacity: 0.6 }}>{item.Warehouse.warehouse_name}</Text>
+                            </div>
+                          )}
+                      </Space>
+                      
+                      {item.link && (
+                          <Button 
+                            type="primary" 
+                            size="small" 
+                            ghost 
+                            icon={<ArrowRight size={14} />} 
+                            style={{ borderRadius: 6, fontSize: 11, height: 28 }}
+                          >
+                              Xử lý ngay
+                          </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

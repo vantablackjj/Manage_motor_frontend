@@ -351,7 +351,7 @@ const AdminDashboardPage = () => {
                                 onChange={handleDateChange}
                                 format="DD/MM/YYYY"
                                 size="small"
-                                style={{ width: 220 }}
+                                style={{ width: 240 }}
                             />
                         </Space>
                         <Divider type="vertical" />
@@ -360,11 +360,12 @@ const AdminDashboardPage = () => {
                             <Select 
                                 variant="borderless"
                                 placeholder="Tất cả kho" 
-                                style={{ width: 140 }} 
+                                style={{ minWidth: 180, maxWidth: 280 }} 
                                 allowClear
                                 onChange={handleWarehouseChange}
                                 value={filters.warehouse_id}
                                 size="small"
+                                dropdownMatchSelectWidth={false}
                             >
                                 {warehouses.map(w => <Option key={w.id} value={w.id}>{w.warehouse_name}</Option>)}
                             </Select>

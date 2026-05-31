@@ -192,7 +192,7 @@ const BackupPage = () => {
 
   return (
     <div className="page-container">
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header">
         <div>
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>QUẢN LÝ SAO LƯU DỮ LIỆU</Title>
           <Breadcrumb items={[
@@ -200,7 +200,7 @@ const BackupPage = () => {
             { title: 'Sao lưu & Phục hồi' }
           ]} style={{ marginTop: 8 }} />
         </div>
-        <Space>
+        <Space wrap>
           <Button 
             type="primary"
             icon={<PlusCircle size={18} />} 

@@ -36,6 +36,10 @@ const PartLocationPage = () => {
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const allowedWarehouseIds = [
+    user.warehouse_id,
+    ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])
+  ].filter(Boolean);
 
   const fetchData = async () => {
     setLoading(true);
@@ -75,11 +79,9 @@ const PartLocationPage = () => {
     try {
         await api.put(`/part-inventory/${id}`, { location });
         message.success('Đã cập nhật vị trí');
-        // Update local state to reflect change without full reload if possible, 
-        // but for simplicity and correctness with filters, we can just fetch again or update locally.
         setData(prev => prev.map(item => item.id === id ? { ...item, location } : item));
     } catch (error) {
-        message.error('Lỗi cập nhật: ' + error.message);
+        message.error('Lỗi cập nhật: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -113,39 +115,43 @@ const PartLocationPage = () => {
         title: 'Vị trí hiện tại', 
         dataIndex: 'location', 
         key: 'location',
-        render: (text, record) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Input 
-                    defaultValue={text} 
-                    onBlur={(e) => {
-                        if (e.target.value !== text) {
-                            handleUpdateLocation(record.id, e.target.value);
-                        }
-                    }}
-                    onPressEnter={(e) => {
-                        if (e.target.value !== text) {
-                            handleUpdateLocation(record.id, e.target.value);
-                            e.target.blur();
-                        }
-                    }}
-                    placeholder="Nhập vị trí (VD: Kệ A-1)"
-                    prefix={<MapPin size={14} style={{ color: text ? 'var(--primary-color)' : '#94a3b8' }} />}
-                    style={{ 
-                        borderRadius: '6px',
-                        border: text ? '1px solid var(--primary-color)' : '1px solid #d1d5db',
-                        background: text ? 'rgba(79, 70, 229, 0.02)' : '#fff'
-                    }}
-                />
-                {!text && (
-                    <Tooltip title="Chưa có vị trí">
-                        <AlertCircle size={16} color="#ef4444" />
-                    </Tooltip>
-                )}
-                {text && (
-                    <CheckCircle2 size={16} color="#10b981" />
-                )}
-            </div>
-        )
+        render: (text, record) => {
+            const canEdit = isPowerUser || allowedWarehouseIds.includes(record.warehouse_id);
+            return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Input 
+                        defaultValue={text} 
+                        onBlur={(e) => {
+                            if (e.target.value !== text) {
+                                handleUpdateLocation(record.id, e.target.value);
+                            }
+                        }}
+                        onPressEnter={(e) => {
+                            if (e.target.value !== text) {
+                                handleUpdateLocation(record.id, e.target.value);
+                                e.target.blur();
+                            }
+                        }}
+                        placeholder={canEdit ? "Nhập vị trí (VD: Kệ A-1)" : "Không có quyền sửa"}
+                        prefix={<MapPin size={14} style={{ color: text ? 'var(--primary-color)' : '#94a3b8' }} />}
+                        style={{ 
+                            borderRadius: '6px',
+                            border: text ? '1px solid var(--primary-color)' : '1px solid #d1d5db',
+                            background: text ? 'rgba(79, 70, 229, 0.02)' : '#fff'
+                        }}
+                        disabled={!canEdit}
+                    />
+                    {!text && (
+                        <Tooltip title="Chưa có vị trí">
+                            <AlertCircle size={16} color="#ef4444" />
+                        </Tooltip>
+                    )}
+                    {text && (
+                        <CheckCircle2 size={16} color="#10b981" />
+                    )}
+                </div>
+            );
+        }
     },
   ];
 

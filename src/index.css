@@ -292,4 +292,38 @@ body {
     }
 }
 
+/* Improved Visibility for Currency Inputs */
+.money-input-bold .ant-input-number-input {
+    font-weight: 800 !important;
+    font-size: 16px !important;
+    color: #0f172a !important;
+}
+
+/* Hide controls for money inputs as they are usually not helpful for large values */
+.hide-controls .ant-input-number-handler-wrap {
+    display: none !important;
+}
+
+.readonly-input-highlight .ant-input-number-input {
+    background-color: #f8fafc !important;
+    color: #1d4ed8 !important;
+    font-weight: 800 !important;
+}
+
+/* Unfix Ant Design columns on mobile/tablet (width <= 1024px) to enable normal horizontal scrolling */
+@media (max-width: 1024px) {
+    .ant-table-cell-fix-left,
+    .ant-table-cell-fix-left-last,
+    .ant-table-cell-fix-right,
+    .ant-table-cell-fix-right-first,
+    .ant-table-wrapper th[class*="ant-table-cell-fix-"],
+    .ant-table-wrapper td[class*="ant-table-cell-fix-"] {
+        position: static !important;
+        left: auto !important;
+        right: auto !important;
+        box-shadow: none !important;
+    }
+}
+
+
 

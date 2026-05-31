@@ -45,6 +45,7 @@ import {
   RotateCcw,
   Save,
   Gift,
+  FileSpreadsheet,
 } from "lucide-react";
 import dayjs from "dayjs";
 import api from "../../utils/api";
@@ -314,23 +315,23 @@ const RetailSaleReportPage = () => {
     { title: "Số Khung", dataIndex: "chassis_no", width: 150 },
     isPowerUser
       ? {
-          title: "Giá bán",
+          title: "GIÁ BÁN",
           dataIndex: "total_price",
-          width: 130,
-          render: (v) => <Text strong>{Number(v).toLocaleString()} đ</Text>,
+          width: 110,
+          render: (v) => <Text strong style={{ fontSize: 11 }}>{Number(v).toLocaleString()} đ</Text>,
         }
       : null,
     isPowerUser
       ? {
-          title: "Đã trả",
-          width: 130,
+          title: "ĐÃ TRẢ",
+          width: 110,
           render: (_, r) => {
             const isDisbursed = r.is_disbursed === true || r.is_disbursed === 1;
             const collected =
               Number(r.paid_amount) +
               (isDisbursed ? Number(r.loan_amount || 0) : 0);
             return (
-              <Text style={{ color: "#10b981" }}>
+              <Text style={{ color: "#10b981", fontSize: 11, fontWeight: 500 }}>
                 {collected.toLocaleString()} đ
               </Text>
             );
@@ -358,8 +359,8 @@ const RetailSaleReportPage = () => {
     },
     isPowerUser
       ? {
-          title: "Còn nợ",
-          width: 130,
+          title: "CÒN NỢ",
+          width: 110,
           render: (_, r) => {
             const isDisbursed = r.is_disbursed === true || r.is_disbursed === 1;
             const price = Number(r.total_price || 0);
@@ -374,6 +375,7 @@ const RetailSaleReportPage = () => {
                 style={{
                   color: debt > 0 ? "#ef4444" : "transparent",
                   fontWeight: "bold",
+                  fontSize: 11
                 }}
               >
                 {debt > 0 ? `${debt.toLocaleString()} đ` : "-"}
@@ -491,7 +493,9 @@ const RetailSaleReportPage = () => {
         Number(s.paid_amount) +
         (s.is_disbursed ? Number(s.loan_amount || 0) : 0),
       "Tiền mặt": Number(s.cash_amount || 0),
-      "Chuyển khoản": Number(s.transfer_amount || 0),
+      "CK 1 (Xe)": Number(s.transfer_amount_1 || 0),
+      "CK 2 (Đ.Ký)": Number(s.transfer_amount_2 || 0),
+      "Tổng CK": Number(s.transfer_amount || 0),
       "Còn nợ":
         Number(s.total_price) -
         Number(s.paid_amount) -
@@ -502,6 +506,37 @@ const RetailSaleReportPage = () => {
       "Ghi chú": s.notes || "",
     }));
     exportToExcel(exportData, `BaoCaoBanLeXe_${dayjs().format("YYYYMMDD")}`);
+  };
+
+  const handleExportTransferTracking = () => {
+    // Only export records that have a transfer amount
+    const transferData = filteredData.filter(s => Number(s.transfer_amount || 0) > 0);
+    
+    if (transferData.length === 0)
+      return message.warning("Không có dữ liệu chuyển khoản trong danh sách hiện tại!");
+
+    const exportData = transferData.map((s) => ({
+      "Ngày": dayjs(s.sale_date).format("DD/MM/YYYY"),
+      "Tên khách hàng": s.customer_name,
+      "Loại xe": s.Vehicle?.VehicleType?.name || "N/A",
+      "Màu": s.Vehicle?.VehicleColor?.color_name || "N/A",
+      "Số máy": s.engine_no,
+      "Tổng tiền": Number(s.total_price),
+      "CK 1 (Xe)": Number(s.transfer_amount_1 || 0),
+      "CK 2 (Đ.Ký)": Number(s.transfer_amount_2 || 0),
+      "Tổng CK": Number(s.transfer_amount || 0),
+      "Tiền mặt": Number(s.cash_amount || 0),
+    }));
+
+    const dateStr = filters.dates 
+      ? `${filters.dates[0].format("DDMM")}-${filters.dates[1].format("DDMM")}`
+      : dayjs().format("YYYYMMDD");
+    
+    const warehouseName = filters.warehouse_id 
+      ? warehouses.find(w => w.id === filters.warehouse_id)?.warehouse_name 
+      : "TatCaKho";
+
+    exportToExcel(exportData, `TheoDoiCK_${warehouseName}_${dateStr}`);
   };
 
   const handlePrint = () => {
@@ -584,6 +619,7 @@ const RetailSaleReportPage = () => {
                 <th>Khách hàng</th>
                 <th>SĐT</th>
                 <th>Loại xe</th>
+                <th>Màu</th>
                 <th>Số máy</th>
                 <th>Số khung</th>
                 ${isPowerUser ? "<th>Giá bán</th><th>Đã trả</th><th>Còn nợ</th>" : ""}
@@ -600,6 +636,7 @@ const RetailSaleReportPage = () => {
                     <td>${s.customer_name}</td>
                     <td>${s.phone || "-"}</td>
                     <td>${s.Vehicle?.VehicleType?.name || "N/A"}</td>
+                    <td class="text-center">${s.Vehicle?.VehicleColor?.color_name || "-"}</td>
                     <td>${s.engine_no}</td>
                     <td>${s.chassis_no}</td>
                     ${
@@ -669,14 +706,7 @@ const RetailSaleReportPage = () => {
 
   return (
     <div style={{ padding: "0 5px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
+      <div className="page-header">
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
           XEM THÔNG TIN VỀ XE BÁN LẺ
         </Title>
@@ -684,16 +714,25 @@ const RetailSaleReportPage = () => {
           <Button
             icon={<Printer size={16} />}
             onClick={handlePrint}
-            type="dashed"
+            size="middle"
           >
             In báo cáo
+          </Button>
+          <Button
+            icon={<FileSpreadsheet size={16} />}
+            onClick={handleExportTransferTracking}
+            type="primary"
+            ghost
+            style={{ color: '#10b981', borderColor: '#10b981' }}
+          >
+            Theo Dõi CK
           </Button>
           <Button
             type="primary"
             icon={<Download size={16} />}
             onClick={handleExport}
           >
-            Xuất tệp báo cáo
+            Xuất Excel
           </Button>
         </Space>
       </div>
@@ -1006,8 +1045,8 @@ const RetailSaleReportPage = () => {
             borderTop: "1px solid #cbd5e1",
           }}
         >
-          <Row gutter={16} justify="center">
-            <Col span={isPowerUser ? 6 : 24}>
+          <Row gutter={[16, 16]} justify="center">
+            <Col xs={24} sm={12} md={isPowerUser ? 6 : 24}>
               <Statistic
                 title="Tổng số xe bán (Cái)"
                 value={summary.total_count}
@@ -1020,7 +1059,7 @@ const RetailSaleReportPage = () => {
             </Col>
             {isPowerUser && (
               <>
-                <Col span={6}>
+                <Col xs={24} sm={12} md={6}>
                   <Statistic
                     title="Doanh thu (đ)"
                     value={summary.total_revenue}
@@ -1031,7 +1070,7 @@ const RetailSaleReportPage = () => {
                     }}
                   />
                 </Col>
-                <Col span={6}>
+                <Col xs={24} sm={12} md={6}>
                   <Statistic
                     title="Thực thu (đ)"
                     value={summary.total_collected}
@@ -1042,7 +1081,7 @@ const RetailSaleReportPage = () => {
                     }}
                   />
                 </Col>
-                <Col span={6}>
+                <Col xs={24} sm={12} md={6}>
                   <Statistic
                     title="Tổng nợ (đ)"
                     value={summary.total_debt}

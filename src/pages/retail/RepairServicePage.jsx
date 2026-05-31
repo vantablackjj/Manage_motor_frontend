@@ -55,6 +55,88 @@ const RepairServicePage = () => {
   const [partSearchText, setPartSearchText] = useState('');
   const [vehicleFound, setVehicleFound] = useState(null); // { internal: true/false, data: ... }
   const [maintenanceHistory, setMaintenanceHistory] = useState([]);
+  const engineNo = Form.useWatch('engine_no', form);
+  const licensePlate = Form.useWatch('license_plate', form);
+  const [licensePlateOptions, setLicensePlateOptions] = useState([]);
+  const [activeOrderWarning, setActiveOrderWarning] = useState(null);
+
+  // Check for active duplicate maintenance order
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (licensePlate || engineNo) {
+        checkActiveOrder(licensePlate, engineNo);
+      } else {
+        setActiveOrderWarning(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [licensePlate, engineNo]);
+
+  const checkActiveOrder = async (plate, engNo) => {
+    try {
+      const res = await api.get(`/maintenance-orders/check-active`, {
+        params: {
+          license_plate: plate ? plate.trim() : undefined,
+          engine_no: engNo ? engNo.trim() : undefined,
+          exclude_id: id || undefined
+        }
+      });
+      if (res.data.has_active) {
+        setActiveOrderWarning(res.data.order);
+      } else {
+        setActiveOrderWarning(null);
+      }
+    } catch (e) {
+      console.error("Lỗi kiểm tra trùng phiếu:", e);
+    }
+  };
+
+  const handleLicensePlateSearch = async (value) => {
+    if (!value || value.length < 2) {
+      setLicensePlateOptions([]);
+      return;
+    }
+    try {
+      const res = await api.get(`/maintenance-vehicle-search?q=${value}`);
+      const plates = [];
+      const seenPlates = new Set();
+      res.data.forEach((item) => {
+        const plate = item.license_plate;
+        if (plate && !seenPlates.has(plate.toUpperCase())) {
+          seenPlates.add(plate.toUpperCase());
+          plates.push({
+            value: plate,
+            label: (
+              <div>
+                <Text strong>{plate}</Text> - {item.customer_name} ({item.model_name || "Xe vãng lai"})
+              </div>
+            ),
+            item: item
+          });
+        }
+      });
+      setLicensePlateOptions(plates);
+    } catch (e) {
+      console.error("Lỗi gợi ý biển số:", e);
+    }
+  };
+
+  const handleLicensePlateSelect = (value, option) => {
+    const item = option.item;
+    setVehicleFound({ internal: item.is_internal, data: item });
+    form.setFieldsValue({
+      customer_name: item.customer_name,
+      customer_phone: item.phone,
+      customer_address: item.address,
+      engine_no: item.engine_no,
+      chassis_no: item.chassis_no,
+      license_plate: item.license_plate,
+      model_name: item.model_name || item.Vehicle?.VehicleType?.name || "",
+      search_vehicle: item.engine_no || item.license_plate,
+    });
+    message.success("Đã điền thông tin xe từ biển số đã chọn!");
+  };
 
   // Debounce search effect
   useEffect(() => {
@@ -210,7 +292,7 @@ const RepairServicePage = () => {
             form.setFieldsValue({
                 engine_no: vehicleData.engine_no,
                 chassis_no: vehicleData.chassis_no,
-                license_plate: vehicleData.license_plate || form.getFieldValue('license_plate'),
+                license_plate: vehicleData.license_plate || historyData?.license_plate || form.getFieldValue('license_plate'),
                 model_name: vehicleData.VehicleType?.name,
                 customer_name: vehicleData.RetailSale?.customer_name || historyData?.customer_name,
                 customer_phone: vehicleData.RetailSale?.phone || historyData?.customer_phone,
@@ -435,6 +517,55 @@ const RepairServicePage = () => {
             </Title>
             
             <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ maintenance_date: dayjs(), vat_percent: 0 }}>
+                {activeOrderWarning && (
+                  <div
+                    style={{
+                      marginBottom: 20,
+                      padding: "16px",
+                      borderRadius: 12,
+                      background: "rgba(239, 68, 68, 0.08)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      animation: "fadeIn 0.3s ease-out",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        background: "#ef4444",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <AlertCircle size={20} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "bold", color: "#ef4444", fontSize: 13, textTransform: "uppercase" }}>
+                        Cảnh báo: Xe đang có phiếu sửa chữa chưa hoàn thành
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4, color: "var(--text-color, #333)" }}>
+                        Xe mang biển số <b>{activeOrderWarning.license_plate || "Chưa rõ"}</b> / Số máy <b>{activeOrderWarning.engine_no || "Chưa rõ"}</b> đang có phiếu sửa chữa hoạt động tại bàn nâng <b>{activeOrderWarning.LiftTable?.name || "Chưa gán"}</b> (Kho: {activeOrderWarning.Warehouse?.warehouse_name || "N/A"}).
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <Button
+                          size="small"
+                          type="primary"
+                          danger
+                          onClick={() => navigate(`/repair-service/${activeOrderWarning.id}`)}
+                        >
+                          Xem chi tiết phiếu trùng
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Vehicle Search Section */}
                 <div style={{ background: 'var(--bg-secondary)', padding: 16, borderRadius: 12, marginBottom: 24 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -457,7 +588,15 @@ const RepairServicePage = () => {
                     <Row gutter={12}>
                         <Col span={10}>
                             <Form.Item label="Biển số" name="license_plate">
-                                <Input placeholder="35H1-..." />
+                                <AutoComplete
+                                    options={licensePlateOptions}
+                                    onSearch={handleLicensePlateSearch}
+                                    onSelect={handleLicensePlateSelect}
+                                    popupMatchSelectWidth={false}
+                                    dropdownStyle={{ minWidth: 250 }}
+                                >
+                                    <Input placeholder="35H1-..." />
+                                </AutoComplete>
                             </Form.Item>
                         </Col>
                         <Col span={14}>
@@ -662,11 +801,11 @@ const RepairServicePage = () => {
         {/* RIGHT PANEL: SERVICE CONTENT */}
         <Col xs={24} lg={16}>
           <div className="glass-card" style={{ padding: 24, minHeight: 'calc(100vh - 48px)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
                 <Title level={4} style={{ margin: 0 }}>CHI TIẾT PHIẾU BẢO TRÌ</Title>
-                <Space>
+                <Space wrap>
                     <Button icon={<PlusCircle size={16} />} onClick={addServiceItem}>Thêm tiền công</Button>
-                    <div style={{ width: 350 }}>
+                    <div style={{ width: '100%', minWidth: 200, maxWidth: 350 }}>
                         <AutoComplete 
                             options={partOptions} 
                             onSearch={setPartSearchText} 

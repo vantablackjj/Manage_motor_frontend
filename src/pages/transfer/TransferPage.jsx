@@ -253,6 +253,21 @@ const TransferPage = () => {
     }
   };
 
+  const handleDeletePermanent = async (id) => {
+    try {
+      setLoading(true);
+      await api.delete(`/transfers/${id}`);
+      message.success('Đã xóa hoàn tất phiếu chuyển và các dữ liệu liên quan!');
+      setIsDetailModalOpen(false);
+      fetchTransfers();
+      if (user.warehouse_id) fetchAvailableVehicles(user.warehouse_id);
+    } catch (e) {
+      message.error(e.response?.data?.message || e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePrintTransfer = (data) => {
     if (!data) return;
     const { transfer, vehicles } = data;
@@ -296,6 +311,7 @@ const TransferPage = () => {
             <tr>
                 <th style="width: 40px">STT</th>
                 <th>Loại xe</th>
+                <th>Màu</th>
                 <th>Số Máy</th>
                 <th>Số Khung</th>
                 <th style="width: 100px">Kiểm tra</th>
@@ -306,6 +322,7 @@ const TransferPage = () => {
                 <tr>
                     <td class="center">${i + 1}</td>
                     <td>${v.VehicleType?.name || 'N/A'}</td>
+                    <td>${v.VehicleColor?.color_name || 'N/A'}</td>
                     <td>${v.engine_no}</td>
                     <td>${v.chassis_no}</td>
                     <td></td>
@@ -358,11 +375,13 @@ const TransferPage = () => {
     { title: 'Đã Trả', dataIndex: 'paid_amount_vnd', render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()}</Text> },
     { title: 'Còn Nợ', key: 'debt', render: (_, r) => <Tag color={(Number(r.total_amount) - Number(r.paid_amount_vnd)) > 0 ? 'red' : 'green'}>{(Number(r.total_amount) - Number(r.paid_amount_vnd)).toLocaleString()}</Tag> },
     { title: 'Trạng Thái', dataIndex: 'status', render: status => getStatusTag(status) },
+    { title: 'Thời gian hoàn thành', dataIndex: 'received_at', key: 'received_at', render: d => d ? dayjs(d).format('DD/MM/YYYY HH:mm') : '---' },
     { title: '', key: 'action', render: (_, r) => <Button size="small" onClick={() => loadDetails(r.id)}>Chi tiết</Button> }
   ];
 
   const vehicleColumns = [
     { title: 'Loại xe', key: 'type', render: (_, r) => r.VehicleType?.name || 'N/A' },
+    { title: 'Màu', key: 'color', render: (_, r) => r.VehicleColor?.color_name || 'N/A' },
     { title: 'Số Máy', dataIndex: 'engine_no', render: v => <Text code>{v}</Text> },
     { title: 'Số Khung', dataIndex: 'chassis_no', render: v => <Text code>{v}</Text> },
     { title: 'Giá (đ)', dataIndex: 'price_vnd', render: v => Number(v).toLocaleString() }
@@ -374,11 +393,19 @@ const TransferPage = () => {
     v.VehicleType?.name?.toLowerCase().includes(vehicleSearchText.toLowerCase())
   );
 
-  const filteredHistory = transfers.filter(t => 
-    t.transfer_code?.toLowerCase().includes(historySearchText.toLowerCase()) ||
-    warehouses.find(w => w.id === t.from_warehouse_id)?.warehouse_name?.toLowerCase().includes(historySearchText.toLowerCase()) ||
-    warehouses.find(w => w.id === t.to_warehouse_id)?.warehouse_name?.toLowerCase().includes(historySearchText.toLowerCase())
-  );
+  const filteredHistory = transfers.filter(t => {
+    const searchText = historySearchText.toLowerCase();
+    const codeMatch = t.transfer_code?.toLowerCase().includes(searchText);
+    const fromWhMatch = warehouses.find(w => w.id === t.from_warehouse_id)?.warehouse_name?.toLowerCase().includes(searchText);
+    const toWhMatch = warehouses.find(w => w.id === t.to_warehouse_id)?.warehouse_name?.toLowerCase().includes(searchText);
+    
+    const vehicleMatch = t.TransferItems?.some(item => 
+      item.Vehicle?.engine_no?.toLowerCase().includes(searchText) ||
+      item.Vehicle?.chassis_no?.toLowerCase().includes(searchText)
+    );
+
+    return codeMatch || fromWhMatch || toWhMatch || vehicleMatch;
+  });
 
 
   const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
@@ -388,7 +415,7 @@ const TransferPage = () => {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header">
         <div>
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>LUÂN CHUYỂN XE GIỮA CÁC KHO</Title>
           <Text type="secondary">Quy trình: Tạo phiếu (Kho A) → Duyệt (Admin) → Xác nhận nhận (Kho B)</Text>
@@ -538,12 +565,12 @@ const TransferPage = () => {
             <Card className="glass-card">
               <div style={{ marginBottom: 16 }}>
                 <Input 
-                   placeholder="Tìm theo mã phiếu, tên kho..." 
+                   placeholder="Tìm theo mã phiếu, tên kho, số máy, số khung..." 
                    prefix={<Search size={18} opacity={0.6} />}
                    allowClear
                    value={historySearchText}
                    onChange={(e) => setHistorySearchText(e.target.value)}
-                   style={{ width: 300, borderRadius: 10, background: 'rgba(255,255,255,0.02)' }}
+                   style={{ width: 350, borderRadius: 10, background: 'rgba(255,255,255,0.02)' }}
                 />
               </div>
               <Table 
@@ -587,8 +614,20 @@ const TransferPage = () => {
                    </div>
                 </div>
 
-                <div style={{ marginBottom: 20, padding: 10, background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
-                  <Space><UserIcon size={14} /> <Text type="secondary">Lập bởi:</Text> <Text strong>{detailData.transfer.creator?.full_name || 'N/A'}</Text></Space>
+                <div style={{ marginBottom: 20, padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <Row gutter={[16, 8]}>
+                    <Col span={12}>
+                      <Space><UserIcon size={14} /> <Text type="secondary">Lập bởi:</Text> <Text strong>{detailData.transfer.creator?.full_name || 'N/A'}</Text></Space>
+                    </Col>
+                    <Col span={12}>
+                      <Space><Calendar size={14} /> <Text type="secondary">Ngày lập:</Text> <Text strong>{dayjs(detailData.transfer.createdAt).format('DD/MM/YYYY HH:mm')}</Text></Space>
+                    </Col>
+                    {detailData.transfer.status === 'RECEIVED' && (
+                      <Col span={24}>
+                        <Space><Clock size={14} style={{ color: '#10b981' }} /> <Text type="secondary">Thời gian hoàn tất:</Text> <Text strong style={{ color: '#10b981' }}>{dayjs(detailData.transfer.received_at).format('DD/MM/YYYY HH:mm')}</Text></Space>
+                      </Col>
+                    )}
+                  </Row>
                 </div>
 
 
@@ -652,6 +691,20 @@ const TransferPage = () => {
                   {(isAdmin || (user.id === detailData.transfer.created_by)) && detailData.transfer.status !== 'RECEIVED' && detailData.transfer.status !== 'CANCELLED' && (
                     <Popconfirm title="Hủy phiếu này? Các xe sẽ quay lại trạng thái Sẵn sàng ở kho cũ." onConfirm={() => handleCancel(detailData.transfer.id)}>
                       <Button danger icon={<XCircle size={18} />} style={{ height: 45 }}>HỦY PHIẾU</Button>
+                    </Popconfirm>
+                  )}
+
+                  {/* PERMANENT DELETE (Admin or Manager/Nhân viên tổng bộ) */}
+                  {(isAdmin || isManager) && (
+                    <Popconfirm 
+                      title="XÓA VĨNH VIỄN PHIẾU NÀY?" 
+                      description="Lưu ý: Xe sẽ tự động quay về KHO CŨ ban đầu. Mọi dấu vết, lịch sử tiền và log của phiếu này sẽ biến mất."
+                      onConfirm={() => handleDeletePermanent(detailData.transfer.id)}
+                      okText="Đồng ý xóa"
+                      cancelText="Không"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button danger type="dashed" icon={<Trash2 size={18} />} style={{ height: 45 }}>XÓA VĨNH VIỄN</Button>
                     </Popconfirm>
                   )}
                 </div>

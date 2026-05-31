@@ -127,7 +127,7 @@ const MechanicPage = () => {
 
   return (
     <div className="page-container">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header">
         <div>
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>QUẢN LÝ DANH SÁCH THỢ</Title>
           <Text type="secondary">Quản lý nhân viên kỹ thuật (không cần tài khoản hệ thống)</Text>

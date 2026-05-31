@@ -20,6 +20,8 @@ import {
   Collapse,
   Checkbox,
   Modal,
+  Divider,
+  Tooltip,
 } from "antd";
 
 const { Panel } = Collapse;
@@ -40,6 +42,7 @@ import {
   RotateCcw,
   Printer,
   Gift,
+  History,
 } from "lucide-react";
 import dayjs from "dayjs";
 import api from "../../utils/api";
@@ -70,6 +73,7 @@ const RetailSalePage = () => {
   const [loading, setLoading] = useState(false);
   const [showPriceWarning, setShowPriceWarning] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
+  const [currentWarehouse, setCurrentWarehouse] = useState({});
   const [employees, setEmployees] = useState([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(
     user.warehouse_id,
@@ -107,33 +111,99 @@ const RetailSalePage = () => {
     fetchInitialData();
   }, []);
 
-  const fetchInitialData = async (warehouseId = selectedWarehouseId) => {
+  const fetchInitialData = async (warehouseId = selectedWarehouseId, search = "") => {
     try {
+      setLoading(true);
       const [salesRes, stockRes, whRes, empRes, giftRes, giftInvRes] =
         await Promise.all([
           api.get("/retail-sales"),
           api.get(
-            `/inventory/available${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
+            `/inventory/available${
+              search
+                ? `?search=${search}`
+                : warehouseId
+                ? `?warehouse_id=${warehouseId}`
+                : ""
+            }`,
           ),
-          isAdmin || isManager || user.accessible_warehouses
-            ? api.get("/warehouses")
-            : Promise.resolve({ data: [] }),
-          api.get("/auth/users"),
-          api.get("/gifts"),
+          api.get("/warehouses").catch(() => ({ data: [] })),
+          api.get("/auth/users").catch(() => ({ data: [] })),
+          api.get("/gifts").catch(() => ({ data: [] })),
           api.get(
             `/gifts/inventory${warehouseId ? `?warehouse_id=${warehouseId}` : ""}`,
-          ),
+          ).catch(() => ({ data: [] })),
         ]);
+      
+      if (search) {
+        if (stockRes.data.length > 0) {
+          const v = stockRes.data[0];
+          if (v.status !== "In Stock" || v.is_locked) {
+            const rescueBtn = (
+              <Button
+                type="primary"
+                size="small"
+                danger
+                style={{ marginLeft: 8 }}
+                onClick={async () => {
+                  try {
+                    await api.post("/inventory/rescue", { engine_no: v.engine_no });
+                    message.success(`Đã giải cứu xe ${v.engine_no}!`);
+                    fetchInitialData(selectedWarehouseId); // Tải lại danh sách
+                  } catch (err) {
+                    message.error("Không thể giải cứu xe này.");
+                  }
+                }}
+              >
+                Giải cứu xe
+              </Button>
+            );
+            message.warning(
+              <span>
+                Tìm thấy xe {v.engine_no} nhưng trạng thái là "{v.status === "Sold" ? "Đã bán" : v.status}" {v.is_locked ? "và Đang bị khóa" : ""}. {rescueBtn}
+              </span>,
+              10 // Hiển thị trong 10 giây
+            );
+          } else if (v.warehouse_id !== selectedWarehouseId) {
+            message.info(
+              `Xe này đang nằm ở kho: ${
+                v.Warehouse?.warehouse_name || "Kho khác"
+              }. Bạn cần chọn đúng kho xuất xe để bán.`,
+            );
+          }
+          setAvailableStock((prev) => {
+            const exists = prev.find((x) => x.id === v.id);
+            return exists ? prev : [...prev, v];
+          });
+        } else {
+          message.error("Không tìm thấy xe này trên toàn hệ thống.");
+        }
+      } else {
+        setAvailableStock(stockRes.data);
+      }
+
       setSalesHistory(salesRes.data);
-      setAvailableStock(stockRes.data);
-      if (whRes.data) {
+      if (whRes.data && whRes.data.length > 0) {
         setWarehouses(whRes.data);
+        const wid = warehouseId || user.warehouse_id;
+        const found = whRes.data.find((w) => String(w.id) === String(wid));
+        if (found) setCurrentWarehouse(found);
       }
       setEmployees(empRes.data);
       setAvailableGifts(giftRes.data);
       setGiftInventory(giftInvRes.data);
+
+      // Always fetch current warehouse directly (works even for staff accounts)
+      const curWid = warehouseId || user.warehouse_id;
+      if (curWid) {
+        try {
+          const wRes = await api.get(`/warehouses/${curWid}`);
+          if (wRes.data) setCurrentWarehouse(wRes.data);
+        } catch (_) {}
+      }
     } catch (error) {
       message.error("Lỗi tải dữ liệu: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,6 +226,8 @@ const RetailSalePage = () => {
         paid_amount: Number(suggested),
         cash_amount: Number(suggested),
         transfer_amount: 0,
+        transfer_amount_1: 0,
+        transfer_amount_2: 0,
       });
 
       setShowPriceWarning(false);
@@ -180,16 +252,24 @@ const RetailSalePage = () => {
       paid_amount: target,
       cash_amount: target,
       transfer_amount: 0,
+      transfer_amount_1: 0,
+      transfer_amount_2: 0,
     });
   };
 
   const handlePaymentChange = (type, value) => {
     const cash =
       type === "cash" ? value : form.getFieldValue("cash_amount") || 0;
-    const transfer =
-      type === "transfer" ? value : form.getFieldValue("transfer_amount") || 0;
+    const transfer1 =
+      type === "transfer_1" ? value : form.getFieldValue("transfer_amount_1") || 0;
+    const transfer2 =
+      type === "transfer_2" ? value : form.getFieldValue("transfer_amount_2") || 0;
+    
+    const totalTransfer = Number(transfer1) + Number(transfer2);
+    
     form.setFieldsValue({
-      paid_amount: Number(cash) + Number(transfer),
+      transfer_amount: totalTransfer,
+      paid_amount: Number(cash) + totalTransfer,
     });
   };
 
@@ -209,7 +289,7 @@ const RetailSalePage = () => {
       form.resetFields();
       setSelectedVehicle(null);
       setShowPriceWarning(false);
-      fetchInitialData();
+      await fetchInitialData();
     } catch (error) {
       message.error("Lỗi: " + (error.response?.data?.message || error.message));
     } finally {
@@ -224,7 +304,7 @@ const RetailSalePage = () => {
       message.success(
         "Đã hủy đơn bán và khôi phục xe về trạng thái 'Trong kho'!",
       );
-      fetchInitialData();
+      await fetchInitialData();
     } catch (error) {
       message.error(
         "Lỗi khi hủy đơn: " + (error.response?.data?.message || error.message),
@@ -267,7 +347,7 @@ const RetailSalePage = () => {
       const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
       setPaymentHistory(res.data);
 
-      fetchInitialData(); // Refresh history table
+      await fetchInitialData(); // Refresh history table
     } catch (error) {
       message.error("Lỗi: " + (error.response?.data?.message || error.message));
     } finally {
@@ -281,7 +361,7 @@ const RetailSalePage = () => {
       message.success("Đã xóa khoản thanh toán");
       const res = await api.get(`/retail-sales/${selectedSale.id}/payments`);
       setPaymentHistory(res.data);
-      fetchInitialData();
+      await fetchInitialData();
     } catch (error) {
       message.error("Lỗi: " + error.message);
     }
@@ -291,7 +371,8 @@ const RetailSalePage = () => {
     const warehouse = sale.Warehouse || sale.warehouse || sale.Store || {};
     const vehicle = sale.Vehicle || sale.vehicle || {};
     const seller = sale.Seller || sale.seller || sale.User || {};
-    const loan = sale.is_disbursed ? Number(sale.loan_amount || 0) : 0;
+    const loanAmount = Number(sale.loan_amount || 0);
+    const loan = sale.is_disbursed ? loanAmount : 0;
     const paid = Number(sale.paid_amount || 0);
     const price = Number(sale.sale_price || 0);
     const debt = price - paid - loan;
@@ -351,7 +432,7 @@ const RetailSalePage = () => {
       return r.charAt(0).toUpperCase() + r.slice(1) + " đồng";
     };
 
-    const dateObj = sale.sale_date ? new Date(sale.sale_date) : new Date();
+    const dateObj = sale.sale_date ? dayjs(sale.sale_date).toDate() : new Date();
     const dd = String(dateObj.getDate()).padStart(2, "0");
     const mm = String(dateObj.getMonth() + 1).padStart(2, "0");
     const yyyy = dateObj.getFullYear();
@@ -448,6 +529,7 @@ const RetailSalePage = () => {
   <div class="row" style="margin-top:2px"><span class="lbl">Xe bao gồm :</span><span class="val">${sale.sale_type === "Đăng ký" ? "Đăng ký xe" : "Hồ sơ xe"}</span></div>
   <div class="row">
     <div class="col"><span class="lbl">Loại xe :</span><span class="val">${vehicle.VehicleType?.name || "................"}</span></div>
+    <div class="col"><span class="lbl">Màu xe :</span><span class="val">${vehicle.VehicleColor?.color_name || "................"}</span></div>
   </div>
   <div class="row">
     <div class="col"><span class="lbl">Số máy :</span><span class="val">${formatSN(sale.engine_no)}</span></div>
@@ -461,8 +543,8 @@ const RetailSalePage = () => {
     sale.payment_method === "Trả góp"
       ? `
   <div class="row">
-    <div class="col"><span class="lbl">Trả góp :</span><span class="val">${loan.toLocaleString("vi-VN")} đ</span></div>
-    <div class="col"><span class="lbl">Ngân hàng :</span><span class="val">....................................................</span></div>
+    <div class="col"><span class="lbl">Trả góp :</span><span class="val">${loanAmount.toLocaleString("vi-VN")} đ</span></div>
+    <div class="col"><span class="lbl">Ngân hàng :</span><span class="val">${sale.bank_name || "...................................................."}</span></div>
   </div>
   `
       : ""
@@ -499,6 +581,70 @@ const RetailSalePage = () => {
     }
   };
 
+  const handlePrintDraft = async () => {
+    const values = form.getFieldsValue();
+    if (!values.customer_name && !values.engine_no) {
+      return message.warning(
+        "Vui lòng nhập ít nhất tên khách hoặc số máy để in!",
+      );
+    }
+
+    const warehouseId = selectedWarehouseId || user.warehouse_id;
+    let warehouse = {};
+
+    // 1. Try fetching the specific warehouse by ID (requires backend route /warehouses/:id)
+    if (warehouseId) {
+      try {
+        const res = await api.get(`/warehouses/${warehouseId}`);
+        if (res.data && res.data.id) {
+          warehouse = res.data;
+        }
+      } catch (_) {
+        // Route may not exist yet, try fetching all
+      }
+    }
+
+    // 2. Fallback: fetch all warehouses and find the right one
+    if (!warehouse.id) {
+      try {
+        const res = await api.get("/warehouses");
+        const allWh = Array.isArray(res.data) ? res.data : [];
+        if (warehouseId) {
+          warehouse =
+            allWh.find((w) => String(w.id) === String(warehouseId)) || {};
+        }
+        // If still not found, take the first warehouse
+        if (!warehouse.id && allWh.length > 0) {
+          warehouse = allWh[0];
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback: use already-loaded state
+    if (!warehouse.id && currentWarehouse?.id) {
+      warehouse = currentWarehouse;
+    }
+    if (!warehouse.id && warehouses.length > 0) {
+      warehouse =
+        warehouses.find((w) => String(w.id) === String(warehouseId)) ||
+        warehouses[0] ||
+        {};
+    }
+
+    const draftSale = {
+      ...values,
+      Warehouse: warehouse,
+      Vehicle: selectedVehicle,
+      Seller:
+        employees.find(
+          (e) => String(e.id) === String(values.seller_id),
+        ) || user,
+      is_disbursed: false,
+    };
+
+    handlePrint(draftSale);
+  };
+
   const columns = [
     {
       title: "NGÀY BÁN",
@@ -521,6 +667,12 @@ const RetailSalePage = () => {
       ),
     },
     {
+      title: "MÀU",
+      key: "color",
+      width: 80,
+      render: (_, r) => r.Vehicle?.VehicleColor?.color_name || "-",
+    },
+    {
       title: "TÊN KHÁCH",
       dataIndex: "customer_name",
       key: "customer",
@@ -534,25 +686,28 @@ const RetailSalePage = () => {
       ),
     },
     {
-      title: "Ngày sinh",
+      title: "NGÀY SINH",
       dataIndex: "birthday",
-      key: "birthday",
+      width: 90,
       render: (d) => (d ? dayjs(d).format("DD/MM/YYYY") : "-"),
     },
     {
-      title: "Giá bán",
+      title: "GIÁ BÁN",
       dataIndex: "sale_price",
-      render: (v) => <b>{Number(v).toLocaleString()}</b>,
+      width: 100,
+      render: (v) => <b style={{ fontSize: 11 }}>{Number(v).toLocaleString()}</b>,
     },
     {
-      title: "Loại TT",
+      title: "LOẠI TT",
       dataIndex: "payment_method",
-      render: (v) => <Tag color={v === "Trả góp" ? "orange" : "blue"}>{v}</Tag>,
+      width: 90,
+      render: (v) => <Tag color={v === "Trả góp" ? "orange" : "blue"} style={{ fontSize: 10 }}>{v}</Tag>,
     },
     {
-      title: "Đã trả",
+      title: "ĐÃ TRẢ",
       dataIndex: "paid_amount",
-      render: (v) => <Text type="success">{Number(v).toLocaleString()}</Text>,
+      width: 100,
+      render: (v) => <Text type="success" style={{ fontSize: 11 }}>{Number(v).toLocaleString()}</Text>,
     },
     {
       title: "Quà tặng",
@@ -576,8 +731,9 @@ const RetailSalePage = () => {
       ),
     },
     {
-      title: "Còn nợ",
+      title: "CÒN NỢ",
       key: "debt",
+      width: 100,
       render: (_, r) => {
         const price = Number(r.sale_price || r.total_price || 0);
         const paid = Number(r.paid_amount || 0);
@@ -585,11 +741,11 @@ const RetailSalePage = () => {
         const debt = price - paid - loan;
         if (price === 0) return <Tag color="error">TRẢ XE MƯỢN</Tag>;
         return debt > 0 ? (
-          <Text type="danger" strong>
+          <Text type="danger" strong style={{ fontSize: 11 }}>
             {Number(debt).toLocaleString()}
           </Text>
         ) : (
-          <Tag color="green">Đã đủ</Tag>
+          <Tag color="green" style={{ fontSize: 10 }}>Đủ</Tag>
         );
       },
     },
@@ -707,12 +863,37 @@ const RetailSalePage = () => {
         "Giá bán": price,
         "Thực thu (TM+CK+NH)": paid + loan,
         "Tiền mặt": Number(s.cash_amount || 0),
-        "Chuyển khoản": Number(s.transfer_amount || 0),
+        "CK 1 (Xe)": Number(s.transfer_amount_1 || 0),
+        "CK 2 (Đ.Ký)": Number(s.transfer_amount_2 || 0),
+        "Tổng CK": Number(s.transfer_amount || 0),
         "Còn nợ": debt,
         "NV Bán": s.seller?.full_name || "N/A",
       };
     });
     exportToExcel(exportData, `LichSuBanLe_${dayjs().format("YYYYMMDD_HHmm")}`);
+  };
+
+  const handleExportTransferTracking = () => {
+    // Only export from the ALREADY FILTERED history (search, debt, etc.)
+    // AND only records that have a transfer amount
+    const transferData = filteredHistory.filter(s => Number(s.transfer_amount || 0) > 0);
+    
+    if (transferData.length === 0)
+      return message.warning("Không có dữ liệu chuyển khoản trong danh sách hiện tại!");
+
+    const exportData = transferData.map((s) => ({
+      "Ngày": dayjs(s.sale_date).format("DD/MM/YYYY"),
+      "Tên khách hàng": s.customer_name,
+      "Loại xe": s.Vehicle?.VehicleType?.name || "N/A",
+      "Màu": s.Vehicle?.VehicleColor?.color_name || "N/A",
+      "Số máy": s.engine_no,
+      "Tổng tiền": Number(s.sale_price || s.total_price || 0),
+      "CK 1 (Xe)": Number(s.transfer_amount_1 || 0),
+      "CK 2 (Đ.Ký)": Number(s.transfer_amount_2 || 0),
+      "Tổng CK": Number(s.transfer_amount || 0),
+      "Tiền mặt": Number(s.cash_amount || 0),
+    }));
+    exportToExcel(exportData, `TheoDoiChuyenKhoan_LS_${dayjs().format("YYYYMMDD")}`);
   };
 
   const filteredHistory = salesHistory.filter((s) => {
@@ -735,7 +916,7 @@ const RetailSalePage = () => {
   });
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ width: "100%", margin: "0 auto" }}>
       <div className="page-header" style={{ marginBottom: 24 }}>
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
           BÁN LẺ XE MÁY
@@ -756,7 +937,7 @@ const RetailSalePage = () => {
       </div>
 
       <Row gutter={[24, 24]} className="mobile-stack-cols">
-        <Col xs={24} lg={11}>
+        <Col xs={24} lg={10}>
           <Card
             title={
               <Space>
@@ -766,9 +947,12 @@ const RetailSalePage = () => {
             className="glass-card"
             extra={
               selectedVehicle && (
-                <div style={{ textAlign: "right" }}>
+                <Space>
                   <Tag color="blue">{selectedVehicle.VehicleType?.name}</Tag>
-                </div>
+                  {selectedVehicle.VehicleColor?.color_name && (
+                    <Tag color="cyan">{selectedVehicle.VehicleColor.color_name}</Tag>
+                  )}
+                </Space>
               )
             }
           >
@@ -870,7 +1054,21 @@ const RetailSalePage = () => {
                       size="large"
                       placeholder="Chọn số máy..."
                       onChange={handleVehicleSelect}
-                      optionFilterProp="children"
+                      onSearch={(val) => {
+                        if (val && val.length >= 6) {
+                          const exists = availableStock.some((v) =>
+                            v.engine_no.toLowerCase().includes(val.toLowerCase().trim()),
+                          );
+                          if (!exists) {
+                            fetchInitialData(selectedWarehouseId, val.trim());
+                          }
+                        }
+                      }}
+                      filterOption={(input, option) =>
+                        (option?.children ?? "")
+                          .toLowerCase()
+                          .includes(input.toLowerCase().trim())
+                      }
                     >
                       {availableStock.map((v) => (
                         <Option key={v.id} value={v.id}>
@@ -891,7 +1089,21 @@ const RetailSalePage = () => {
                       size="large"
                       placeholder="Chọn số khung..."
                       onChange={handleVehicleSelect}
-                      optionFilterProp="children"
+                      onSearch={(val) => {
+                        if (val && val.length >= 6) {
+                          const exists = availableStock.some((v) =>
+                            v.chassis_no.toLowerCase().includes(val.toLowerCase().trim()),
+                          );
+                          if (!exists) {
+                            fetchInitialData(selectedWarehouseId, val.trim());
+                          }
+                        }
+                      }}
+                      filterOption={(input, option) =>
+                        (option?.children ?? "")
+                          .toLowerCase()
+                          .includes(input.toLowerCase().trim())
+                      }
                     >
                       {availableStock.map((v) => (
                         <Option key={v.id} value={v.id}>
@@ -993,6 +1205,8 @@ const RetailSalePage = () => {
                                 paid_amount: 0,
                                 cash_amount: 0,
                                 transfer_amount: 0,
+                                transfer_amount_1: 0,
+                                transfer_amount_2: 0,
                                 notes:
                                   "[TRẢ XE MƯỢN] " +
                                   (form.getFieldValue("notes") || ""),
@@ -1028,10 +1242,12 @@ const RetailSalePage = () => {
               </Row>
 
               <Row gutter={[16, 16]}>
-                <Col xs={12} sm={8}>
+                <Col xs={12} sm={6}>
                   <Form.Item label="Tiền mặt" name="cash_amount">
                     <InputNumber
                       size="large"
+                      className="money-input-bold hide-controls"
+                      controls={false}
                       style={{ width: "100%" }}
                       onChange={(v) => handlePaymentChange("cash", v)}
                       formatter={(v) =>
@@ -1041,20 +1257,43 @@ const RetailSalePage = () => {
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={12} sm={8}>
-                  <Form.Item label="Chuyển khoản" name="transfer_amount">
+                <Col xs={12} sm={6}>
+                  <Form.Item label="CK 1 (Xe)" name="transfer_amount_1">
                     <InputNumber
                       size="large"
+                      className="money-input-bold hide-controls"
+                      controls={false}
                       style={{ width: "100%" }}
-                      onChange={(v) => handlePaymentChange("transfer", v)}
+                      onChange={(v) => handlePaymentChange("transfer_1", v)}
                       formatter={(v) =>
                         `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                       }
                       parser={(v) => v.replace(/\./g, "")}
+                      placeholder="CK Xe..."
                     />
                   </Form.Item>
                 </Col>
-                <Col xs={24} sm={8}>
+                <Col xs={12} sm={6}>
+                  <Form.Item label="CK 2 (Đ.Ký)" name="transfer_amount_2">
+                    <InputNumber
+                      size="large"
+                      className="money-input-bold hide-controls"
+                      controls={false}
+                      style={{ width: "100%" }}
+                      onChange={(v) => handlePaymentChange("transfer_2", v)}
+                      formatter={(v) =>
+                        `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                      }
+                      parser={(v) => v.replace(/\./g, "")}
+                      placeholder="CK Đ.Ký..."
+                    />
+                  </Form.Item>
+                </Col>
+                {/* Hidden field for total transfer to keep compatibility */}
+                <Form.Item name="transfer_amount" hidden>
+                  <InputNumber />
+                </Form.Item>
+                <Col xs={24} sm={6}>
                   <Form.Item
                     noStyle
                     shouldUpdate={(prev, curr) =>
@@ -1074,8 +1313,8 @@ const RetailSalePage = () => {
                               Tiền thực thu
                               {getFieldValue("payment_method") ===
                                 "Trả góp" && (
-                                <Tag color="cyan">
-                                  Cần thu: {target.toLocaleString()}đ
+                                <Tag color="cyan" style={{ fontSize: 10 }}>
+                                  Cần: {target.toLocaleString()}đ
                                 </Tag>
                               )}
                             </Space>
@@ -1085,10 +1324,11 @@ const RetailSalePage = () => {
                         >
                           <InputNumber
                             size="large"
+                            className="money-input-bold hide-controls readonly-input-highlight"
+                            controls={false}
                             style={{ width: "100%" }}
                             placeholder="Tổng thực thu..."
                             readOnly
-                            className="readonly-input-highlight"
                             formatter={(v) =>
                               `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
                             }
@@ -1115,6 +1355,8 @@ const RetailSalePage = () => {
                             contract_number: null,
                             cash_amount: price,
                             transfer_amount: 0,
+                            transfer_amount_1: 0,
+                            transfer_amount_2: 0,
                             paid_amount: price,
                           });
                         } else {
@@ -1123,6 +1365,8 @@ const RetailSalePage = () => {
                           form.setFieldsValue({
                             cash_amount: target,
                             transfer_amount: 0,
+                            transfer_amount_1: 0,
+                            transfer_amount_2: 0,
                             paid_amount: target,
                           });
                         }
@@ -1198,6 +1442,8 @@ const RetailSalePage = () => {
                                 form.setFieldsValue({
                                   cash_amount: target,
                                   transfer_amount: 0,
+                                  transfer_amount_1: 0,
+                                  transfer_amount_2: 0,
                                   paid_amount: target,
                                 });
                               }}
@@ -1445,58 +1691,98 @@ const RetailSalePage = () => {
                 <Input.TextArea rows={2} placeholder="Thông tin thêm..." />
               </Form.Item>
 
-              <Button
-                block
-                type="primary"
-                size="large"
-                htmlType="submit"
-                loading={loading}
-                style={{ height: 48, fontWeight: "bold" }}
-              >
-                XÁC NHẬN XUẤT HÓA ĐƠN
-              </Button>
+              <Row gutter={12}>
+                <Col xs={24} sm={10}>
+                  <Button
+                    block
+                    size="large"
+                    icon={<Printer size={18} />}
+                    onClick={handlePrintDraft}
+                    style={{
+                      height: 48,
+                      marginBottom: window.innerWidth < 640 ? 8 : 0,
+                    }}
+                  >
+                    IN HÓA ĐƠN (TẠM)
+                  </Button>
+                </Col>
+                <Col xs={24} sm={14}>
+                  <Button
+                    block
+                    type="primary"
+                    size="large"
+                    htmlType="submit"
+                    loading={loading}
+                    style={{ height: 48, fontWeight: "bold" }}
+                  >
+                    XÁC NHẬN XUẤT HÓA ĐƠN
+                  </Button>
+                </Col>
+              </Row>
             </Form>
           </Card>
         </Col>
 
-        <Col xs={24} lg={13}>
+        <Col xs={24} lg={14}>
           <Card
-            title="Lịch sử giao dịch"
+            title={
+              <Space>
+                <History size={20} className="text-primary" />
+                <span>Lịch sử giao dịch</span>
+              </Space>
+            }
             className="glass-card"
             extra={
               <Space wrap>
                 <Input.Search
-                  placeholder="Tìm số máy/khung/khách..."
+                  placeholder="Tìm nhanh..."
                   allowClear
                   onSearch={(v) => setSearchText(v)}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: window.innerWidth < 768 ? "100%" : 220 }}
+                  style={{ width: 200 }}
+                  size="small"
                 />
                 <Checkbox
                   checked={showOnlyDebt}
                   onChange={(e) => setShowOnlyDebt(e.target.checked)}
                 >
-                  <Text strong type="danger" style={{ fontSize: 13 }}>
+                  <Text type="danger" style={{ fontSize: 12, fontWeight: 500 }}>
                     Chưa thu đủ
                   </Text>
                 </Checkbox>
-                <Button
-                  icon={<Download size={16} />}
-                  onClick={handleExport}
-                  size="small"
-                  ghost
-                >
-                  Xuất
-                </Button>
-                <Button
-                  icon={<FileSpreadsheet size={16} />}
-                  type="primary"
-                  ghost
-                  size="small"
-                  onClick={() => setImportVisible(true)}
-                >
-                  Nhập
-                </Button>
+                <Divider type="vertical" />
+                <Space size={4}>
+                  <Tooltip title="Xuất Excel tổng hợp">
+                    <Button
+                      icon={<Download size={14} />}
+                      onClick={handleExport}
+                      size="small"
+                      type="primary"
+                      ghost
+                    />
+                  </Tooltip>
+                  <Button
+                    icon={<FileSpreadsheet size={14} />}
+                    onClick={handleExportTransferTracking}
+                    size="small"
+                    type="primary"
+                    ghost
+                    style={{ color: '#10b981', borderColor: '#10b981', fontSize: 11 }}
+                  >
+                    Theo Dõi CK
+                  </Button>
+                  <Tooltip title="Nhập dữ liệu từ Excel">
+                    <Button
+                      icon={<FileSpreadsheet size={14} />}
+                      type="primary"
+                      ghost
+                      size="small"
+                      onClick={() => setImportVisible(true)}
+                    >
+                      Nhập
+                    </Button>
+                  </Tooltip>
+                </Space>
               </Space>
             }
             styles={{ body: { padding: 0 } }}
@@ -1731,7 +2017,7 @@ const RetailSalePage = () => {
             });
             message.success("Đã xác nhận giải ngân thành công!");
             setDisburseModalVisible(false);
-            fetchInitialData();
+            await fetchInitialData();
           } catch (err) {
             message.error("Lỗi: " + err.message);
           } finally {

@@ -13,7 +13,7 @@ import {
   Card,
   Statistic
 } from 'antd';
-import { Search, Box, Layers, Download, RotateCcw, FileStack } from 'lucide-react';
+import { Search, Box, Layers, Download, RotateCcw, FileStack, DollarSign, Package } from 'lucide-react';
 import api from '../../utils/api';
 import dayjs from 'dayjs';
 import { exportToExcel } from '../../utils/excelExport';
@@ -35,6 +35,13 @@ const PartInventoryPage = () => {
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isPowerUser = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const allowedWarehouseIds = [
+    user.warehouse_id,
+    ...(user.accessible_warehouses ? user.accessible_warehouses.split(',') : [])
+  ].filter(Boolean);
+
+  const totalQuantity = data.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const totalValue = data.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.Part?.purchase_price || 0)), 0);
 
   const fetchData = async () => {
     setLoading(true);
@@ -64,14 +71,23 @@ const PartInventoryPage = () => {
 
   const handleExport = () => {
     if (!data || data.length === 0) return message.warning('Không có dữ liệu để xuất!');
-    const exportData = data.map(item => ({
-      'Mã phụ tùng (SKU)': item.Part?.code,
-      'Loại': item.Part?.code_type === 'HONDA' ? 'Honda' : 'Tự tạo',
-      'Tên phụ tùng': item.Part?.name,
-      'Đơn vị lẻ': item.Part?.unit,
-      'Kho': item.Warehouse?.warehouse_name || 'N/A',
-      'Số lượng tồn': Number(item.quantity)
-    }));
+    const exportData = data.map(item => {
+      const row = {
+        'Mã phụ tùng (SKU)': item.Part?.code,
+        'Loại': item.Part?.code_type === 'HONDA' ? 'Honda' : 'Tự tạo',
+        'Tên phụ tùng': item.Part?.name,
+        'Đơn vị lẻ': item.Part?.unit,
+        'Kho': item.Warehouse?.warehouse_name || 'N/A',
+        'Vị trí': item.location || '',
+        'Hạn mức cảnh báo': item.warning_limit !== undefined && item.warning_limit !== null ? Number(item.warning_limit) : 5,
+        'Số lượng tồn': Number(item.quantity)
+      };
+      if (isPowerUser) {
+        row['Giá nhập (đ)'] = Number(item.Part?.purchase_price || 0);
+        row['Thành tiền (đ)'] = Number(item.quantity || 0) * Number(item.Part?.purchase_price || 0);
+      }
+      return row;
+    });
     exportToExcel(exportData, `TonKhoPhuTung_${dayjs().format('YYYYMMDD')}`);
   };
 
@@ -109,33 +125,94 @@ const PartInventoryPage = () => {
         title: 'Vị trí', 
         dataIndex: 'location', 
         key: 'location',
-        render: (text, record) => (
-            <Input 
-                defaultValue={text} 
-                onBlur={(e) => handleUpdateLocation(record.id, e.target.value)}
-                placeholder="VD: Kệ A hàng 3"
-                style={{ width: '150px' }}
-            />
-        )
+        render: (text, record) => {
+            const canEdit = isPowerUser || allowedWarehouseIds.includes(record.warehouse_id);
+            return (
+                <Input 
+                    defaultValue={text} 
+                    onBlur={(e) => {
+                        if (e.target.value !== text) {
+                            handleUpdateLocation(record.id, e.target.value);
+                        }
+                    }}
+                    placeholder={canEdit ? "VD: Kệ A hàng 3" : "Không có quyền sửa"}
+                    style={{ width: '150px' }}
+                    disabled={!canEdit}
+                />
+            );
+        }
+    },
+    { 
+        title: 'SL cảnh báo', 
+        dataIndex: 'warning_limit', 
+        key: 'warning_limit',
+        render: (text, record) => {
+            const canEdit = isPowerUser || allowedWarehouseIds.includes(record.warehouse_id);
+            const val = text !== undefined && text !== null ? Number(text) : 5;
+            return (
+                <Input 
+                    type="number"
+                    defaultValue={val} 
+                    onBlur={(e) => {
+                        const newVal = e.target.value === '' ? 5 : Number(e.target.value);
+                        if (newVal !== val) {
+                            handleUpdateWarningLimit(record.id, newVal);
+                        }
+                    }}
+                    placeholder={canEdit ? "VD: 5" : "Không có quyền sửa"}
+                    style={{ width: '100px' }}
+                    disabled={!canEdit}
+                />
+            );
+        }
     },
     { 
         title: 'Số lượng tồn (Lẻ)', 
         dataIndex: 'quantity', 
         key: 'quantity',
-        render: (v) => (
-            <Text strong style={{ color: Number(v) <= 5 ? '#ef4444' : '#10b981', fontSize: 16 }}>
-                {Number(v).toLocaleString()}
-            </Text>
-        )
+        render: (v, record) => {
+            const threshold = record.warning_limit !== undefined && record.warning_limit !== null ? Number(record.warning_limit) : 5;
+            return (
+                <Text strong style={{ color: Number(v) <= threshold ? '#ef4444' : '#10b981', fontSize: 16 }}>
+                    {Number(v).toLocaleString()}
+                </Text>
+            );
+        }
     },
+    ...(isPowerUser ? [
+        { 
+            title: 'Giá Nhập (đ)', 
+            dataIndex: ['Part', 'purchase_price'], 
+            key: 'price', 
+            align: 'right',
+            render: v => <Text>{Number(v || 0).toLocaleString()}</Text>
+        },
+        { 
+            title: 'Thành Tiền', 
+            key: 'total', 
+            align: 'right',
+            render: (_, r) => <Text strong>{(Number(r.quantity) * Number(r.Part?.purchase_price || 0)).toLocaleString()} đ</Text>
+        }
+    ] : [])
   ];
 
   const handleUpdateLocation = async (id, location) => {
       try {
           await api.put(`/part-inventory/${id}`, { location });
           message.success('Cập nhật vị trí thành công');
+          setData(prev => prev.map(item => item.id === id ? { ...item, location } : item));
       } catch (error) {
-          message.error('Lỗi cập nhật vị trí: ' + error.message);
+          message.error('Lỗi cập nhật vị trí: ' + (error.response?.data?.message || error.message));
+      }
+  };
+
+  const handleUpdateWarningLimit = async (id, warning_limit) => {
+      try {
+          await api.put(`/part-inventory/${id}`, { warning_limit });
+          message.success('Cập nhật hạn mức cảnh báo thành công');
+          setData(prev => prev.map(item => item.id === id ? { ...item, warning_limit } : item));
+      } catch (error) {
+          message.error('Lỗi cập nhật hạn mức cảnh báo: ' + (error.response?.data?.message || error.message));
       }
   };
 
@@ -172,8 +249,8 @@ const PartInventoryPage = () => {
         </Space>
       </div>
 
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} md={isPowerUser ? 6 : 8}>
             <Card className="glass-card" bodyStyle={{ padding: 16 }}>
                 <Statistic 
                     title="Tổng số mặt hàng" 
@@ -182,16 +259,41 @@ const PartInventoryPage = () => {
                 />
             </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={24} sm={12} md={isPowerUser ? 6 : 8}>
             <Card className="glass-card" bodyStyle={{ padding: 16 }}>
                 <Statistic 
                     title="Hết hàng / Sắp hết" 
-                    value={data.filter(i => i.quantity <= 5).length} 
+                    value={data.filter(i => {
+                        const threshold = i.warning_limit !== undefined && i.warning_limit !== null ? Number(i.warning_limit) : 5;
+                        return Number(i.quantity) <= threshold;
+                    }).length} 
                     valueStyle={{ color: '#ef4444' }}
                     prefix={<Layers size={18} style={{ marginRight: 8 }} />} 
                 />
             </Card>
         </Col>
+        <Col xs={24} sm={12} md={isPowerUser ? 6 : 8}>
+            <Card className="glass-card" bodyStyle={{ padding: 16 }}>
+                <Statistic 
+                    title="Tổng số lượng tồn" 
+                    value={totalQuantity} 
+                    prefix={<Package size={18} style={{ marginRight: 8, color: '#10b981' }} />} 
+                />
+            </Card>
+        </Col>
+        {isPowerUser && (
+          <Col xs={24} sm={12} md={6}>
+              <Card className="glass-card" bodyStyle={{ padding: 16 }}>
+                  <Statistic 
+                      title="Tổng giá trị tồn kho" 
+                      value={totalValue} 
+                      suffix="đ"
+                      formatter={v => Number(v).toLocaleString()}
+                      prefix={<DollarSign size={18} style={{ marginRight: 8, color: '#f59e0b' }} />} 
+                  />
+              </Card>
+          </Col>
+        )}
       </Row>
 
       <div className="glass-card" style={{ padding: 20, marginBottom: 24 }}>

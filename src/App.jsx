@@ -28,7 +28,6 @@ import PartInventoryPage from './pages/inventory/PartInventoryPage';
 import PartRetailPage from './pages/retail/PartRetailPage';
 import PartRetailDebtPage from './pages/retail/PartRetailDebtPage';
 import PartWholesaleDebtPage from './pages/purchase/PartWholesaleDebtPage';
-import PartInventoryReportPage from './pages/reports/PartInventoryReportPage';
 import PartPurchasesReportPage from './pages/reports/PartPurchasesReportPage';
 import PartSalesReportPage from './pages/reports/PartSalesReportPage';
 import MaintenanceHub from './pages/retail/MaintenanceHub';
@@ -179,7 +178,7 @@ function App() {
                     />
                     
                     {/* BÁO CÁO PHỤ TÙNG */}
-                    <Route path="/report/parts-inventory" element={<PartInventoryReportPage />} />
+                    <Route path="/report/parts-inventory" element={<Navigate to="/part-inventory" replace />} />
                     <Route path="/report/parts-purchases" element={<PartPurchasesReportPage />} />
                     <Route path="/report/parts-sales" element={<PartSalesReportPage />} />
                     <Route path="/report/parts-wholesale" element={<PartWholesaleReportPage />} />

@@ -60,11 +60,13 @@ const MaintenanceReportPage = () => {
             title: 'Ngày bảo trì', 
             dataIndex: 'maintenance_date', 
             key: 'date',
+            sorter: (a, b) => dayjs(a.maintenance_date).unix() - dayjs(b.maintenance_date).unix(),
             render: v => dayjs(v).format('DD/MM/YYYY HH:mm')
         },
         { 
             title: 'Khách hàng', 
             key: 'customer',
+            sorter: (a, b) => (a.customer_name || 'Khách vãng lai').localeCompare(b.customer_name || 'Khách vãng lai'),
             render: (_, r) => (
                 <div>
                     <div style={{ fontWeight: 'bold' }}><User size={14} style={{ marginRight: 4, opacity: 0.5 }} />{r.customer_name || 'Khách vãng lai'}</div>
@@ -75,6 +77,7 @@ const MaintenanceReportPage = () => {
         { 
             title: 'Thông tin xe', 
             key: 'vehicle',
+            sorter: (a, b) => (a.license_plate || '').localeCompare(b.license_plate || ''),
             render: (_, r) => (
                 <div>
                     <div style={{ fontWeight: 'bold' }}>{r.license_plate || 'Chưa có biển'}</div>
@@ -86,18 +89,21 @@ const MaintenanceReportPage = () => {
         { 
             title: 'Kho thực hiện', 
             dataIndex: ['Warehouse', 'warehouse_name'], 
-            key: 'warehouse' 
+            key: 'warehouse',
+            sorter: (a, b) => (a.Warehouse?.warehouse_name || '').localeCompare(b.Warehouse?.warehouse_name || '')
         },
         { 
             title: 'Loại hình', 
             dataIndex: 'service_type', 
             key: 'service_type',
+            sorter: (a, b) => (a.service_type || '').localeCompare(b.service_type || ''),
             render: v => <Tag color="blue">{v}</Tag>
         },
         { 
             title: 'Trạng thái', 
             dataIndex: 'status', 
             key: 'status',
+            sorter: (a, b) => (a.status || '').localeCompare(b.status || ''),
             render: v => {
                 const colors = {
                     'COMPLETED': 'success',
@@ -113,6 +119,7 @@ const MaintenanceReportPage = () => {
             dataIndex: 'total_amount', 
             key: 'total',
             align: 'right',
+            sorter: (a, b) => Number(a.total_amount) - Number(b.total_amount),
             render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text>
         },
         {
@@ -154,7 +161,7 @@ const MaintenanceReportPage = () => {
 
     return (
         <div className="page-container">
-            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="page-header">
                 <div>
                     <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁO CÁO DỊCH VỤ SỬA CHỮA</Title>
                     <Text type="secondary">Tra cứu danh sách xe vào xưởng để chăm sóc khách hàng</Text>

@@ -335,6 +335,7 @@ const VehicleLifecyclePage = () => {
                 <th>Ngày</th>
                 <th>Trạng thái</th>
                 <th>Loại xe</th>
+                <th>Màu</th>
                 <th>Số máy</th>
                 <th>Số khung</th>
                 <th>Khách hàng</th>
@@ -351,6 +352,7 @@ const VehicleLifecyclePage = () => {
                     <td class="text-center">${dayjs(v.sale_date || v.import_date).format("DD/MM/YYYY")}</td>
                     <td class="text-center">${v.sale_date ? "Đã bán" : "Trong kho"}</td>
                     <td>${v.type_name}</td>
+                    <td class="text-center">${v.color_name || "-"}</td>
                     <td>${v.engine_no}</td>
                     <td>${v.chassis_no}</td>
                     <td>${v.customer_name || "-"}</td>
@@ -492,21 +494,21 @@ const VehicleLifecyclePage = () => {
     const groups = {};
     const others = [];
 
-    results.forEach(v => {
+    results.forEach((v) => {
       // Logic gộp: Nếu là hàng bán sỉ hoặc nhập theo lô thì mới gộp
       const hasLot = v.wholesale_sale_id || v.purchase_id;
       const isWholesaleItem = !!v.wholesale_sale_id;
       const isPurchaseItem = !!v.purchase_id && !v.sale_date; // Chỉ gộp nhập hàng nếu chưa bán (hoặc tùy logix)
-      
+
       // Tuy nhiên khách muốn gộp theo Ngày + Khách/NCC
-      const dateKey = dayjs(v.sale_date || v.import_date).format('YYYY-MM-DD');
+      const dateKey = dayjs(v.sale_date || v.import_date).format("YYYY-MM-DD");
       const partnerId = v.customer_id || v.supplier_id;
       const partnerName = v.customer_name || v.supplier_name;
 
       // Chỉ gộp nếu có Lô và có Đối tác + Ngày
       if (hasLot && (partnerId || partnerName) && dateKey) {
         const key = `${partnerId || partnerName}_${dateKey}`;
-        
+
         if (!groups[key]) {
           groups[key] = {
             id: v.wholesale_sale_id || v.purchase_id || key,
@@ -517,8 +519,8 @@ const VehicleLifecyclePage = () => {
             supplier_name: v.supplier_name,
             customer_name: v.customer_name,
             sale_channel: v.sale_channel,
-            type_name: `LÔ HÀNG (${v.customer_name && v.customer_name !== 'N/A' ? v.customer_name : (v.supplier_name || 'N/A')})`,
-            children: []
+            type_name: `${v.customer_name && v.customer_name !== "N/A" ? v.customer_name : v.supplier_name || "N/A"}`,
+            children: [],
           };
         }
         groups[key].children.push({ ...v, key: v.id });
@@ -528,24 +530,34 @@ const VehicleLifecyclePage = () => {
     });
 
     // Tính toán tổng cho mỗi nhóm
-    const groupedList = Object.values(groups).map(g => {
-        const count = g.children.length;
-        const total_price = g.children.reduce((sum, item) => sum + Number(item.sale_price || 0), 0);
-        const purchase_total = g.children.reduce((sum, item) => sum + Number(item.purchase_price || 0), 0);
-        
-        // Kiểm tra xem đây là lô nhập hay lô bán để hiển thị giá phù hợp
-        const isWholesaleGroup = g.children.some(x => !!x.wholesale_sale_id);
+    const groupedList = Object.values(groups).map((g) => {
+      const count = g.children.length;
+      const total_price = g.children.reduce(
+        (sum, item) => sum + Number(item.sale_price || 0),
+        0,
+      );
+      const purchase_total = g.children.reduce(
+        (sum, item) => sum + Number(item.purchase_price || 0),
+        0,
+      );
 
-        return {
-            ...g,
-            engine_no: <Tag color="blue" style={{ fontWeight: 'bold' }}>LÔ GIAO DỊCH: {count} XE</Tag>,
-            chassis_no: 'Click để xem danh sách',
-            sale_price: isWholesaleGroup ? total_price : purchase_total,
-            purchase_price: purchase_total,
-            count,
-            batch_items: g.children,
-            children: undefined 
-        };
+      // Kiểm tra xem đây là lô nhập hay lô bán để hiển thị giá phù hợp
+      const isWholesaleGroup = g.children.some((x) => !!x.wholesale_sale_id);
+
+      return {
+        ...g,
+        engine_no: (
+          <Tag color="blue" style={{ fontWeight: "bold" }}>
+            GIAO DỊCH: {count} XE
+          </Tag>
+        ),
+        chassis_no: "Click để xem danh sách",
+        sale_price: isWholesaleGroup ? total_price : purchase_total,
+        purchase_price: purchase_total,
+        count,
+        batch_items: g.children,
+        children: undefined,
+      };
     });
 
     return [...groupedList, ...others];
@@ -718,8 +730,8 @@ const VehicleLifecyclePage = () => {
     const displayWhName = `HEAD ${rawWhName.replace(/^(HEAD\s*)+/i, "").trim()}`;
 
     const title = isWholesaleOnly
-      ? "PHIẾU XUẤT KHO LÔ HÀNG"
-      : "PHIẾU NHẬP KHO LÔ HÀNG";
+      ? "PHIẾU XUẤT KHO GIAO DỊCH"
+      : "PHIẾU NHẬP KHO GIAO DỊCH";
     const partnerLabel = isWholesaleOnly ? "Khách hàng" : "Nhà cung cấp";
     const priceLabel = isWholesaleOnly ? "Giá bán" : "Giá nhập";
 
@@ -775,6 +787,7 @@ const VehicleLifecyclePage = () => {
             <tr>
               <th style="width: 25px;">STT</th>
               <th>Loại xe</th>
+              <th>Màu</th>
               <th style="width: 100px;">Số Máy</th>
               <th style="width: 150px;">Số Khung</th>
               <th style="text-align: right; width: 90px;">${priceLabel}</th>
@@ -788,6 +801,7 @@ const VehicleLifecyclePage = () => {
               <tr>
                 <td style="text-align: center;">${i + 1}</td>
                 <td>${v.type_name}</td>
+                <td style="text-align: center;">${v.color_name || "-"}</td>
                 <td style="text-align: center;"><b>${v.engine_no}</b></td>
                 <td style="text-align: center;"><b>${v.chassis_no}</b></td>
                 <td style="text-align: right;"><b>${Number(isWholesaleOnly ? v.sale_price || v.purchase_price : v.purchase_price).toLocaleString()}</b></td>
@@ -836,7 +850,7 @@ const VehicleLifecyclePage = () => {
         if (record.isGroup)
           return (
             <Tag color="processing" icon={<Box size={12} />}>
-              GIAO DỊCH LÔ
+              GIAO DỊCH
             </Tag>
           );
         return record.sale_date ? (
@@ -903,14 +917,24 @@ const VehicleLifecyclePage = () => {
           return <Text strong>{record.supplier_name}</Text>;
         }
         // Các trang khác (Bán lẻ/Bán sỉ) hiện tên Khách hàng
-        if (record.customer_name && record.customer_name !== "N/A")
-          return record.customer_name;
+        if (record.customer_name && record.customer_name !== "N/A") {
+          return (
+            <div>
+              <Text strong>{record.customer_name}</Text>
+              {record.customer_phone && (
+                <div style={{ fontSize: "11px", opacity: 0.6 }}>
+                  {record.customer_phone}
+                </div>
+              )}
+            </div>
+          );
+        }
         return record.supplier_name;
       },
     },
     { title: "Người thực hiện", dataIndex: "importer_name", width: 150 },
     {
-      title: "Thông tin xe / Lô",
+      title: "Thông tin xe / Giao dịch",
       dataIndex: "type_name",
       render: (text, record) => (
         <div>
@@ -1104,14 +1128,7 @@ const VehicleLifecyclePage = () => {
 
   return (
     <div style={{ padding: "0 5px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
+      <div className="page-header">
         <Title level={2} className="gradient-text" style={{ margin: 0 }}>
           {isPurchaseOnly
             ? "XEM THÔNG TIN MUA XE"
@@ -1547,7 +1564,7 @@ const VehicleLifecyclePage = () => {
           <Space>
             <Box size={20} color="var(--primary-color)" />
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <Text strong>CHI TIẾT LÔ HÀNG</Text>
+              <Text strong>CHI TIẾT GIAO DỊCH</Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {isPurchaseOnly
                   ? selectedBatchInfo?.supplier_name

@@ -513,6 +513,8 @@ const MaintenanceHub = () => {
   const [partOptions, setPartOptions] = useState([]);
   const [vehicleOptions, setVehicleOptions] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [licensePlateOptions, setLicensePlateOptions] = useState([]);
+  const [activeOrderWarning, setActiveOrderWarning] = useState(null);
   const [vehicleHistoryModal, setVehicleHistoryModal] = useState(null); // { engine_no, license_plate, chassis_no, customer_name }
   const engineNo = Form.useWatch("engine_no", form);
   const licensePlate = Form.useWatch("license_plate", form);
@@ -528,6 +530,84 @@ const MaintenanceHub = () => {
   const [historySearch, setHistorySearch] = useState("");
   const [partSearchText, setPartSearchText] = useState("");
   const [isImportModalVisible, setIsImportModalVisible] = useState(false);
+
+  // Check for active duplicate maintenance order
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (licensePlate || engineNo) {
+        checkActiveOrder(licensePlate, engineNo);
+      } else {
+        setActiveOrderWarning(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [licensePlate, engineNo]);
+
+  const checkActiveOrder = async (plate, engNo) => {
+    try {
+      const res = await api.get(`/maintenance-orders/check-active`, {
+        params: {
+          license_plate: plate ? plate.trim() : undefined,
+          engine_no: engNo ? engNo.trim() : undefined,
+          exclude_id: id || undefined
+        }
+      });
+      if (res.data.has_active) {
+        setActiveOrderWarning(res.data.order);
+      } else {
+        setActiveOrderWarning(null);
+      }
+    } catch (e) {
+      console.error("Lỗi kiểm tra trùng phiếu:", e);
+    }
+  };
+
+  const handleLicensePlateSearch = async (value) => {
+    if (!value || value.length < 2) {
+      setLicensePlateOptions([]);
+      return;
+    }
+    try {
+      const res = await api.get(`/maintenance-vehicle-search?q=${value}`);
+      const plates = [];
+      const seenPlates = new Set();
+      res.data.forEach((item) => {
+        const plate = item.license_plate;
+        if (plate && !seenPlates.has(plate.toUpperCase())) {
+          seenPlates.add(plate.toUpperCase());
+          plates.push({
+            value: plate,
+            label: (
+              <div>
+                <Text strong>{plate}</Text> - {item.customer_name} ({item.model_name || "Xe vãng lai"})
+              </div>
+            ),
+            item: item
+          });
+        }
+      });
+      setLicensePlateOptions(plates);
+    } catch (e) {
+      console.error("Lỗi gợi ý biển số:", e);
+    }
+  };
+
+  const handleLicensePlateSelect = (value, option) => {
+    const item = option.item;
+    setVehicleFound({ internal: item.is_internal, data: item });
+    form.setFieldsValue({
+      customer_name: item.customer_name,
+      customer_phone: item.phone,
+      customer_address: item.address,
+      engine_no: item.engine_no,
+      chassis_no: item.chassis_no,
+      license_plate: item.license_plate,
+      model_name: item.model_name || item.Vehicle?.VehicleType?.name || "",
+      search_vehicle: item.engine_no || item.license_plate,
+    });
+    message.success("Đã điền thông tin xe từ biển số đã chọn!");
+  };
 
   // Debounce search effect
   useEffect(() => {
@@ -921,7 +1001,7 @@ const MaintenanceHub = () => {
     if (value.length < 3) return;
 
     try {
-      const res = await api.get(`/search-sold-vehicles?q=${value}`);
+      const res = await api.get(`/maintenance-vehicle-search?q=${value}`);
       let options = res.data.map((item) => {
         if (item.is_previous_external) {
           return {
@@ -1013,7 +1093,30 @@ const MaintenanceHub = () => {
 
       setVehicleOptions(options);
     } catch (e) {
-      console.error(e);
+      console.error('Lỗi tìm kiếm xe:', e);
+      // Nếu API lỗi (403, 500...), vẫn cho phép tiếp nhận xe mới
+      setVehicleOptions([{
+        value: `EXTERNAL_${value}`,
+        label: (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span>
+              Tiếp nhận mới <b>"{value}"</b>
+            </span>
+            <Tag color="orange" style={{ margin: 0 }}>
+              Xe lạ
+            </Tag>
+          </div>
+        ),
+        isInternal: false,
+        isPreviousExternal: false,
+        searchValue: value,
+      }]);
     }
   };
 
@@ -1028,6 +1131,7 @@ const MaintenanceHub = () => {
         engine_no: item.engine_no,
         chassis_no: item.chassis_no,
         model_name: item.Vehicle?.VehicleType?.name || "",
+        license_plate: item.license_plate || "",
         search_vehicle: item.engine_no, // Set input back to clean engine number
       });
       message.success("Đã nhận diện xe hệ thống bán ra!");
@@ -1511,6 +1615,57 @@ const MaintenanceHub = () => {
                 <Form.Item name="status" hidden>
                   <Input />
                 </Form.Item>
+
+                {activeOrderWarning && (
+                  <div
+                    style={{
+                      marginBottom: 20,
+                      padding: "16px",
+                      borderRadius: 12,
+                      background: "rgba(239, 68, 68, 0.08)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      animation: "fadeIn 0.3s ease-out",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        background: "#ef4444",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <AlertCircle size={20} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: "bold", color: "#ef4444", fontSize: 13, textTransform: "uppercase" }}>
+                        Cảnh báo: Xe đang có phiếu sửa chữa chưa hoàn thành
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4, color: "var(--text-color, #333)" }}>
+                        Xe mang biển số <b>{activeOrderWarning.license_plate || "Chưa rõ"}</b> / Số máy <b>{activeOrderWarning.engine_no || "Chưa rõ"}</b> đang có phiếu sửa chữa hoạt động tại bàn nâng <b>{activeOrderWarning.LiftTable?.name || "Chưa gán"}</b> (Kho: {activeOrderWarning.Warehouse?.warehouse_name || "N/A"}).
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <Button
+                          size="small"
+                          type="primary"
+                          danger
+                          onClick={() => handleEditFromBoard(activeOrderWarning.id)}
+                        >
+                          Xem chi tiết phiếu trùng
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <Form.Item
                   label="Tìm kiếm xe (Số máy/Số khung/SĐT)"
                   name="search_vehicle"
@@ -1614,9 +1769,14 @@ const MaintenanceHub = () => {
                               </div>
                               <Space wrap size={[4, 4]}>
                                 {vehicleFound.data.gifts.map((g, idx) => {
+                                  const giftName = typeof g === "object" && g !== null ? g.name : g;
+                                  const giftQty = typeof g === "object" && g !== null ? g.quantity : null;
                                   const isUsed = (
                                     vehicleFound.data.used_gifts || []
-                                  ).includes(g);
+                                  ).some((used) => {
+                                    const usedName = typeof used === "object" && used !== null ? (used.gift_name || used.name) : used;
+                                    return String(usedName).toLowerCase() === String(giftName).toLowerCase();
+                                  });
                                   return (
                                     <Tag
                                       key={idx}
@@ -1628,7 +1788,7 @@ const MaintenanceHub = () => {
                                         opacity: isUsed ? 0.6 : 1,
                                       }}
                                     >
-                                      {g} {isUsed ? "(Đã dùng)" : ""}
+                                      {giftName}{giftQty ? ` (x${giftQty})` : ""} {isUsed ? "(Đã dùng)" : ""}
                                     </Tag>
                                   );
                                 })}
@@ -1739,7 +1899,15 @@ const MaintenanceHub = () => {
                   </Col>
                   <Col span={6}>
                     <Form.Item label="Biển số xe" name="license_plate">
-                      <Input placeholder="29A-12345" size="large" />
+                      <AutoComplete
+                        options={licensePlateOptions}
+                        onSearch={handleLicensePlateSearch}
+                        onSelect={handleLicensePlateSelect}
+                        popupMatchSelectWidth={false}
+                        dropdownStyle={{ minWidth: 250 }}
+                      >
+                        <Input placeholder="29A-12345" size="large" />
+                      </AutoComplete>
                     </Form.Item>
                   </Col>
                   <Col span={6}>
@@ -2213,10 +2381,12 @@ const MaintenanceHub = () => {
 
                 {vehicleFound?.internal &&
                   vehicleFound.data?.gifts?.some(
-                    (g) =>
-                      !["Áo mưa", "Mũ bảo hiểm", "Bảo hiểm đi đường"].includes(
-                        g,
-                      ),
+                    (g) => {
+                      const giftName = typeof g === "object" && g !== null ? g.name : g;
+                      return !["Áo mưa", "Mũ bảo hiểm", "Bảo hiểm đi đường"].includes(
+                        giftName,
+                      );
+                    }
                   ) && (
                     <Row gutter={12}>
                       <Col span={24}>
@@ -2234,24 +2404,31 @@ const MaintenanceHub = () => {
                           >
                             {vehicleFound.data.gifts
                               .filter(
-                                (g) =>
-                                  ![
+                                (g) => {
+                                  const giftName = typeof g === "object" && g !== null ? g.name : g;
+                                  return ![
                                     "Áo mưa",
                                     "Mũ bảo hiểm",
                                     "Bảo hiểm đi đường",
-                                  ].includes(g),
+                                  ].includes(giftName);
+                                }
                               )
                               .map((g) => {
+                                const giftName = typeof g === "object" && g !== null ? g.name : g;
+                                const giftQty = typeof g === "object" && g !== null ? g.quantity : null;
                                 const isUsed = (
                                   vehicleFound.data.used_gifts || []
-                                ).includes(g);
+                                ).some((used) => {
+                                  const usedName = typeof used === "object" && used !== null ? (used.gift_name || used.name) : used;
+                                  return String(usedName).toLowerCase() === String(giftName).toLowerCase();
+                                });
                                 return (
                                   <Select.Option
-                                    key={g}
-                                    value={g}
+                                    key={giftName}
+                                    value={giftName}
                                     disabled={isUsed}
                                   >
-                                    {g}{" "}
+                                    {giftName}{giftQty ? ` (x${giftQty})` : ""}{" "}
                                     {isUsed ? "(Đã sử dụng ở lần trước)" : ""}
                                   </Select.Option>
                                 );

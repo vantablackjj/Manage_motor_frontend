@@ -61,8 +61,21 @@ const PartUsageReportPage = () => {
   const totalSelling = data.reduce((sum, item) => sum + Number(item.thu_ngay_amount), 0);
 
   const columns = [
-    { title: 'PT', dataIndex: 'code', key: 'code', fixed: 'left', width: 140 },
-    { title: 'Tên Tiếng Việt', dataIndex: 'name', key: 'name', width: 250 },
+    { 
+      title: 'PT', 
+      dataIndex: 'code', 
+      key: 'code', 
+      fixed: 'left', 
+      width: 140,
+      sorter: (a, b) => (a.code || '').localeCompare(b.code || '')
+    },
+    { 
+      title: 'Tên Tiếng Việt', 
+      dataIndex: 'name', 
+      key: 'name', 
+      width: 250,
+      sorter: (a, b) => (a.name || '').localeCompare(b.name || '')
+    },
     { title: 'Đơn vị', dataIndex: 'unit', key: 'unit', width: 80, align: 'center' },
     { 
       title: 'Tổng xuất', 
@@ -70,17 +83,19 @@ const PartUsageReportPage = () => {
       key: 'total_qty', 
       width: 100, 
       align: 'right',
+      sorter: (a, b) => Number(a.total_qty) - Number(b.total_qty),
       render: v => <Text strong>{v}</Text>
     },
-    { title: 'Thu ngay', dataIndex: 'thu_ngay_qty', key: 'thu_ngay_qty', width: 100, align: 'right' },
-    { title: 'Bảo hành', dataIndex: 'bao_hanh_qty', key: 'bao_hanh_qty', width: 100, align: 'right' },
-    { title: 'Khuyến mại', dataIndex: 'khuyen_mai_qty', key: 'khuyen_mai_qty', width: 110, align: 'right' },
+    { title: 'Thu ngay', dataIndex: 'thu_ngay_qty', key: 'thu_ngay_qty', width: 100, align: 'right', sorter: (a, b) => Number(a.thu_ngay_qty) - Number(b.thu_ngay_qty) },
+    { title: 'Bảo hành', dataIndex: 'bao_hanh_qty', key: 'bao_hanh_qty', width: 100, align: 'right', sorter: (a, b) => Number(a.bao_hanh_qty) - Number(b.bao_hanh_qty) },
+    { title: 'Khuyến mại', dataIndex: 'khuyen_mai_qty', key: 'khuyen_mai_qty', width: 110, align: 'right', sorter: (a, b) => Number(a.khuyen_mai_qty) - Number(b.khuyen_mai_qty) },
     { 
       title: 'Tiền thu ngay', 
       dataIndex: 'thu_ngay_amount', 
       key: 'thu_ngay_amount', 
       width: 140, 
       align: 'right',
+      sorter: (a, b) => Number(a.thu_ngay_amount) - Number(b.thu_ngay_amount),
       render: v => <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{Number(v).toLocaleString()} đ</Text>
     },
     { 
@@ -89,6 +104,7 @@ const PartUsageReportPage = () => {
       key: 'bao_hanh_amount', 
       width: 140, 
       align: 'right',
+      sorter: (a, b) => Number(a.bao_hanh_amount) - Number(b.bao_hanh_amount),
       render: v => v > 0 ? <Text type="secondary">{Number(v).toLocaleString()} đ</Text> : '-'
     },
     { 
@@ -97,6 +113,7 @@ const PartUsageReportPage = () => {
       key: 'khuyen_mai_amount', 
       width: 140, 
       align: 'right',
+      sorter: (a, b) => Number(a.khuyen_mai_amount) - Number(b.khuyen_mai_amount),
       render: v => v > 0 ? <Text type="secondary">{Number(v).toLocaleString()} đ</Text> : '-'
     },
   ];
@@ -120,12 +137,12 @@ const PartUsageReportPage = () => {
 
   return (
     <div className="page-container">
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header">
         <div>
            <Title level={2} className="gradient-text" style={{ margin: 0 }}>BÁO CÁO CHI TIẾT XUẤT PHỤ TÙNG</Title>
            <Text type="secondary">Thống kê chi tiết phụ tùng xuất kho theo mục đích sử dụng</Text>
         </div>
-        <Space>
+        <Space wrap>
            <Button icon={<Download size={16} />} onClick={handleExport}>Xuất Excel</Button>
         </Space>
       </div>
@@ -185,7 +202,9 @@ const PartUsageReportPage = () => {
         borderBottom: 'none',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '10px'
       }}>
         <Space size={24}>
            <Text>Tổng tiền bán: <Text strong style={{ fontSize: 18, color: '#10b981' }}>{totalSelling.toLocaleString()} đ</Text></Text>

@@ -398,7 +398,7 @@ const PrintInvoice = ({ sale }) => {
               <div className="info-col">
                 <span className="info-label">Ngân hàng :</span>
                 <span className="info-value">
-                  ....................................................
+                  {sale.bank_name || "...................................................."}
                 </span>
               </div>
             </div>

@@ -35,6 +35,7 @@ import {
   Trash2, 
   XCircle,
   MapPin,
+  Calendar,
   Search,
   User as UserIcon,
   Printer,
@@ -271,7 +272,7 @@ const PartTransferPage = () => {
     { title: 'Đến Kho', dataIndex: 'ToWarehouse', render: wh => wh?.warehouse_name || 'N/A' },
     { title: 'Người lập', dataIndex: 'creator', render: u => u?.full_name || 'N/A' },
     { title: 'Trạng Thái', dataIndex: 'status', render: status => getStatusTag(status) },
-    { title: 'Ngày lập', dataIndex: 'transfer_date', render: d => dayjs(d).format('DD/MM/YYYY') },
+    { title: 'Thời gian hoàn thành', dataIndex: 'received_at', render: d => d ? dayjs(d).format('DD/MM/YYYY HH:mm') : '---' },
     { title: '', key: 'action', render: (_, r) => <Button size="small" onClick={() => loadDetails(r.id)}>Chi tiết</Button> }
   ];
 
@@ -353,7 +354,7 @@ const PartTransferPage = () => {
           items={detailData?.items} 
         />
       </div>
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header">
         <div>
           <Title level={2} className="gradient-text" style={{ margin: 0 }}>LUÂN CHUYỂN PHỤ TÙNG NỘI BỘ</Title>
           <Text type="secondary">Cấu trúc và quy trình thống nhất với hệ thống quản lý xe máy</Text>
@@ -583,6 +584,22 @@ const PartTransferPage = () => {
                       <Text type="secondary" size="small">KHO NHẬN</Text><br/>
                       <Text strong style={{ fontSize: 16, color: 'var(--primary-color)' }}>{detailData.transfer.ToWarehouse?.warehouse_name}</Text>
                    </div>
+                </div>
+
+                <div style={{ marginBottom: 20, padding: 12, background: 'rgba(0,0,0,0.02)', borderRadius: 8 }}>
+                  <Row gutter={[16, 8]}>
+                    <Col span={12}>
+                      <Space><UserIcon size={14} /> <Text type="secondary">Lập bởi:</Text> <Text strong>{detailData.transfer.creator?.full_name || 'N/A'}</Text></Space>
+                    </Col>
+                    <Col span={12}>
+                      <Space><Calendar size={14} /> <Text type="secondary">Ngày lập:</Text> <Text strong>{dayjs(detailData.transfer.createdAt).format('DD/MM/YYYY HH:mm')}</Text></Space>
+                    </Col>
+                    {detailData.transfer.status === 'RECEIVED' && (
+                      <Col span={24}>
+                        <Space><Clock size={14} style={{ color: '#10b981' }} /> <Text type="secondary">Thời gian hoàn tất:</Text> <Text strong style={{ color: '#10b981' }}>{dayjs(detailData.transfer.received_at).format('DD/MM/YYYY HH:mm')}</Text></Space>
+                      </Col>
+                    )}
+                  </Row>
                 </div>
 
                 <Text strong>DANH SÁCH LINH KIỆN ({detailData.items.length})</Text>

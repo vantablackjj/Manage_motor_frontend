@@ -101,6 +101,7 @@ const PurchasePage = () => {
       setSuppliers(sRes.data);
       setWarehouses(wRes.data);
       setVehicleTypes(tRes.data);
+      setColors(cRes.data);
     } catch (e) {
       console.error(e);
     }
@@ -163,6 +164,7 @@ const PurchasePage = () => {
       {
         key: newKey,
         type_id: null,
+        color_id: null,
         engine_no: "",
         chassis_no: "",
         price_vnd: undefined,
@@ -214,6 +216,8 @@ const PurchasePage = () => {
         const item = inputItems[i];
         if (!item.type_id)
           return message.error(`Dòng ${i + 1}: Chưa chọn Loại xe!`);
+        if (!item.color_id)
+          return message.error(`Dòng ${i + 1}: Chưa chọn Màu sơn!`);
         if (!item.engine_no || item.engine_no.trim() === "")
           return message.error(`Dòng ${i + 1}: Chưa nhập Số máy!`);
         if (!item.chassis_no || item.chassis_no.trim() === "")
@@ -240,6 +244,7 @@ const PurchasePage = () => {
         {
           key: Date.now().toString(),
           type_id: null,
+          color_id: null,
           engine_no: "",
           chassis_no: "",
           price_vnd: undefined,
@@ -492,6 +497,7 @@ const PurchasePage = () => {
               <tr>
                 <th style="width: 25px;">STT</th>
                 <th>Loại xe</th>
+                <th style="width: 120px;">Màu sơn</th>
                 <th style="width: 100px;">Số Máy</th>
                 <th style="width: 150px;">Số Khung</th>
                 <th style="text-align: right; width: 90px;">Giá nhập</th>
@@ -505,6 +511,7 @@ const PurchasePage = () => {
                 <tr>
                   <td style="text-align: center;">${i + 1}</td>
                   <td>${vehicleTypes.find((t) => t.id === v.type_id)?.name || "N/A"}</td>
+                  <td style="text-align: center;">${v.VehicleColor?.color_name || colors.find((c) => c.id === v.color_id)?.color_name || "N/A"}</td>
                   <td style="text-align: center;"><b>${v.engine_no}</b></td>
                   <td style="text-align: center;"><b>${v.chassis_no}</b></td>
                   <td style="text-align: right;"><b>${Number(v.price_vnd).toLocaleString()}</b></td>
@@ -559,15 +566,20 @@ const PurchasePage = () => {
       });
       message.success("Cập nhật lô hàng thành công!");
       setIsEditingLot(false);
+      
       // Refresh list
+      const supplierId = form.getFieldValue("supplier_id");
       const res = await api.get("/purchases", {
-        params: { supplier_id: selectedSupplier },
+        params: { supplier_id: supplierId },
       });
       setPurchaseHistory(res.data);
       const updatedLot = res.data.find((l) => l.id === selectedLot.id);
-      setSelectedLot(updatedLot);
+      if (updatedLot) {
+        setSelectedLot(updatedLot);
+      }
     } catch (e) {
-      message.error("Lỗi khi cập nhật!");
+      console.error(e);
+      message.error("Lỗi khi cập nhật: " + (e.response?.data?.message || e.message));
     } finally {
       setLoading(false);
     }
@@ -651,8 +663,25 @@ const PurchasePage = () => {
       ),
     },
     {
+      title: "Màu sơn",
+      dataIndex: "color_id",
       width: "12%",
-      render: (val, record) => <Text type="secondary">-</Text>,
+      render: (val, record) => (
+        <Select
+          style={{ width: "100%" }}
+          showSearch
+          placeholder="Màu sơn..."
+          optionFilterProp="children"
+          value={val}
+          onChange={(v) => updateItem(record.key, "color_id", v)}
+        >
+          {colors.map((c) => (
+            <Option key={c.id} value={c.id}>
+              {c.color_name}
+            </Option>
+          ))}
+        </Select>
+      ),
     },
     {
       title: "Giá Nhập (đ)",
@@ -733,6 +762,11 @@ const PurchasePage = () => {
       title: "Số Khung",
       dataIndex: "chassis_no",
       render: (v) => <Text code>{v}</Text>,
+    },
+    {
+      title: "Màu Sơn",
+      width: "100px",
+      render: (_, r) => r.VehicleColor?.color_name || colors.find((c) => c.id === r.color_id)?.color_name || "N/A",
     },
     {
       title: "Giá Nhập",
@@ -1200,18 +1234,20 @@ const PurchasePage = () => {
                       selectedLot ? (
                         <Space>
                           <span>{`Lô hàng ngày ${dayjs(selectedLot.purchase_date).format("DD/MM/YYYY")}`}</span>
-                          <Button
-                            icon={<Settings size={14} />}
-                            size="small"
-                            type="text"
-                            onClick={() => {
-                              setEditLotData({
-                                purchase_date: dayjs(selectedLot.purchase_date),
-                                notes: selectedLot.notes || "",
-                              });
-                              setIsEditingLot(true);
-                            }}
-                          />
+                           {isAdmin && (
+                            <Button
+                              icon={<Settings size={14} />}
+                              size="small"
+                              type="text"
+                              onClick={() => {
+                                setEditLotData({
+                                  purchase_date: dayjs(selectedLot.purchase_date),
+                                  notes: selectedLot.notes || "",
+                                });
+                                setIsEditingLot(true);
+                              }}
+                            />
+                          )}
                         </Space>
                       ) : (
                         "Thông tin chi tiết lô"

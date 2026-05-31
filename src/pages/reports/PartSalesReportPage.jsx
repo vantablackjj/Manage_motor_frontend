@@ -21,7 +21,8 @@ const PartSalesReportPage = () => {
         from_date: dayjs().startOf('month').format('YYYY-MM-DD'),
         to_date: dayjs().format('YYYY-MM-DD'),
         warehouse_id: undefined,
-        query: ''
+        query: '',
+        sale_type: 'Retail'
     });
     const [warehouses, setWarehouses] = useState([]);
     const [selectedSaleForPrint, setSelectedSaleForPrint] = useState(null);
@@ -88,12 +89,14 @@ const PartSalesReportPage = () => {
             title: 'Ngày bán', 
             dataIndex: 'sale_date', 
             key: 'date',
+            sorter: (a, b) => dayjs(a.sale_date).unix() - dayjs(b.sale_date).unix(),
             render: v => dayjs(v).format('DD/MM/YYYY HH:mm')
         },
         { 
             title: 'Khách hàng', 
             dataIndex: 'customer_name', 
             key: 'customer',
+            sorter: (a, b) => (a.customer_name || 'Khách vãng lai').localeCompare(b.customer_name || 'Khách vãng lai'),
             render: (v, r) => (
                 <div>
                     <div>{v || 'Khách vãng lai'}</div>
@@ -104,11 +107,13 @@ const PartSalesReportPage = () => {
         { 
             title: 'Kho xuất', 
             dataIndex: ['Warehouse', 'warehouse_name'], 
-            key: 'warehouse' 
+            key: 'warehouse',
+            sorter: (a, b) => (a.Warehouse?.warehouse_name || '').localeCompare(b.Warehouse?.warehouse_name || '')
         },
         { 
             title: 'Số mặt hàng', 
             key: 'items',
+            sorter: (a, b) => (a.PartSaleItems?.length || 0) - (b.PartSaleItems?.length || 0),
             render: (_, r) => (
                 <Button type="link" onClick={() => { setSelectedSaleForPrint(r); setIsDetailModalOpen(true); }}>
                     {r.PartSaleItems?.length || 0} mặt hàng
@@ -120,6 +125,7 @@ const PartSalesReportPage = () => {
             dataIndex: 'total_amount', 
             key: 'total',
             align: 'right',
+            sorter: (a, b) => Number(a.total_amount) - Number(b.total_amount),
             render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text>
         },
         {
@@ -127,6 +133,7 @@ const PartSalesReportPage = () => {
             dataIndex: 'paid_amount',
             key: 'paid',
             align: 'right',
+            sorter: (a, b) => (Number(a.total_amount) - Number(a.paid_amount || 0)) - (Number(b.total_amount) - Number(b.paid_amount || 0)),
             render: (v, r) => {
                 const total = Number(r.total_amount);
                 const paid = Number(v || 0);
@@ -192,7 +199,7 @@ const PartSalesReportPage = () => {
 
     return (
         <div className="page-container">
-            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="page-header">
                 <div>
                     <Title level={2} className="gradient-text" style={{ margin: 0 }}>NHẬT KÝ BÁN LẺ PHỤ TÙNG</Title>
                     <Text type="secondary">Xem lịch sử và in lại hóa đơn lẻ, phiếu dịch vụ sửa chữa</Text>
@@ -260,6 +267,7 @@ const PartSalesReportPage = () => {
                             disabled={!isPowerUser}
                             value={filters.warehouse_id || (isPowerUser ? undefined : user.warehouse_id)}
                             onChange={v => setFilters(prev => ({ ...prev, warehouse_id: v }))}
+                            dropdownMatchSelectWidth={false}
                         >
                             {warehouses.map(w => <Select.Option key={w.id} value={w.id}>{w.warehouse_name}</Select.Option>)}
                         </Select>

@@ -80,7 +80,7 @@ const ServiceBoardPage = () => {
 
     return (
         <div style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div className="page-header">
                 <div>
                     <Title level={3} style={{ margin: 0 }}>
                         <LayoutGrid size={24} style={{ marginRight: 8, marginBottom: -4 }} /> ĐIỀU PHỐI BÀN NÂNG

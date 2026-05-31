@@ -21,6 +21,7 @@ import {
   Badge,
   Alert,
   Popconfirm,
+  Segmented,
 } from "antd";
 import {
   ShoppingCart,
@@ -38,6 +39,7 @@ import {
   Banknote,
   Car,
   FileStack,
+  Edit,
 } from "lucide-react";
 import ImportExcelModal from "../../components/ImportExcelModal";
 import PrintPartSale from "../../components/PrintPartSale";
@@ -78,12 +80,21 @@ const PartRetailPage = () => {
   const paidAmountWatch = Form.useWatch("paid_amount", form);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [warehouses, setWarehouses] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [allParts, setAllParts] = useState([]);
   const [partOptions, setPartOptions] = useState([]);
   const [history, setHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("1");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [activeMobileSection, setActiveMobileSection] = useState("items");
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedSaleForDetail, setSelectedSaleForDetail] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -343,65 +354,68 @@ const PartRetailPage = () => {
   };
 
   const onFinish = async (values) => {
-    if (items.length === 0)
-      return message.error("Chưa có linh kiện nào trong hóa đơn!");
-    const warehouseId = isAdmin
-      ? values.warehouse_id
-      : user.warehouse_id || values.warehouse_id;
-    if (!warehouseId) return message.error("Vui lòng chọn kho xuất hàng!");
-
-    setSubmitLoading(true);
     try {
-      const mDate = values.sale_date
-        ? dayjs.isDayjs(values.sale_date)
-          ? values.sale_date
-          : dayjs(values.sale_date)
-        : dayjs();
-
+      setSubmitLoading(true);
       const payload = {
         ...values,
-        warehouse_id: warehouseId,
-        sale_date: mDate.toISOString(),
-        sale_type: "Retail",
         items,
+        sale_date: values.sale_date.format("YYYY-MM-DD"),
       };
-      const res = await api.post("/part-sale", payload);
-      const savedSale = res.data;
 
-      Modal.success({
-        title: "Lưu hóa đơn thành công!",
-        content: "Bạn có muốn in hóa đơn ngay không?",
-        okText: "In hóa đơn",
-        cancelText: "Đóng",
-        onOk: () =>
-          handlePrint({
-            ...savedSale,
-            ...values,
-            sale_date: mDate,
-            warehouse_id: warehouseId,
-            PartSaleItems: items,
-          }),
-        closable: true,
-        maskClosable: true,
-      });
+      let res;
+      if (editingId) {
+        res = await api.put(`/part-sale/${editingId}`, payload);
+        message.success("Cập nhật hóa đơn thành công!");
+      } else {
+        res = await api.post("/part-sale", {
+          ...payload,
+          sale_type: "Retail",
+        });
+        message.success("Lập hóa đơn bán lẻ thành công!");
+      }
 
+      setLastSavedSale(res.data);
+      form.resetFields();
       setItems([]);
-      form.resetFields([
-        "customer_name",
-        "customer_phone",
-        "paid_amount",
-        "notes",
-        "vat_percent",
-      ]);
-      form.setFieldsValue({ sale_date: dayjs(), seller_id: user.id });
+      setEditingId(null);
       fetchHistory();
+
+      setTimeout(() => {
+        handlePrint(res.data);
+      }, 500);
     } catch (error) {
-      message.error(
-        "Lỗi khi lưu: " + (error.response?.data?.message || error.message),
-      );
+      message.error("Lỗi: " + (error.response?.data?.message || error.message));
     } finally {
       setSubmitLoading(false);
     }
+  };
+
+  const handleEdit = (sale) => {
+    setEditingId(sale.id);
+    setActiveTab("1");
+    form.setFieldsValue({
+      sale_date: dayjs(sale.sale_date),
+      seller_id: sale.created_by,
+      warehouse_id: sale.warehouse_id,
+      customer_name: sale.customer_name,
+      customer_phone: sale.customer_phone,
+      notes: sale.notes,
+      vat_percent: sale.vat_percent,
+      paid_amount: Number(sale.paid_amount),
+    });
+
+    const mappedItems = (sale.PartSaleItems || []).map((item) => ({
+      key: item.id || Date.now() + Math.random(),
+      part_id: item.part_id,
+      code: item.Part?.code || item.code,
+      name: item.Part?.name || item.name,
+      unit: item.unit,
+      quantity: Number(item.quantity),
+      unit_price: Number(item.unit_price),
+      total_price: Number(item.total_price),
+    }));
+    setItems(mappedItems);
+    message.info("Đã tải dữ liệu hóa đơn để chỉnh sửa");
   };
 
   const handleOpenPaymentModal = (sale) => {
@@ -470,26 +484,27 @@ const PartRetailPage = () => {
 
   // ────────────────────────── COLUMNS ──────────────────────────
   const itemColumns = [
-    { title: "Mã PT", dataIndex: "code", width: 130 },
+    { title: "Mã PT", dataIndex: "code", width: isMobile ? 80 : 130 },
     { title: "Tên Phụ tùng", dataIndex: "name" },
-    { title: "ĐVT", dataIndex: "unit", width: 80 },
+    { title: "ĐVT", dataIndex: "unit", width: isMobile ? 50 : 80 },
     {
       title: "SL",
       dataIndex: "quantity",
-      width: 90,
+      width: isMobile ? 65 : 90,
       render: (v, r) => (
         <InputNumber
           min={1}
           value={v}
           onChange={(val) => updateItem(r.key, "quantity", val)}
           size="small"
+          style={{ width: "100%" }}
         />
       ),
     },
     {
       title: "Đơn giá",
       dataIndex: "unit_price",
-      width: 150,
+      width: isMobile ? 110 : 150,
       render: (v, r) => (
         <InputNumber
           min={0}
@@ -505,7 +520,7 @@ const PartRetailPage = () => {
     {
       title: "Thành tiền",
       dataIndex: "total_price",
-      width: 150,
+      width: isMobile ? 100 : 150,
       align: "right",
       render: (v) => (
         <Text strong style={{ color: "var(--primary-color)" }}>
@@ -578,6 +593,12 @@ const PartRetailPage = () => {
               setSelectedSaleForDetail(r);
               setIsDetailModalOpen(true);
             }}
+          />
+          <Button
+            size="small"
+            icon={<Edit size={14} />}
+            title="Chỉnh sửa"
+            onClick={() => handleEdit(r)}
           />
           <Button
             size="small"
@@ -670,286 +691,329 @@ const PartRetailPage = () => {
               </Space>
             ),
             children: (
-              <Row gutter={[24, 24]}>
-                {/* LEFT: Invoice Info */}
-                <Col xs={24} lg={9}>
-                  <Card
-                    className="glass-card"
-                    title={
-                      <Space>
-                        <ShoppingCart size={18} /> THÔNG TIN HÓA ĐƠN
-                      </Space>
-                    }
-                  >
-                    <Form
-                      form={form}
-                      layout="vertical"
-                      onFinish={onFinish}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.preventDefault();
-                      }}
-                      initialValues={{
-                        sale_date: dayjs(),
-                        vat_percent: 0,
-                        seller_id: user.id,
-                      }}
-                    >
-                      <Row gutter={12}>
-                        <Col xs={12}>
-                          <Form.Item
-                            label="Ngày bán"
-                            name="sale_date"
-                            rules={[{ required: true }]}
-                          >
-                            <DatePicker
-                              style={{ width: "100%" }}
-                              size="large"
-                              format="DD/MM/YYYY"
-                            />
-                          </Form.Item>
-                        </Col>
-                        <Col xs={12}>
-                          <Form.Item
-                            label="Người bán"
-                            name="seller_id"
-                            rules={[{ required: true }]}
-                          >
-                            <Select
-                              size="large"
-                              disabled={!isAdmin}
-                              showSearch
-                              optionFilterProp="children"
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {isMobile && (
+                  <Segmented
+                    block
+                    size="large"
+                    value={activeMobileSection}
+                    onChange={setActiveMobileSection}
+                    options={[
+                      { label: `Linh kiện (${items.length})`, value: "items" },
+                      { label: "Thanh toán", value: "form" },
+                    ]}
+                    style={{ marginBottom: 4 }}
+                  />
+                )}
+
+                <Row gutter={[16, 16]}>
+                  {/* LEFT: Invoice Info */}
+                  {(!isMobile || activeMobileSection === "form") && (
+                    <Col xs={24} lg={9}>
+                      <Card
+                        className="glass-card"
+                        title={
+                          <Space>
+                            <ShoppingCart size={18} />{" "}
+                            {editingId ? "CHỈNH SỬA HÓA ĐƠN" : "THÔNG TIN HÓA ĐƠN"}
+                          </Space>
+                        }
+                      >
+                        <Form
+                          form={form}
+                          layout="vertical"
+                          onFinish={onFinish}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") e.preventDefault();
+                          }}
+                          initialValues={{
+                            sale_date: dayjs(),
+                            vat_percent: 0,
+                            seller_id: user.id,
+                          }}
+                        >
+                          <Row gutter={12}>
+                            <Col xs={12}>
+                              <Form.Item
+                                label="Ngày bán"
+                                name="sale_date"
+                                rules={[{ required: true }]}
+                              >
+                                <DatePicker
+                                  style={{ width: "100%" }}
+                                  size="large"
+                                  format="DD/MM/YYYY"
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={12}>
+                              <Form.Item
+                                label="Người bán"
+                                name="seller_id"
+                                rules={[{ required: true }]}
+                              >
+                                <Select
+                                  size="large"
+                                  disabled={!isAdmin}
+                                  showSearch
+                                  optionFilterProp="children"
+                                >
+                                  {employees.map((e) => (
+                                    <Select.Option key={e.id} value={e.id}>
+                                      {e.full_name}
+                                    </Select.Option>
+                                  ))}
+                                </Select>
+                              </Form.Item>
+                            </Col>
+                          </Row>
+
+                          {showWarehouseSelector ? (
+                            <Form.Item
+                              label="Kho xuất hàng"
+                              name="warehouse_id"
+                              rules={[{ required: true }]}
                             >
-                              {employees.map((e) => (
-                                <Select.Option key={e.id} value={e.id}>
-                                  {e.full_name}
-                                </Select.Option>
-                              ))}
-                            </Select>
-                          </Form.Item>
-                        </Col>
-                      </Row>
+                              <Select
+                                size="large"
+                                placeholder="Chọn kho..."
+                                onChange={handleWarehouseChange}
+                              >
+                                {warehouses.map((w) => (
+                                  <Select.Option key={w.id} value={w.id}>
+                                    {w.warehouse_name}
+                                  </Select.Option>
+                                ))}
+                              </Select>
+                            </Form.Item>
+                          ) : (
+                            // Staff: auto-set warehouse, hidden field
+                            <Form.Item
+                              name="warehouse_id"
+                              hidden
+                              initialValue={user.warehouse_id}
+                            >
+                              <Input />
+                            </Form.Item>
+                          )}
 
-                      {showWarehouseSelector ? (
-                        <Form.Item
-                          label="Kho xuất hàng"
-                          name="warehouse_id"
-                          rules={[{ required: true }]}
-                        >
-                          <Select
-                            size="large"
-                            placeholder="Chọn kho..."
-                            onChange={handleWarehouseChange}
+                          <Form.Item
+                            label="Tên khách hàng"
+                            name="customer_name"
                           >
-                            {warehouses.map((w) => (
-                              <Select.Option key={w.id} value={w.id}>
-                                {w.warehouse_name}
-                              </Select.Option>
-                            ))}
-                          </Select>
-                        </Form.Item>
-                      ) : (
-                        // Staff: auto-set warehouse, hidden field
-                        <Form.Item
-                          name="warehouse_id"
-                          hidden
-                          initialValue={user.warehouse_id}
-                        >
-                          <Input />
-                        </Form.Item>
-                      )}
-
-                      <Form.Item
-                        label="Tên khách hàng"
-                        name="customer_name"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Vui lòng nhập tên khách hàng!",
-                          },
-                        ]}
-                      >
-                        <Input
-                          size="large"
-                          prefix={<User size={16} />}
-                          placeholder="Ví dụ: Nguyễn Văn A"
-                          onBlur={(e) =>
-                            form.setFieldsValue({
-                              customer_name: capitalizeName(e.target.value),
-                            })
-                          }
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        label="Số điện thoại"
-                        name="customer_phone"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Vui lòng nhập số điện thoại!",
-                          },
-                        ]}
-                      >
-                        <Input
-                          size="large"
-                          prefix={<Smartphone size={16} />}
-                          placeholder="09xxxx..."
-                        />
-                      </Form.Item>
-                      <Form.Item label="Ghi chú" name="notes">
-                        <Input.TextArea
-                          rows={2}
-                          placeholder="Ghi chú thêm..."
-                        />
-                      </Form.Item>
-
-                      <Divider />
-
-                      <div
-                        style={{
-                          background: "rgba(0,0,0,0.03)",
-                          padding: 16,
-                          borderRadius: 12,
-                          border: "1px solid rgba(0,0,0,0.08)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            marginBottom: 8,
-                          }}
-                        >
-                          <Text type="secondary">Tổng tiền hàng:</Text>
-                          <Text strong style={{ fontSize: 15 }}>
-                            {subtotal.toLocaleString("vi-VN")} đ
-                          </Text>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 8,
-                          }}
-                        >
-                          <Text type="secondary">VAT (%):</Text>
-                          <Form.Item name="vat_percent" style={{ margin: 0 }}>
-                            <InputNumber
-                              min={0}
-                              max={100}
-                              size="small"
-                              style={{ width: 65 }}
+                            <Input
+                              size="large"
+                              prefix={<User size={16} />}
+                              placeholder="Ví dụ: Nguyễn Văn A"
+                              onBlur={(e) =>
+                                form.setFieldsValue({
+                                  customer_name: capitalizeName(e.target.value),
+                                })
+                              }
                             />
                           </Form.Item>
-                        </div>
-                        <Divider style={{ margin: "10px 0" }} />
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <Text strong style={{ fontSize: 16 }}>
-                            TỔNG CỘNG:
-                          </Text>
-                          <Text
-                            strong
+                          <Form.Item
+                            label="Số điện thoại"
+                            name="customer_phone"
+                          >
+                            <Input
+                              size="large"
+                              prefix={<Smartphone size={16} />}
+                              placeholder="09xxxx..."
+                            />
+                          </Form.Item>
+                          <Form.Item label="Ghi chú" name="notes">
+                            <Input.TextArea
+                              rows={2}
+                              placeholder="Ghi chú thêm..."
+                            />
+                          </Form.Item>
+
+                          <Divider />
+
+                          <div
                             style={{
-                              fontSize: 18,
-                              color: "var(--primary-color)",
+                              background: "rgba(0,0,0,0.03)",
+                              padding: 16,
+                              borderRadius: 12,
+                              border: "1px solid rgba(0,0,0,0.08)",
                             }}
                           >
-                            {totalAmount.toLocaleString("vi-VN")} đ
-                          </Text>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <Text type="secondary">Tổng tiền hàng:</Text>
+                              <Text strong style={{ fontSize: 15 }}>
+                                {subtotal.toLocaleString("vi-VN")} đ
+                              </Text>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <Text type="secondary">VAT (%):</Text>
+                              <Form.Item name="vat_percent" style={{ margin: 0 }}>
+                                <InputNumber
+                                  min={0}
+                                  max={100}
+                                  size="small"
+                                  style={{ width: 65 }}
+                                />
+                              </Form.Item>
+                            </div>
+                            <Divider style={{ margin: "10px 0" }} />
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                              }}
+                            >
+                              <Text strong style={{ fontSize: 16 }}>
+                                TỔNG CỘNG:
+                              </Text>
+                              <Text
+                                strong
+                                style={{
+                                  fontSize: 18,
+                                  color: "var(--primary-color)",
+                                }}
+                              >
+                                {totalAmount.toLocaleString("vi-VN")} đ
+                              </Text>
+                            </div>
+                          </div>
+
+                          <Form.Item
+                            label="Khách đã trả"
+                            name="paid_amount"
+                            style={{ marginTop: 16 }}
+                          >
+                            <InputNumber
+                              size="large"
+                              style={{ width: "100%" }}
+                              formatter={(v) =>
+                                `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+                              }
+                              parser={(v) => v.replace(/\./g, "")}
+                              placeholder="Có thể trả sau..."
+                            />
+                          </Form.Item>
+
+                          {/* Debt warning */}
+                          {paidAmountWatch > 0 && paidAmountWatch < totalAmount && (
+                            <Alert
+                              message={`Còn nợ: ${(totalAmount - (paidAmountWatch || 0)).toLocaleString("vi-VN")} đ`}
+                              type="warning"
+                              showIcon
+                              style={{ marginBottom: 16 }}
+                            />
+                          )}
+
+                          <Button
+                            type="primary"
+                            block
+                            size="large"
+                            htmlType="submit"
+                            icon={<Save size={20} />}
+                            loading={submitLoading}
+                            disabled={items.length === 0}
+                            style={{ height: 50, fontWeight: "bold" }}
+                          >
+                            {editingId ? "CẬP NHẬT HÓA ĐƠN" : "LƯU & XUẤT HÓA ĐƠN"}
+                          </Button>
+                          {editingId && (
+                            <Button
+                              block
+                              size="large"
+                              onClick={() => {
+                                setEditingId(null);
+                                form.resetFields();
+                                setItems([]);
+                              }}
+                              style={{ marginTop: 12 }}
+                            >
+                              HỦY CHỈNH SỬA
+                            </Button>
+                          )}
+                        </Form>
+                      </Card>
+                    </Col>
+                  )}
+
+                  {/* RIGHT: Items list */}
+                  {(!isMobile || activeMobileSection === "items") && (
+                    <Col xs={24} lg={15}>
+                      <Card
+                        className="glass-card"
+                        title={
+                          <Space>
+                            <LayoutList size={18} /> {isMobile ? "LINH KIỆN CHỌN BÁN" : "DANH SÁCH LINH KIỆN CHỌN BÁN"}
+                          </Space>
+                        }
+                        extra={
+                          <Tag color="blue">
+                            {items.length} MH | {subtotal.toLocaleString()} đ
+                          </Tag>
+                        }
+                      >
+                        <div style={{ marginBottom: 12 }}>
+                          <AutoComplete
+                            style={{ width: "100%" }}
+                            onSearch={setPartSearchText}
+                            onSelect={(val, option) => addItem(option.part)}
+                            options={partOptions}
+                            onFocus={() => executePartSearch(partSearchText)}
+                            placeholder="🔍 Tìm theo mã hoặc tên..."
+                            popupMatchSelectWidth={false}
+                            dropdownStyle={{ minWidth: isMobile ? 280 : 450 }}
+                          >
+                            <Input size="large" />
+                          </AutoComplete>
                         </div>
-                      </div>
-
-                      <Form.Item
-                        label="Khách đã trả"
-                        name="paid_amount"
-                        style={{ marginTop: 16 }}
-                      >
-                        <InputNumber
-                          size="large"
-                          style={{ width: "100%" }}
-                          formatter={(v) =>
-                            `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
-                          }
-                          parser={(v) => v.replace(/\./g, "")}
-                          placeholder="Có thể trả sau..."
+                        <Table
+                          dataSource={items}
+                          columns={itemColumns}
+                          pagination={false}
+                          className="modern-table small-screen-optimized"
+                          size={isMobile ? "small" : "middle"}
+                          scroll={{ x: "max-content", y: isMobile ? 320 : 450 }}
+                          locale={{
+                            emptyText:
+                              "Tìm kiếm phụ tùng ở thanh trên để thêm vào hóa đơn",
+                          }}
                         />
-                      </Form.Item>
-
-                      {/* Debt warning */}
-                      {paidAmountWatch > 0 && paidAmountWatch < totalAmount && (
-                        <Alert
-                          message={`Còn nợ: ${(totalAmount - (paidAmountWatch || 0)).toLocaleString("vi-VN")} đ`}
-                          type="warning"
-                          showIcon
-                          style={{ marginBottom: 16 }}
-                        />
-                      )}
-
-                      <Button
-                        type="primary"
-                        block
-                        size="large"
-                        htmlType="submit"
-                        icon={<Save size={20} />}
-                        loading={submitLoading}
-                        disabled={items.length === 0}
-                        style={{ height: 50, fontWeight: "bold" }}
-                      >
-                        LƯU & XUẤT HÓA ĐƠN
-                      </Button>
-                    </Form>
-                  </Card>
-                </Col>
-
-                {/* RIGHT: Items list */}
-                <Col xs={24} lg={15}>
-                  <Card
-                    className="glass-card"
-                    title={
-                      <Space>
-                        <LayoutList size={18} /> DANH SÁCH LINH KIỆN CHỌN BÁN
-                      </Space>
-                    }
-                    extra={
-                      <Tag color="blue">
-                        {items.length} mặt hàng | {subtotal.toLocaleString()} đ
-                      </Tag>
-                    }
-                  >
-                    <div style={{ marginBottom: 16 }}>
-                      <AutoComplete
-                        style={{ width: "100%" }}
-                        onSearch={setPartSearchText}
-                        onSelect={(val, option) => addItem(option.part)}
-                        options={partOptions}
-                        onFocus={() => executePartSearch(partSearchText)}
-                        placeholder="🔍 Tìm theo mã hoặc tên (ví dụ: 'DAU HONDA')..."
-                        popupMatchSelectWidth={false}
-                        dropdownStyle={{ minWidth: 450 }}
-                      >
-                        <Input size="large" />
-                      </AutoComplete>
-                    </div>
-                    <Table
-                      dataSource={items}
-                      columns={itemColumns}
-                      pagination={false}
-                      className="modern-table"
-                      scroll={{ x: "max-content", y: 450 }}
-                      locale={{
-                        emptyText:
-                          "Tìm kiếm phụ tùng ở thanh trên để thêm vào hóa đơn",
-                      }}
-                    />
-                  </Card>
-                </Col>
-              </Row>
+                        {isMobile && items.length > 0 && (
+                          <Button
+                            type="primary"
+                            block
+                            size="large"
+                            onClick={() => setActiveMobileSection("form")}
+                            style={{
+                              marginTop: 12,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 8,
+                              height: 44,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Tiếp tục thanh toán ({totalAmount.toLocaleString("vi-VN")} đ) &raquo;
+                          </Button>
+                        )}
+                      </Card>
+                    </Col>
+                  )}
+                </Row>
+              </div>
             ),
           },
           {

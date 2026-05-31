@@ -145,15 +145,33 @@ const PartTransferReportPage = () => {
         title: 'Ngày tạo', 
         dataIndex: 'createdAt', 
         key: 'date', 
+        sorter: (a, b) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
         render: v => dayjs(v).format('DD/MM/YYYY HH:mm') 
     },
-    { title: 'Mã phiếu', dataIndex: 'transfer_code', key: 'code', render: v => <Text strong>{v}</Text> },
-    { title: 'Từ kho', dataIndex: ['FromWarehouse', 'warehouse_name'], key: 'from' },
-    { title: 'Đến kho', dataIndex: ['ToWarehouse', 'warehouse_name'], key: 'to' },
+    { 
+      title: 'Mã phiếu', 
+      dataIndex: 'transfer_code', 
+      key: 'code', 
+      sorter: (a, b) => (a.transfer_code || '').localeCompare(b.transfer_code || ''),
+      render: v => <Text strong>{v}</Text> 
+    },
+    { 
+      title: 'Từ kho', 
+      dataIndex: ['FromWarehouse', 'warehouse_name'], 
+      key: 'from',
+      sorter: (a, b) => (a.FromWarehouse?.warehouse_name || '').localeCompare(b.FromWarehouse?.warehouse_name || '')
+    },
+    { 
+      title: 'Đến kho', 
+      dataIndex: ['ToWarehouse', 'warehouse_name'], 
+      key: 'to',
+      sorter: (a, b) => (a.ToWarehouse?.warehouse_name || '').localeCompare(b.ToWarehouse?.warehouse_name || '')
+    },
     { 
         title: 'Trạng thái', 
         dataIndex: 'status', 
         key: 'status',
+        sorter: (a, b) => (a.status || '').localeCompare(b.status || ''),
         render: s => {
             const colors = {
                 'PENDING_ADMIN': 'orange',
@@ -173,6 +191,7 @@ const PartTransferReportPage = () => {
     { 
         title: 'Chi Tiết', 
         key: 'items', 
+        sorter: (a, b) => (a.PartTransferItems?.length || 0) - (b.PartTransferItems?.length || 0),
         render: (_, r) => (
             <Button 
                 type="link" 
@@ -186,7 +205,12 @@ const PartTransferReportPage = () => {
             </Button>
         )
     },
-    { title: 'Người lập', dataIndex: ['creator', 'full_name'], key: 'creator' }
+    { 
+      title: 'Người lập', 
+      dataIndex: ['creator', 'full_name'], 
+      key: 'creator',
+      sorter: (a, b) => (a.creator?.full_name || '').localeCompare(b.creator?.full_name || '')
+    }
   ];
 
   return (

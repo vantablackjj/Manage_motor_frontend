@@ -63,12 +63,14 @@ const PartWholesaleReportPage = () => {
             title: 'Ngày bán', 
             dataIndex: 'sale_date', 
             key: 'date',
+            sorter: (a, b) => dayjs(a.sale_date).unix() - dayjs(b.sale_date).unix(),
             render: v => dayjs(v).format('DD/MM/YYYY HH:mm')
         },
         { 
             title: 'Đối tác buôn', 
             dataIndex: 'customer_name', 
             key: 'customer',
+            sorter: (a, b) => (a.customer_name || '').localeCompare(b.customer_name || ''),
             render: (v, r) => (
                 <div>
                     <Text strong>{v || 'N/A'}</Text>
@@ -79,11 +81,13 @@ const PartWholesaleReportPage = () => {
         { 
             title: 'Kho xuất', 
             dataIndex: ['Warehouse', 'warehouse_name'], 
-            key: 'warehouse' 
+            key: 'warehouse',
+            sorter: (a, b) => (a.Warehouse?.warehouse_name || '').localeCompare(b.Warehouse?.warehouse_name || '')
         },
         { 
             title: 'Số mặt hàng', 
             key: 'items',
+            sorter: (a, b) => (a.PartSaleItems?.length || 0) - (b.PartSaleItems?.length || 0),
             render: (_, r) => (
                 <Button type="link" onClick={() => { setSelectedSaleForPrint(r); setIsDetailModalOpen(true); }}>
                     {r.PartSaleItems?.length || 0} mặt hàng
@@ -95,6 +99,7 @@ const PartWholesaleReportPage = () => {
             dataIndex: 'total_amount', 
             key: 'total',
             align: 'right',
+            sorter: (a, b) => Number(a.total_amount) - Number(b.total_amount),
             render: v => <Text strong style={{ color: '#10b981' }}>{Number(v).toLocaleString()} đ</Text>
         },
         {
@@ -102,6 +107,7 @@ const PartWholesaleReportPage = () => {
             dataIndex: 'paid_amount',
             key: 'paid',
             align: 'right',
+            sorter: (a, b) => (Number(a.total_amount) - Number(a.paid_amount || 0)) - (Number(b.total_amount) - Number(b.paid_amount || 0)),
             render: (v, r) => {
                 const total = Number(r.total_amount);
                 const paid = Number(v || 0);
@@ -150,7 +156,7 @@ const PartWholesaleReportPage = () => {
 
     return (
         <div className="page-container">
-            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="page-header">
                 <div>
                     <Title level={2} className="gradient-text" style={{ margin: 0 }}>NHẬT KÝ BÁN BUÔN PHỤ TÙNG</Title>
                     <Text type="secondary">Thống kê giao dịch xuất sỉ linh kiện, phụ tùng cho đại lý</Text>

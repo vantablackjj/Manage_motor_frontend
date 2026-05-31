@@ -248,7 +248,8 @@ const WholesaleSalePage = () => {
           newData[index].engine_no = vehicle.id; // Map id to value for bind
           newData[index].chassis_no = vehicle.id; // Map id to value for bind
           newData[index].cost_price = vehicle.price_vnd;
-          newData[index].type_name = vehicle.VehicleType?.type_name;
+          newData[index].type_name = vehicle.VehicleType?.name;
+          newData[index].color_name = vehicle.VehicleColor?.color_name;
         }
       } else {
         newData[index][field] = value;
@@ -564,7 +565,8 @@ const WholesaleSalePage = () => {
             <tr>
               <th style="width: 30px;">STT</th>
               <th style="width: 80px;">Ngày bán</th>
-              <th style="width: 200px;">Loại xe</th>
+              <th style="width: 180px;">Loại xe</th>
+              <th style="width: 80px;">Màu</th>
               <th style="width: 100px;">Số Máy</th>
               <th>Số Khung</th>
               <th style="text-align: right; width: 100px;">Đơn giá</th>
@@ -578,6 +580,7 @@ const WholesaleSalePage = () => {
                 <td style="text-align: center;">${i + 1}</td>
                 <td style="text-align: center;">${date.format("DD/MM/YYYY")}</td>
                 <td>${v.VehicleType?.name || v.Type?.name || "N/A"}</td>
+                <td style="text-align: center;">${v.VehicleColor?.color_name || "-"}</td>
                 <td><b>${v.engine_no}</b></td>
                 <td><b>${v.chassis_no}</b></td>
                 <td style="text-align: right;"><b>${Number(v.wholesale_price_vnd).toLocaleString()}</b></td>
@@ -684,6 +687,11 @@ const WholesaleSalePage = () => {
             <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
               {record.type_name}
             </Tag>
+            {record.color_name && (
+              <Tag color="cyan" style={{ fontSize: 10, margin: "0 4px" }}>
+                {record.color_name}
+              </Tag>
+            )}
           </div>
         ) : null,
     },
